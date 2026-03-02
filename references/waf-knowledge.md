@@ -142,6 +142,36 @@ This ensures AntiDDoS AMR inspects all traffic except verified search engine cra
 ### Extensibility
 The same pattern can be extended for other search engines (Baidu, Yandex, etc.) by adding more AND branches inside the OR statement with the appropriate UA keyword and ASN.
 
+## Always-on Challenge for HTML Pages
+
+### Why it is effective for DDoS protection
+- Most DDoS attack tools are not real browsers — they cannot execute JavaScript and therefore cannot pass Challenge or obtain a WAF token
+- Always-on Challenge is preventive, not reactive: it filters non-browser traffic continuously, without waiting for AntiDDoS AMR to detect an attack
+- This eliminates the detection delay inherent in AntiDDoS AMR — attack traffic is blocked from the first request
+- Legitimate users with a valid WAF token are not affected: Challenge acts like Count for requests with an unexpired token, so real users experience the JS verification only once, then browse uninterrupted for the token's lifetime
+
+### What it affects and what it does NOT affect
+Always-on Challenge only matches requests where the `Accept` header contains `text/html` (contains match, not exact) and the method is `GET`. This means:
+- ✅ Affects: browser navigation requests (HTML pages)
+- ❌ Does NOT affect: API calls (JSON/XML responses), file downloads, native app traffic, SPA API requests, static assets (CSS/JS/images), POST/PUT/DELETE requests, CORS preflight OPTIONS requests
+
+This narrow scope means always-on Challenge can be safely deployed without impacting APIs, native apps, file downloads, or single-page application backends.
+
+### Token immunity time
+- Default immunity time is 300 seconds (5 minutes), which works but may concern some users about UX impact
+- Recommend extending to at least 4 hours (14400 seconds) for always-on Challenge — real users complete the JS verification once and then browse uninterrupted for the entire immunity period
+- Configurable at the rule level or Web ACL level
+
+### Search engine crawler consideration
+- Search engine crawlers send `GET` requests with `Accept: text/html` — they will be challenged
+- Crawlers cannot complete JavaScript Challenge, so always-on Challenge will block them
+- Solution: place the always-on Challenge rule AFTER a Count+Label rule that identifies legitimate crawlers via ASN + User-Agent double verification (see "Search Engine Crawler Exclusion Pattern"), then scope-down the Challenge rule to exclude requests with the crawler label
+
+### Complementary to AntiDDoS AMR
+- AntiDDoS AMR is reactive: it detects anomalies and then starts mitigating
+- Always-on Challenge is proactive: it requires proof of browser capability before any HTML content is served
+- Together they provide defense in depth: always-on Challenge handles the bulk of non-browser DDoS traffic instantly, while AntiDDoS AMR handles sophisticated attacks that use real browsers or target non-challengeable paths
+
 ## Managed Rule Group Action Overrides
 
 ### How overrides work

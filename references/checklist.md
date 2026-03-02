@@ -171,3 +171,12 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 - [ ] If `default_action` is Allow: all requests that survive every rule are allowed. Ensure the rule set is comprehensive enough that only legitimate traffic falls through.
 - [ ] If `default_action` is Block: only explicitly allowed traffic passes. This is stricter but may cause false positives if Allow rules are incomplete.
 - [ ] **Redundant trailing Allow-all rule**: If `default_action` is already Allow, check whether the last rule in the Web ACL is a custom rule that matches all requests with Allow action. This is redundant — it wastes WCU and can cause maintenance confusion (e.g., a future maintainer may insert new rules after it, not realizing they will never be evaluated). Recommend removing it.
+
+## 20. Always-on Challenge for HTML Pages
+
+For Web ACLs with DDoS protection objectives:
+
+- [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is a highly effective proactive DDoS defense — see waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
+- [ ] If present, is the token immunity time extended to at least 4 hours (14400 seconds)? Default 300 seconds works but may cause unnecessary re-challenges for real users.
+- [ ] Is the always-on Challenge rule placed AFTER a crawler identification rule (Count+Label with ASN + UA verification)? The Challenge rule must scope-down to exclude requests labeled as legitimate crawlers, otherwise search engine SEO will be impacted.
+- [ ] If not present and the Web ACL relies solely on AntiDDoS AMR for DDoS protection, consider recommending always-on Challenge as a complementary proactive layer.
