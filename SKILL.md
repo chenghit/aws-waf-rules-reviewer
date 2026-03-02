@@ -133,6 +133,8 @@ Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF t
 - Bot Control rule defaults and verified/unverified bot handling
 - Token labeling behavior
 - Rate-based rule characteristics
+- Always-on Challenge as proactive DDoS defense (scope, immunity time, crawler exclusion)
+- Search engine crawler exclusion pattern (ASN + UA double verification)
 - Managed rule group action override mechanics (Count/Allow/Block implications)
 - Count action as a labeling mechanism and its dependencies
 - Common pitfalls and their solutions

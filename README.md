@@ -9,7 +9,7 @@
 给定一个 AWS WAF Web ACL 的 JSON 导出文件，该 skill 会：
 
 1. 构建规则执行流 — 梳理每条规则的优先级、动作、标签和依赖关系
-2. 按 19 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
+2. 按 20 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
 3. 生成按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 4. 在附录中包含 Mermaid 流程图和逐条规则的执行流详情
 5. 自审报告，查找检查清单可能遗漏的问题
@@ -57,7 +57,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 检查清单覆盖范围
 
-评审涵盖 19 个类别：
+评审涵盖 20 个类别：
 
 1. Allow 规则审计（可伪造性、绕过风险）
 2. Scope-down 语句（过窄 / 过宽）
@@ -78,6 +78,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 17. 日志和监控
 18. byte_match_statement 中的哈希/不透明 search_string
 19. Default Action（冗余的尾部 Allow-all 规则检测）
+20. HTML 页面 Always-on Challenge（主动 DDoS 防御、免疫时间、爬虫排除）
 
 ## 免责声明
 

@@ -9,7 +9,7 @@ An [Agent Skill](https://agentskills.io) that reviews AWS WAF Web ACL configurat
 Given an AWS WAF Web ACL JSON export, this skill:
 
 1. Builds a rule execution flow — mapping every rule's priority, action, labels, and dependencies
-2. Runs through a 19-item checklist covering Allow rule audits, scope-down validation, AntiDDoS AMR configuration, Bot Control settings, SEO impact, rate limiting, cross-rule dependencies, and more
+2. Runs through a 20-item checklist covering Allow rule audits, scope-down validation, AntiDDoS AMR configuration, Bot Control settings, SEO impact, rate limiting, cross-rule dependencies, and more
 3. Generates a review report with severity-rated findings (Critical / Medium / Low / Awareness)
 4. Includes a Mermaid flow diagram and detailed rule-by-rule execution trace as an appendix
 5. Self-reviews the report for issues the checklist may have missed
@@ -57,7 +57,7 @@ A Markdown report (`waf-review-report.md`) containing:
 
 ## Checklist Coverage
 
-The review covers 19 categories:
+The review covers 20 categories:
 
 1. Allow rules audit (forgeability, bypass risk)
 2. Scope-down statements (too narrow / too broad)
@@ -78,6 +78,7 @@ The review covers 19 categories:
 17. Logging and monitoring
 18. Hashed/opaque search_string in byte_match_statement
 19. Default action (redundant trailing Allow-all detection)
+20. Always-on Challenge for HTML pages (proactive DDoS defense, immunity time, crawler exclusion)
 
 ## Disclaimer
 
