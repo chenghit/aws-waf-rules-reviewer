@@ -57,11 +57,15 @@ For every rule using Challenge or CAPTCHA action:
 
 ## 5. Bot Control Configuration
 
+- [ ] **Common level only — Awareness**: If Bot Control is configured at Common level only (no Targeted), emit an Awareness finding explaining what Common level can and cannot do:
+  - **Can do**: identify self-declared bots via User-Agent, verify bots belonging to known organizations via reverse DNS lookup, block unverified/forged bot User-Agents
+  - **Cannot do**: detect bots that disguise themselves as normal browsers (no bot-specific User-Agent), detect advanced bots using behavioral analysis, detect credential stuffing or inventory hoarding attacks
+  - Common level only protects against bots that openly identify themselves. Any bot using a standard browser User-Agent will pass through Common Bot Control completely undetected. Advise the user to consider deploying Targeted level if they need protection against advanced or disguised bots.
 - [ ] Are any Common Bot Control rules overridden to Allow? Check if the default behavior already handles the case (verified bots are not matched by default — Allow override also allows unverified/forged bots)
 - [ ] `CategorySearchEngine` and `CategorySeo` default action is Block for unverified bots only. Override to Allow lets forged search engine bots through.
+- [ ] **SignalNonBrowserUserAgent and CategoryHttpLibrary**: default action is Block, but these rules frequently cause false positives on legitimate non-browser clients (native apps, API clients, legitimate tools). Best practice is to override both to **Count**. This avoids false positives while still adding labels that can be used by downstream rules for further evaluation.
 - [ ] For SEO protection: use ASN match + UA double verification instead of Bot Control Allow override. This is especially important when AntiDDoS AMR is present — Bot Control Allow overrides don't prevent AntiDDoS ChallengeAllDuringEvent from challenging crawlers. The correct approach is to scope-down AntiDDoS AMR itself to exclude verified crawlers. See waf-knowledge.md "Search Engine Crawler Exclusion Pattern". Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
-- [ ] `HostingProviderIPList` in AnonymousIpList: Allow override lets cloud-hosted attack traffic bypass all rules
-- [ ] If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. `SignalNonBrowserUserAgent` (default Block) and Targeted rules (`TGT_TokenAbsent` etc.) will block native apps. Solutions:
+- [ ] If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. If `SignalNonBrowserUserAgent` and Targeted rules (`TGT_TokenAbsent` etc.) are not overridden to Count, they will block native apps. Solutions:
   - Best: integrate AWS WAF Mobile SDK
   - Alternative: scope-down Bot Control to exclude native app label, but must use unforgeable condition + rate limiting as fallback
 
@@ -79,13 +83,31 @@ For every rule using Challenge or CAPTCHA action:
 - [ ] Action is Challenge on API paths? Effectively equals Block (low severity if users won't exceed threshold)
 - [ ] Are rate limits reasonable for the endpoint? (payment APIs should have lower limits than static pages)
 - [ ] Is there rate limiting coverage for native app traffic that bypasses Challenge-based protections?
+- [ ] **Overlapping scope-down across multiple rate-based rules**: If the Web ACL contains multiple rate-based rules, compare their scope-down conditions. If two or more rules have overlapping or containing scope-downs (e.g., one targets `/api/` and another targets all traffic), only the rule with the lowest threshold will ever trigger for the overlapping traffic — the others are effectively redundant for that traffic. Advise the user to adjust scope-downs to make them mutually exclusive if the intent was to apply different rate limits to different traffic types.
 
 ## 8. IP Reputation and Anonymous IP Rules
 
+### AWSManagedRulesAmazonIpReputationList (WCU: 25)
+
+This rule group contains three rules:
+
+- `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot). Generally safe to keep at default.
+- `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources. Generally safe to keep at default.
+- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities. Default is Count because DDoS IP lists change rapidly — an IP may be a compromised host (botnet) that has since recovered, but the list update lags behind. Blocking by default would risk false positives on legitimate users behind those recovered IPs.
+
 - [ ] Are these rule groups actually inspecting all traffic? (Check scope-down)
-- [ ] `HostingProviderIPList` action: Allow is dangerous for DDoS protection (attackers use cloud VMs)
+- [ ] If scope-down is too narrow, these rule groups provide no value
+- [ ] **AWSManagedIPDDoSList at default Count**: this rule only adds the label `awswaf:managed:aws:amazon-ip-list:AWSManagedIPDDoSList` without taking action. If no downstream rule uses this label, the rule provides no protection. Note: even when AntiDDoS AMR is present, this rule still has value — AntiDDoS AMR only acts after detecting a DDoS event, so during normal times and during the detection delay at the start of an attack, known DDoS IPs are not blocked by AMR. AWSManagedIPDDoSList fills this gap. Two options for the user to consider:
+  1. Add a rate-based rule downstream that uses the DDoS IP list label as a scope-down condition, applying stricter rate limits to traffic from known DDoS IPs
+  2. During high-risk DDoS periods, temporarily override this rule to Challenge or Block, and revert to Count when the risk subsides
+
+### AWSManagedRulesAnonymousIpList (WCU: 50)
+
 - [ ] Rule action overrides: Challenge is better than Allow for reputation-flagged IPs
-- [ ] If scope-down is too narrow, these expensive rule groups provide no value
+- [ ] **HostingProviderIPList** (default Block): This rule was designed to block traffic from cloud hosting providers, assuming legitimate users don't originate from cloud platforms. However, this assumption is increasingly outdated — many enterprises route traffic through cloud-based proxies, VPNs, or SaaS gateways, and many websites serve both enterprise and consumer traffic on the same domain without separate Web ACLs. As a result, the default Block action frequently causes false positives.
+  - [ ] If HostingProviderIPList is at default Block action: best practice is to override to **Count**. This avoids false positives while still adding the `awswaf:managed:aws:anonymous-ip-list:HostingProviderIPList` label to matching requests.
+  - [ ] If overridden to Allow: this is dangerous — it lets cloud-hosted attack traffic bypass all subsequent rules. Override to Count instead.
+  - [ ] Awareness: remind the user that the HostingProviderIPList label can be used by downstream rules for rate limiting on hosting-provider traffic, if their business requires it. Do not recommend specific rate limiting configurations — this depends on the user's business context.
 
 ## 9. Cross-rule Dependency Analysis
 
@@ -117,10 +139,16 @@ When different traffic types (browser vs native app) need different mitigation s
 
 ## 12. Rule Priority Ordering
 
-- [ ] Is AntiDDoS AMR at or near the highest priority? It should inspect as much traffic as possible for accurate baseline and detection. However, labeling rules that AntiDDoS AMR depends on (e.g., native app identification for dual-AMR scope-down) must be placed before it.
-- [ ] Are Allow rules (IP whitelist, probe service) placed before managed rule groups?
-- [ ] Are Count+Label rules placed before the rules that consume their labels? (A label-consuming rule placed before its label-producing rule will never see the label)
-- [ ] Are rate-based rules placed appropriately relative to managed rule groups?
+Compare the Web ACL's rule ordering against the recommended order in waf-knowledge.md "Recommended Rule Priority Order".
+
+- [ ] Are IP whitelist (Allow) and blacklist (Block) rules placed before AntiDDoS AMR?
+- [ ] Are Count+Label rules (traffic tagging) placed before all rules that consume their labels?
+- [ ] Is AntiDDoS AMR placed as early as possible (after its label dependencies) so it sees full traffic for accurate baseline?
+- [ ] Are IP reputation and Anonymous IP rule groups placed after AntiDDoS AMR?
+- [ ] Are rate-based rules placed before Always-on Challenge?
+- [ ] Is Always-on Challenge placed after IP reputation, Anonymous IP, and rate-based rules to minimize Challenge costs?
+- [ ] Are custom rules placed before application layer rule groups (CRS, KnownBadInputs, etc.)?
+- [ ] Is Bot Control (if present) placed last to minimize per-request costs?
 - [ ] Could a higher-priority Allow rule cause traffic to skip critical lower-priority protections?
 
 ## 13. Missing Baseline Protections
@@ -171,3 +199,12 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 - [ ] If `default_action` is Allow: all requests that survive every rule are allowed. Ensure the rule set is comprehensive enough that only legitimate traffic falls through.
 - [ ] If `default_action` is Block: only explicitly allowed traffic passes. This is stricter but may cause false positives if Allow rules are incomplete.
 - [ ] **Redundant trailing Allow-all rule**: If `default_action` is already Allow, check whether the last rule in the Web ACL is a custom rule that matches all requests with Allow action. This is redundant — it wastes WCU and can cause maintenance confusion (e.g., a future maintainer may insert new rules after it, not realizing they will never be evaluated). Recommend removing it.
+
+## 20. Always-on Challenge for HTML Pages
+
+For Web ACLs with DDoS protection objectives:
+
+- [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is a highly effective proactive DDoS defense — see waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
+- [ ] If present, is the token immunity time extended to at least 4 hours (14400 seconds)? Default 300 seconds works but may cause unnecessary re-challenges for real users.
+- [ ] Is the always-on Challenge rule placed AFTER a crawler identification rule (Count+Label with ASN + UA verification)? The Challenge rule must scope-down to exclude requests labeled as legitimate crawlers, otherwise search engine SEO will be impacted.
+- [ ] If not present and the Web ACL relies solely on AntiDDoS AMR for DDoS protection, consider recommending always-on Challenge as a complementary proactive layer.
