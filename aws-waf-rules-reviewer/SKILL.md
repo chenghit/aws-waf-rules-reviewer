@@ -130,11 +130,16 @@ Reference related issues inline (e.g., "see Issue #3") where applicable.
 Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF technical details including:
 - Challenge action behavior and limitations
 - AntiDDoS AMR mechanics and configuration
-- Bot Control rule defaults and verified/unverified bot handling
+- Bot Control Common vs Targeted level, verification mechanism, limitations, and common misconfigurations
 - Token labeling behavior
-- Rate-based rule characteristics
+- Rate-based rule characteristics and overlapping scope-down detection
+- IP reputation rule groups (AWSManagedIPDDoSList default Count rationale, relationship with AntiDDoS AMR)
+- Anonymous IP rule groups (HostingProviderIPList outdated assumption)
 - Always-on Challenge as proactive DDoS defense (scope, immunity time, crawler exclusion)
 - Search engine crawler exclusion pattern (ASN + UA double verification)
 - Managed rule group action override mechanics (Count/Allow/Block implications)
+- Recommended rule priority order
+- CRS SizeRestrictions_Body false positive risk
+- Token domain configuration (apex domain coverage)
 - Count action as a labeling mechanism and its dependencies
 - Common pitfalls and their solutions
