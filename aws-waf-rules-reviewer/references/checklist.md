@@ -28,9 +28,12 @@ For every managed rule group with a scope-down:
 - [ ] Is `ChallengeAllDuringEvent` enabled (not overridden to Count)?
 - [ ] If disabled, is there a valid reason? (native app traffic, non-browser clients)
 - [ ] If disabled for native app reasons, recommend dual AMR instance approach:
-  - Instance 1: browser traffic, Challenge enabled, Block LOW
-  - Instance 2: native app traffic (scope-down by label), Challenge disabled, Block MEDIUM
-- [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions)
+  - **Step 1 (prerequisite)**: Add a Count+Label rule **before** both AMR instances to identify and label native app traffic (e.g., label `native-app:identified`). This rule must be at a higher priority (lower number) than both AMR instances, because the AMR scope-downs consume this label — it must already exist when AMR evaluates the request.
+  - **Step 2**: Configure two AMR instances:
+    - Instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW
+    - Instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM
+  - **How to configure two AMR instances**: The AWS console does not allow adding the same managed rule group twice. To duplicate it: in the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, then change the `Name` and `MetricName` fields to unique values. Save — AWS WAF will treat them as two independent rule instances with separate configurations.
+- [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions). Unanchored API path patterns are `contains` matches — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent.
 - [ ] Does the exempt regex cover all API paths that can't handle Challenge?
 - [ ] Check regex `|` operator precedence: `$` only anchors the last branch unless grouped with `()`
 - [ ] **SEO impact**: Does the AntiDDoS AMR scope-down exclude legitimate search engine crawlers? ChallengeAllDuringEvent will Challenge all challengeable requests during a DDoS event. Search engine crawlers (Googlebot, Bingbot, etc.) cannot complete JavaScript Challenge — they may index the Challenge interstitial page instead of actual content, severely damaging SEO. Solution: add a scope-down using ASN + User-Agent double verification to exclude verified crawlers from AntiDDoS inspection. See waf-knowledge.md "Search Engine Crawler Exclusion Pattern" for implementation details.
@@ -45,15 +48,17 @@ For every managed rule group with a scope-down:
 
 For every rule using Challenge or CAPTCHA action:
 
-- [ ] Does the rule target requests that can actually complete a Challenge? (Only GET `text/html` requests from browsers)
-- [ ] POST requests, API calls, native app requests, CORS preflight OPTIONS — none can complete Challenge
-- [ ] For API/POST paths: Challenge effectively equals Block. Is this the intended behavior?
+- [ ] Does the rule target requests that can actually complete a Challenge/CAPTCHA? (Only GET `text/html` requests from browsers)
+- [ ] POST requests, API calls, native app requests, CORS preflight OPTIONS — none can complete Challenge or CAPTCHA. Both actions return a JS interstitial that requires browser execution; for non-browser or non-GET requests, both are effectively equivalent to Block.
+- [ ] For API/POST paths: Challenge or CAPTCHA effectively equals Block. Is this the intended behavior?
 - [ ] If Challenge is used on rate-limit rules for API paths: legitimate users normally won't exceed the threshold, so impact is low — severity should be adjusted accordingly
 
 **Key facts**:
-- Challenge returns HTTP 202 with JavaScript interstitial
-- Only works when `Accept` header contains `text/html` and client can execute JavaScript
-- If client already has valid unexpired WAF token, Challenge acts like Count (no interstitial)
+- Both Challenge and CAPTCHA return an HTTP interstitial that requires JavaScript execution in a browser
+- Neither works for POST requests, API calls, native apps, or non-`text/html` responses — treat both as Block in those contexts
+- Challenge: silent JS puzzle, returns HTTP 202
+- CAPTCHA: visible image puzzle, returns HTTP 405
+- If client already has valid unexpired WAF token, Challenge acts like Count (no interstitial); CAPTCHA always shows the puzzle regardless of token state
 
 ## 5. Bot Control Configuration
 
@@ -61,13 +66,14 @@ For every rule using Challenge or CAPTCHA action:
   - **Can do**: identify self-declared bots via User-Agent, verify bots belonging to known organizations via reverse DNS lookup, block unverified/forged bot User-Agents
   - **Cannot do**: detect bots that disguise themselves as normal browsers (no bot-specific User-Agent), detect advanced bots using behavioral analysis, detect credential stuffing or inventory hoarding attacks
   - Common level only protects against bots that openly identify themselves. Any bot using a standard browser User-Agent will pass through Common Bot Control completely undetected. Advise the user to consider deploying Targeted level if they need protection against advanced or disguised bots.
-- [ ] Are any Common Bot Control rules overridden to Allow? Check if the default behavior already handles the case (verified bots are not matched by default — Allow override also allows unverified/forged bots)
-- [ ] `CategorySearchEngine` and `CategorySeo` default action is Block for unverified bots only. Override to Allow lets forged search engine bots through.
+- [ ] Are any Common Bot Control rules overridden to Allow? Category rules only match unverified bots — verified bots already pass without action, and forged UAs never match category rules (they fall through to SignalNonBrowserUserAgent). Allow override on a category rule lets unverified bots in that category bypass all subsequent WAF rules.
+- [ ] `CategorySearchEngine` and `CategorySeo` default action is Block for unverified bots only. Override to Allow lets unverified search engine bots (e.g., individual-triggered Google SaaS tools) bypass all subsequent rules. Forged Googlebot UAs are NOT affected — they never match the category rule. Severity: **Low** (limited blast radius; does not enable full WAF bypass for arbitrary attackers).
 - [ ] **SignalNonBrowserUserAgent and CategoryHttpLibrary**: default action is Block, but these rules frequently cause false positives on legitimate non-browser clients (native apps, API clients, legitimate tools). Best practice is to override both to **Count**. This avoids false positives while still adding labels that can be used by downstream rules for further evaluation.
 - [ ] For SEO protection: use ASN match + UA double verification instead of Bot Control Allow override. This is especially important when AntiDDoS AMR is present — Bot Control Allow overrides don't prevent AntiDDoS ChallengeAllDuringEvent from challenging crawlers. The correct approach is to scope-down AntiDDoS AMR itself to exclude verified crawlers. See waf-knowledge.md "Search Engine Crawler Exclusion Pattern". Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
-- [ ] If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. If `SignalNonBrowserUserAgent` and Targeted rules (`TGT_TokenAbsent` etc.) are not overridden to Count, they will block native apps. Solutions:
-  - Best: integrate AWS WAF Mobile SDK
-  - Alternative: scope-down Bot Control to exclude native app label, but must use unforgeable condition + rate limiting as fallback
+- [ ] If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. Two migration paths:
+  - **Short-term**: scope-down Bot Control to exclude native app traffic using an unforgeable label (e.g., a label applied by an earlier Count rule based on a non-UA condition). Since scope-down applies to the entire managed rule group, native app traffic bypasses all of Bot Control — both Common and Targeted levels. Do NOT discuss `SignalNonBrowserUserAgent` or `TGT_TokenAbsent` in this context; they are irrelevant when the entire rule group is bypassed.
+  - **Medium-term**: integrate AWS WAF Mobile SDK. The SDK generates valid WAF tokens for native app requests, so Targeted level works correctly (`TGT_TokenAbsent` will not fire). However, Common level still requires attention: `SignalNonBrowserUserAgent` will Block native app requests and must be overridden to **Count** when the scope-down is removed.
+  - **NEVER override `TGT_TokenAbsent` to Count** — this rule identifies token-absent requests and is the foundation of all Targeted Bot Control detection. Overriding it to Count disables the entire Targeted level's session-tracking mechanism.
 
 ## 6. Token and Label Dependencies
 
@@ -123,11 +129,7 @@ After identifying all issues, use the rule execution flow (built in workflow ste
 
 ## 10. Dual AMR Instance Pattern
 
-When different traffic types (browser vs native app) need different mitigation strategies:
-
-- [ ] Use label-based scope-down to split traffic
-- [ ] Configure each AMR instance with appropriate Challenge/Block settings
-- [ ] Implementation: copy AMR JSON config → create custom rule → change rule name and metric name → save
+When different traffic types (browser vs native app) need different mitigation strategies, see section 3 "AntiDDoS AMR Configuration" for the full dual instance setup guide.
 
 ## 11. Landing Page and Cookie-based Logic
 
@@ -170,7 +172,11 @@ Note: WCU cannot be accurately calculated from JSON alone. When recommending add
 
 ## 16. Managed Rule Group Versions
 
-Note: If any managed rule groups are locked to a specific static version, remind the user to check whether a newer recommended version is available in the AWS console.
+Only check versions for these specific rule groups:
+- **AWSManagedRulesSQLiRuleSet**: if pinned to a version below 2.0, recommend upgrading. Earlier versions have weaker SQLi detection coverage.
+- **AWSManagedRulesBotControlRuleSet**: if pinned to a version below 5.0, recommend upgrading. Earlier versions lack certain Targeted level detection capabilities.
+
+For all other managed rule groups, do not flag version numbers — the version shown in JSON is just the current snapshot and requires no action.
 
 ## 17. Logging and Monitoring
 
@@ -204,7 +210,57 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 
 For Web ACLs with DDoS protection objectives:
 
-- [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is a highly effective proactive DDoS defense — see waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
+- [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is the most effective proactive DDoS defense — it takes effect immediately with zero detection delay, unlike AntiDDoS AMR which requires time to establish a baseline. See waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
+- [ ] If not present and the Web ACL has DDoS protection objectives, flag as **Medium** severity and recommend adding it. Provide the following rule JSON directly in the report for easy copy-paste:
+
+```json
+{
+  "Name": "always-on-challenge-html",
+  "Priority": 8,
+  "Action": { "Challenge": {} },
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "always-on-challenge-html"
+  },
+  "Statement": {
+    "AndStatement": {
+      "Statements": [
+        {
+          "ByteMatchStatement": {
+            "FieldToMatch": { "Method": {} },
+            "PositionalConstraint": "EXACTLY",
+            "SearchString": "GET",
+            "TextTransformations": [{ "Priority": 0, "Type": "NONE" }]
+          }
+        },
+        {
+          "ByteMatchStatement": {
+            "FieldToMatch": {
+              "SingleHeader": { "Name": "accept" }
+            },
+            "PositionalConstraint": "CONTAINS",
+            "SearchString": "text/html",
+            "TextTransformations": [{ "Priority": 0, "Type": "NONE" }]
+          }
+        },
+        {
+          "NotStatement": {
+            "Statement": {
+              "LabelMatchStatement": {
+                "Scope": "LABEL",
+                "Key": "crawler:verified"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Note: The `NotStatement` above assumes a crawler identification rule (Count+Label) is placed before this rule, labeling verified crawlers with `crawler:verified`. Replace the label key to match whatever label your crawler identification rule produces. If no crawler identification rule exists, add one first (see waf-knowledge.md "Search Engine Crawler Exclusion Pattern").
+
 - [ ] If present, is the token immunity time extended to at least 4 hours (14400 seconds)? Default 300 seconds works but may cause unnecessary re-challenges for real users.
 - [ ] Is the always-on Challenge rule placed AFTER a crawler identification rule (Count+Label with ASN + UA verification)? The Challenge rule must scope-down to exclude requests labeled as legitimate crawlers, otherwise search engine SEO will be impacted.
-- [ ] If not present and the Web ACL relies solely on AntiDDoS AMR for DDoS protection, consider recommending always-on Challenge as a complementary proactive layer.

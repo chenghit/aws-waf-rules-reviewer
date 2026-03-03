@@ -25,6 +25,25 @@
 - Configurable at Web ACL or rule level
 - After successful Challenge, client is not re-challenged until token expires
 
+## CAPTCHA Action
+
+### How it works
+- Returns HTTP 405 with a visible image puzzle interstitial
+- User must solve the puzzle; on success, client gets/updates `aws-waf-token` cookie
+- Unlike Challenge, CAPTCHA **always shows the puzzle** regardless of whether the client already has a valid token
+
+### What can complete CAPTCHA
+- Same constraints as Challenge: browser `GET` requests with `Accept: text/html` over HTTPS
+
+### What cannot complete CAPTCHA
+- Same as Challenge: `POST` requests, API calls, native apps, non-`GET` requests, non-browser clients
+- **For POST/API paths, CAPTCHA is effectively equivalent to Block** — the interstitial cannot be completed, so the original request is never resubmitted
+
+### Key difference from Challenge
+- Challenge: silent JS puzzle, token-aware (skips if valid token exists)
+- CAPTCHA: visible image puzzle, always shown regardless of token state
+- Both require browser JS execution; neither works for non-browser or non-GET requests
+
 ## AntiDDoS AMR (AWSManagedRulesAntiDDoSRuleSet)
 
 ### Detection mechanism
@@ -58,8 +77,8 @@
 ### Exempt URI regex
 - Defines URIs that can't handle Challenge (API paths, static assets)
 - Regex `|` branches are independent: `$` only anchors the last branch
-- API paths without `^` are contains matches, not starts-with
-- Example: `^\/api\/|^\/query|\.(css|js|png)$`
+- API paths without `^` are `contains` matches, not `starts-with` — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent
+- Always anchor API path branches with `^`: `^\/api\/|^\/query|^\/messages|\.(css|js|png)$`
 
 ### Pricing
 - $20/month per AMR instance + $0.15/million requests
@@ -67,18 +86,20 @@
 
 ### Dual instance pattern
 When browser and native app traffic need different strategies:
-1. Pre-label native app requests (high priority rule)
-2. AMR instance 1: exclude native app label, enable Challenge, Block LOW
-3. AMR instance 2: match native app label only, disable Challenge, Block MEDIUM
+1. **Pre-label native app requests**: Add a Count+Label rule **before** both AMR instances to label native app traffic (e.g., `native-app:identified`). This rule must be at a higher priority (lower number) than both AMR instances — the label must already exist when AMR evaluates the request.
+2. AMR instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW
+3. AMR instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM
 
-Implementation: copy AMR JSON → create custom rule → change name/metric → save
+Implementation: In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save. AWS WAF treats them as two independent rule instances.
 
 ## Bot Control (AWSManagedRulesBotControlRuleSet)
 
 ### Common level
 - Identifies self-declared bots by analyzing the User-Agent header
-- For bots claiming to belong to a specific organization (e.g., Googlebot, Bingbot, Route53 Health Check): performs **reverse DNS lookup** on the source IP to verify the User-Agent is genuine. If the resolved domain belongs to the claimed organization → verified; otherwise → forged
-- For bots not belonging to a specific organization (e.g., okhttp, WhatsApp): reverse DNS lookup is not meaningful, so the rule does not verify — marks as `bot:unverified` and applies default action (Block)
+- Bots fall into three categories based on how Common level handles them:
+  1. **Verified bots** — UA claims to belong to a specific organization (e.g., Googlebot, Bingbot, Route53 Health Check) AND reverse DNS lookup confirms the source IP belongs to that organization. The matching category rule adds labels (`bot:verified` + category + name) but takes **no action**. Bot Control evaluation ends here; the request continues to subsequent Web ACL rules.
+  2. **Unverified bots** — UA identifies the bot as belonging to a known category, but the bot cannot be verified via reverse DNS. This includes: bots not belonging to any specific organization (e.g., okhttp, WhatsApp), bots triggered by individual users on personal devices, bots whose business model doesn't involve visiting websites (e.g., scanners, curl), and bots from organizations where individual-triggered requests can't be reverse-DNS-verified (e.g., some Google SaaS developer tools). The matching category rule adds labels (`bot:unverified` + category + name) and applies the **default action (Block)**.
+  3. **Unknown non-browser UA** — UA is neither a browser UA nor any recognized bot UA, OR it claims to be an organization bot but reverse DNS verification fails (forged UA). These requests do NOT match any category rule. They fall through to `SignalNonBrowserUserAgent`, which adds `signal:non_browser_user_agent` and applies the **default action (Block)**.
 - Can identify 200+ bot types
 
 ### Common level limitations
@@ -90,20 +111,21 @@ Implementation: copy AMR JSON → create custom rule → change name/metric → 
 ### Common level common misconfigurations
 
 **Overriding CategorySearchEngine/CategorySeo to Allow to "protect SEO":**
-This is a serious mistake. Common Bot Control already does not block verified search engine crawlers — verified bots (those passing reverse DNS verification) receive only labels and no action. The request then continues to subsequent rules. Overriding to Allow is unnecessary and dangerous: Allow is a terminating action that does not distinguish verified from unverified. A malicious bot forging a Googlebot User-Agent (which fails reverse DNS) would also be Allowed, bypassing all subsequent WAF rules. The correct approach: keep default actions. If AntiDDoS AMR's ChallengeAllDuringEvent is a concern for crawlers, scope-down AntiDDoS AMR using ASN + UA double verification (see "Search Engine Crawler Exclusion Pattern"), not Bot Control Allow overrides.
+This is unnecessary and potentially harmful, but the actual risk is more nuanced than it appears. Category rules only match **unverified** bots in that category — bots that self-identify as search engine crawlers but cannot be verified via reverse DNS (e.g., individual-triggered Google SaaS tools, personal-device bots). Verified crawlers (e.g., real Googlebot with confirmed reverse DNS) are already handled without any action by the category rule — they pass through with `bot:verified` label regardless of the override. Forged Googlebot UAs (reverse DNS fails) do NOT match `CategorySearchEngine` at all — they fall through to `SignalNonBrowserUserAgent` and are Blocked. Therefore, overriding `CategorySearchEngine` to Allow only affects unverified search engine bots (which would otherwise be Blocked), allowing them to bypass all subsequent WAF rules. Severity: **Low** — the blast radius is limited to unverified bots in that category; it does not enable full WAF bypass for arbitrary attackers. The correct approach: keep default actions. If AntiDDoS AMR's ChallengeAllDuringEvent is a concern for crawlers, scope-down AntiDDoS AMR using ASN + UA double verification (see "Search Engine Crawler Exclusion Pattern"), not Bot Control Allow overrides.
 
 **Keeping SignalNonBrowserUserAgent and CategoryHttpLibrary at default Block:**
 These two rules block requests with non-browser User-Agents. Default Block frequently causes false positives on legitimate non-browser clients (native apps, API clients, monitoring tools, legitimate HTTP libraries). Best practice is to override both to **Count**. This preserves the labeling (for downstream rules to use) while avoiding false positives.
 
 ### Common level key labels
-- `bot:verified` — User-Agent verified via reverse DNS. Bot Control stops checking this request; it passes to subsequent Web ACL rules
-- `bot:unverified` — Bot identified but cannot be verified (not from a specific organization). Default action: Block
-- `signal:non_browser_user_agent` — Either: (1) reverse DNS verification failed (forged UA), or (2) UA is neither a browser nor a known bot. Default action: Block
+- `bot:verified` — UA verified via reverse DNS as belonging to a specific organization. The matching category rule takes no action; Bot Control evaluation ends here and the request continues to subsequent Web ACL rules.
+- `bot:unverified` — Bot identified as a known category but cannot be verified (no specific organization, personal device, or individual-triggered). The matching category rule applies default action (Block).
+- `signal:non_browser_user_agent` — Either: (1) UA claims to be an organization bot but reverse DNS verification failed (forged UA), or (2) UA is neither a browser nor any recognized bot UA. These requests do NOT match any category rule; they fall through to `SignalNonBrowserUserAgent`. Default action: Block.
 
 ### Verified vs unverified bots
-- For verified bots: the matching rule does NOT take action, only adds labels (`bot:verified` + category + name). Bot Control evaluation ends here.
-- For unverified bots: the matching rule applies its default action (usually Block)
-- Override to Allow is unnecessary for verified bots and dangerous — it also allows unverified/forged bots
+- For verified bots: the matching category rule adds labels only (`bot:verified` + category + name), takes no action. Bot Control evaluation ends here.
+- For unverified bots: the matching category rule adds labels (`bot:unverified` + category + name) and applies default action (Block).
+- For forged/unknown UA: no category rule matches; falls through to `SignalNonBrowserUserAgent` (Block).
+- Override to Allow on a category rule only affects unverified bots in that category — verified bots already pass without action, and forged UAs never match the category rule.
 
 ### Targeted level
 - Includes all Common level protections
@@ -119,8 +141,19 @@ These two rules block requests with non-browser User-Agents. Default Block frequ
 - `token:absent` means request has no WAF token
 
 ### Key rules for native app considerations
-- `SignalNonBrowserUserAgent` (default Block): blocks non-browser User-Agents that fail verification or are unknown. Best practice is to override to **Count** to avoid false positives (see "Common level common misconfigurations").
-- `TGT_TokenAbsent` (default Count, often overridden to Challenge): flags requests without WAF token
+
+**Short-term: scope-down Bot Control to exclude native app traffic**
+- Apply a scope-down to the entire Bot Control managed rule group using an unforgeable label (e.g., a label applied by an earlier Count rule). This bypasses the entire rule group — both Common and Targeted levels — for native app traffic. `SignalNonBrowserUserAgent` and `TGT_TokenAbsent` are irrelevant in this scenario since the rule group is not evaluated at all.
+
+**Medium-term: integrate AWS WAF Mobile SDK**
+- The SDK generates valid WAF tokens for native app requests. Remove the scope-down once SDK is integrated.
+- Targeted level: works correctly. `TGT_TokenAbsent` will not fire for SDK-enabled requests.
+- Common level: `SignalNonBrowserUserAgent` (default Block) will Block native app requests. Must be overridden to **Count** when the scope-down is removed.
+- **NEVER override `TGT_TokenAbsent` to Count** — it is the foundation of all Targeted Bot Control detection. Overriding it disables the entire session-tracking mechanism for token-absent requests.
+
+**Key rules**:
+- `SignalNonBrowserUserAgent` (default Block): blocks non-browser User-Agents. Override to **Count** when native apps are present and not excluded via scope-down.
+- `TGT_TokenAbsent` (default Count, often overridden to Challenge): flags requests without WAF token. **Do not override to Count.**
 - `TGT_VolumetricIpTokenAbsent` (default Challenge): 5+ requests from same IP without token in 5 min
 
 ## Rate-based Rules
@@ -159,11 +192,11 @@ AWSManagedIPDDoSList defaults to Count because DDoS IP lists change rapidly — 
 
 **HostingProviderIPList outdated assumption**: This rule assumes legitimate users don't originate from cloud platforms. This is increasingly false — many enterprises route traffic through cloud-based proxies, VPNs, or SaaS gateways, and many websites serve both enterprise and consumer traffic on the same domain. Default Block frequently causes false positives. Best practice: override to **Count** and optionally use the label for downstream rate limiting. Override to Allow is dangerous — it lets cloud-hosted attack traffic bypass all subsequent rules.
 
-## ASN Match Statement (June 2025)
+## ASN Match Statement
 
 - Match requests by source IP's Autonomous System Number
 - Syntax: `"AsnMatchStatement": { "AsnList": [15169, 8075] }`
-- Use case: identify legitimate search engine crawlers (Google ASN 15169, Bing ASN 8075)
+- Use case: identify legitimate search engine crawlers. Confirmed ASNs: Google ASN 15169, Bing ASN 8075, Yandex ASN 13238. For other search engines (Baidu, Yahoo Japan, etc.), verify the current ASN list from their official documentation — these engines may use multiple ASNs.
 - Combine with User-Agent for double verification (ASN is unforgeable, UA is forgeable)
 - Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
 
@@ -177,28 +210,32 @@ Bot Control can identify verified crawlers, but it costs $10/million requests (T
 
 ### Solution: ASN + User-Agent double verification scope-down
 Apply a scope-down to the AntiDDoS AMR rule group that excludes requests matching BOTH:
-1. User-Agent contains a search engine keyword (e.g., "google", "bing") — forgeable alone, but combined with ASN becomes reliable
+1. User-Agent contains a search engine bot keyword (e.g., "googlebot", "bingbot") — forgeable alone, but combined with ASN becomes reliable
 2. Source IP belongs to the search engine's ASN (unforgeable) — Google: ASN 15169, Bing: ASN 8075
 
 ### Scope-down structure
 The scope-down uses a NOT(Or(And, And)) pattern:
 - NOT → "inspect everything EXCEPT the following"
   - OR → "any of these crawler patterns"
-    - AND → UA contains "google" AND ASN is 15169
-    - AND → UA contains "bing" AND ASN is 8075
+    - AND → UA contains "googlebot" AND ASN is 15169
+    - AND → UA contains "bingbot" AND ASN is 8075
 
 This ensures AntiDDoS AMR inspects all traffic except verified search engine crawlers.
 
 ### Extensibility
-The same pattern can be extended for other search engines (Baidu, Yandex, etc.) by adding more AND branches inside the OR statement with the appropriate UA keyword and ASN.
+The same pattern can be extended for other search engines by adding more AND branches inside the OR statement. Confirmed examples:
+- Yandex: UA contains "yandexbot", ASN 13238 and ASN 208722
+
+For other search engines (Baidu, Yahoo Japan, etc.), do NOT assume a single ASN covers all crawler IPs — these engines may use multiple ASNs. Advise the user to verify the current ASN list from the search engine's official documentation before configuring.
 
 ## Always-on Challenge for HTML Pages
 
 ### Why it is effective for DDoS protection
 - Most DDoS attack tools are not real browsers — they cannot execute JavaScript and therefore cannot pass Challenge or obtain a WAF token
 - Always-on Challenge is preventive, not reactive: it filters non-browser traffic continuously, without waiting for AntiDDoS AMR to detect an attack
-- This eliminates the detection delay inherent in AntiDDoS AMR — attack traffic is blocked from the first request
+- **Takes effect immediately with zero detection delay** — attack traffic is blocked from the first request, unlike AntiDDoS AMR which requires time to establish a baseline before it can detect anomalies
 - Legitimate users with a valid WAF token are not affected: Challenge acts like Count for requests with an unexpired token, so real users experience the JS verification only once, then browse uninterrupted for the token's lifetime
+- **Severity when absent**: Medium — this is the most effective proactive DDoS defense for browser traffic; its absence means the Web ACL relies entirely on reactive AMR detection with an unavoidable delay window
 
 ### What it affects and what it does NOT affect
 Always-on Challenge only matches requests where the `Accept` header contains `text/html` (contains match, not exact) and the method is `GET`. This means:
@@ -297,5 +334,4 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 - Bot Control has different purpose, slower response, higher cost, narrower scope
 
 ### Override to Allow when default already handles the case
-- CategorySearchEngine/CategorySeo Allow → verified bots already pass by default, Allow override also lets forged bots through. See "Common level common misconfigurations" above for details.
-- Override lets unverified (forged) bots through too
+- CategorySearchEngine/CategorySeo Allow → category rules only match unverified bots; verified bots already pass without action; forged UAs never match category rules and are handled by SignalNonBrowserUserAgent. Allow override lets unverified search engine bots bypass all subsequent rules. See "Common level common misconfigurations" for details.
