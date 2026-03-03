@@ -29,15 +29,14 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 6. **Generate the report**: Write the full report including:
    - Summary table
    - Detailed findings with `⏳ Needs user confirmation` markers where business context is needed
-   - **Appendix: Rule Execution Flow** — both the Mermaid diagram and the detailed rule list (see Report Format below). This appendix MUST be included in the report.
+   - **Appendix: Rule Execution Flow** — Mermaid diagram (see Report Format below). This appendix MUST be included in the report.
 7. Save the report to the user's specified location. If no location is specified, save it in the same directory as the input WAF rules file, named `waf-review-report.md`.
 8. **Self-review (MANDATORY — do not skip)**:
    a. Use `fs_read` to read the saved report file from line 1 to the end. You MUST issue this tool call — do not rely on your memory of what you wrote.
    b. While reading, check for:
       - Issues the checklist missed (rule ordering problems, missing rule groups, cross-rule interactions, domain-specific risks)
       - Inconsistencies between the Summary table and the detailed findings (missing entries, wrong severity, wrong issue numbers)
-      - Mermaid diagram correctness (does it match the detailed rule list? are all label dependencies shown?)
-      - Rule Execution Flow completeness (are all rules listed? are all label producer→consumer relationships marked?)
+      - Mermaid diagram correctness (are all rules present? are all label dependencies shown with dashed arrows? are all terminating actions branching to terminal nodes?)
       - Findings that reference wrong rule names or priority numbers
    c. If you find additional issues or errors, append corrections to the report using `fs_write`.
    d. After completing self-review, state in your response: "Self-review completed. Read {N} lines. Found {N} additional issues / no additional issues."
@@ -84,38 +83,19 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 
 ## Appendix: Rule Execution Flow
 
-### Visual Overview (Mermaid)
-
-Generate a Mermaid `flowchart TD` diagram showing the rule execution flow:
-- Each rule is a node, labeled with priority, name, and action
+Generate a Mermaid `flowchart TD` diagram showing the complete rule execution flow. The diagram must include:
+- Each rule as a node, labeled with: priority, name, and action
 - Solid arrows for request flow (top to bottom in priority order)
-- Dashed arrows for label dependencies (from producer to consumer, annotated with label name)
-- Terminating actions (Allow/Block) branch to a terminal node (✅ Allowed / 🚫 Blocked)
-- Non-terminating actions (Count/Challenge that continues) flow to the next rule
-- Final node shows the default action for unmatched requests
-- Use diamond shapes for rules with scope-down conditions
-- Reference related issues on nodes where applicable (e.g., "⚠️ Issue #3")
+- Dashed arrows for label dependencies (from producer rule to consumer rule, annotated with the label name)
+- Terminating actions (Allow/Block) branch to a terminal node (✅ Allowed / 🚫 Blocked); Challenge/CAPTCHA on non-browser paths also branch to 🚫 Blocked with a note
+- Non-terminating actions (Count, or Challenge with valid token) flow to the next rule
+- Diamond shapes for rules with scope-down conditions
+- Key overrides noted inline on managed rule group nodes (e.g., "ChallengeAllDuringEvent→Count")
+- Issue references on affected nodes (e.g., "⚠️ Issue #4")
+- Final node showing the default action for unmatched requests
 
 Wrap the diagram in a ` ```mermaid ` code block so it renders in GitHub, VS Code, Typora, etc.
 
-### Detailed Rule List
-
-**Default Action**: {Allow/Block}
-
-For each rule in priority order, document:
-
-#### Priority {N} — {rule name} ({Custom/ManagedRuleGroup}, {action})
-- Match: {matching condition}
-- Scope-down: {condition} ← depends on priority {N} (if label-based)
-- Labels added: {labels or —}
-- Key overrides: {override details, for managed rule groups}
-- ⚠️ TERMINATES (if action is Allow or Block — request skips all subsequent rules)
-
-Use `← depends on priority {N}` to mark every label dependency explicitly.
-Use `⚠️ TERMINATES` on every Allow/Block rule to highlight where request evaluation stops.
-Reference related issues inline (e.g., "see Issue #3") where applicable.
-
-→ Requests not matched by any rule → **{default_action}**
 ```
 
 ## Severity Criteria
