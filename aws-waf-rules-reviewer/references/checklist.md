@@ -30,13 +30,13 @@ For every managed rule group with a scope-down:
 - [ ] If disabled for native app reasons, recommend dual AMR instance approach:
   - **Step 1 (prerequisite)**: Add a Count+Label rule **before** both AMR instances to identify and label native app traffic (e.g., label `native-app:identified`). This rule must be at a higher priority (lower number) than both AMR instances, because the AMR scope-downs consume this label — it must already exist when AMR evaluates the request.
   - **Step 2**: Configure two AMR instances:
-    - Instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW
-    - Instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM
+    - Instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW (LOW is the default; browser traffic already has `ChallengeAllDuringEvent` as the primary mitigation, so Block sensitivity can stay at default)
+    - Instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM (since Challenge is disabled for native apps, Block is the only available mitigation — raise sensitivity from default LOW to MEDIUM for adequate protection)
   - **How to configure two AMR instances**: The AWS console does not allow adding the same managed rule group twice. To duplicate it: in the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, then change the `Name` and `MetricName` fields to unique values. Save — AWS WAF will treat them as two independent rule instances with separate configurations.
 - [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions). Unanchored API path patterns are `contains` matches — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent.
 - [ ] Does the exempt regex cover all API paths that can't handle Challenge?
 - [ ] Check regex `|` operator precedence: `$` only anchors the last branch unless grouped with `()`
-- [ ] **SEO impact**: Does the AntiDDoS AMR scope-down exclude legitimate search engine crawlers? ChallengeAllDuringEvent will Challenge all challengeable requests during a DDoS event. Search engine crawlers (Googlebot, Bingbot, etc.) cannot complete JavaScript Challenge — they may index the Challenge interstitial page instead of actual content, severely damaging SEO. Solution: add a scope-down using ASN + User-Agent double verification to exclude verified crawlers from AntiDDoS inspection. See waf-knowledge.md "Search Engine Crawler Exclusion Pattern" for implementation details.
+- [ ] **SEO impact**: Does the Web ACL have a crawler labeling rule before AntiDDoS AMR? `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event. Search engine crawlers (Googlebot, Bingbot, etc.) may not reliably complete JavaScript Challenge — real-world cases have been observed where crawlers indexed the Challenge interstitial page instead of actual content, severely damaging SEO. The correct solution is a two-step approach: (1) add a Count+Label rule before AntiDDoS AMR that identifies verified crawlers via ASN + User-Agent double verification and labels them (e.g., `crawler:verified`); (2) add a scope-down to AntiDDoS AMR that excludes requests with that label. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern" for implementation details and JSON examples.
 
 **Key facts**:
 - AntiDDoS AMR detection is per-client-IP, not aggregate. Highly distributed low-rate attacks are harder to detect.
@@ -67,10 +67,9 @@ For every rule using Challenge or CAPTCHA action:
   - **Cannot do**: detect bots that disguise themselves as normal browsers (no bot-specific User-Agent), detect advanced bots using behavioral analysis, detect credential stuffing or inventory hoarding attacks
   - Common level only protects against bots that openly identify themselves. Any bot using a standard browser User-Agent will pass through Common Bot Control completely undetected. Advise the user to consider deploying Targeted level if they need protection against advanced or disguised bots.
 - [ ] Are any Common Bot Control rules overridden to Allow? Category rules only match unverified bots — verified bots already pass without action, and forged UAs never match category rules (they fall through to SignalNonBrowserUserAgent). Allow override on a category rule lets unverified bots in that category bypass all subsequent WAF rules.
-- [ ] `CategorySearchEngine` and `CategorySeo` default action is Block for unverified bots only. Override to Allow lets unverified search engine bots (e.g., individual-triggered Google SaaS tools) bypass all subsequent rules. Forged Googlebot UAs are NOT affected — they never match the category rule. Severity: **Low** (limited blast radius; does not enable full WAF bypass for arbitrary attackers).
+- [ ] `CategorySearchEngine` and `CategorySeo` default action is Block for unverified bots only. Override to Allow lets unverified search engine bots (e.g., individual-triggered Google SaaS tools) bypass all subsequent rules. Forged Googlebot UAs are NOT affected — they never match the category rule. Severity: **Low** (limited blast radius; does not enable full WAF bypass for arbitrary attackers). The correct approach for SEO protection is NOT to override these categories to Allow, but to use ASN match + UA double verification via a Count+Label rule that labels verified crawlers (e.g., `crawler:verified`), then scope-down both AntiDDoS AMR and Always-on Challenge to exclude that label. This is especially important when AntiDDoS AMR is present — Bot Control Allow overrides don't prevent AntiDDoS ChallengeAllDuringEvent from challenging crawlers. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern". Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
 - [ ] **SignalNonBrowserUserAgent and CategoryHttpLibrary**: default action is Block, but these rules frequently cause false positives on legitimate non-browser clients (native apps, API clients, legitimate tools). Best practice is to override both to **Count**. This avoids false positives while still adding labels that can be used by downstream rules for further evaluation.
-- [ ] For SEO protection: use ASN match + UA double verification instead of Bot Control Allow override. This is especially important when AntiDDoS AMR is present — Bot Control Allow overrides don't prevent AntiDDoS ChallengeAllDuringEvent from challenging crawlers. The correct approach is to scope-down AntiDDoS AMR itself to exclude verified crawlers. See waf-knowledge.md "Search Engine Crawler Exclusion Pattern". Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
-- [ ] If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. Two migration paths:
+- [ ] **Conditional — only check if Allow Rules Audit (section 1) found a UA-based Allow rule being fixed**: If native app bypass rule (Allow by UA) is being fixed → native app requests will enter Bot Control. Two migration paths:
   - **Short-term**: scope-down Bot Control to exclude native app traffic using an unforgeable label (e.g., a label applied by an earlier Count rule based on a non-UA condition). Since scope-down applies to the entire managed rule group, native app traffic bypasses all of Bot Control — both Common and Targeted levels. Do NOT discuss `SignalNonBrowserUserAgent` or `TGT_TokenAbsent` in this context; they are irrelevant when the entire rule group is bypassed.
   - **Medium-term**: integrate AWS WAF Mobile SDK. The SDK generates valid WAF tokens for native app requests, so Targeted level works correctly (`TGT_TokenAbsent` will not fire). However, Common level still requires attention: `SignalNonBrowserUserAgent` will Block native app requests and must be overridden to **Count** when the scope-down is removed.
   - **NEVER override `TGT_TokenAbsent` to Count** — this rule identifies token-absent requests and is the foundation of all Targeted Bot Control detection. Overriding it to Count disables the entire Targeted level's session-tracking mechanism.
@@ -99,13 +98,13 @@ This rule group contains three rules:
 
 - `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot). Generally safe to keep at default.
 - `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources. Generally safe to keep at default.
-- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities. Default is Count because DDoS IP lists change rapidly — an IP may be a compromised host (botnet) that has since recovered, but the list update lags behind. Blocking by default would risk false positives on legitimate users behind those recovered IPs.
+- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities, including open proxies and potentially some residential proxies that are exploited as DDoS relay points. Default is Count because these IPs may belong to legitimate users whose devices were temporarily compromised — blocking them outright would cause false positives.
 
 - [ ] Are these rule groups actually inspecting all traffic? (Check scope-down)
 - [ ] If scope-down is too narrow, these rule groups provide no value
-- [ ] **AWSManagedIPDDoSList at default Count**: this rule only adds the label `awswaf:managed:aws:amazon-ip-list:AWSManagedIPDDoSList` without taking action. If no downstream rule uses this label, the rule provides no protection. Note: even when AntiDDoS AMR is present, this rule still has value — AntiDDoS AMR only acts after detecting a DDoS event, so during normal times and during the detection delay at the start of an attack, known DDoS IPs are not blocked by AMR. AWSManagedIPDDoSList fills this gap. Two options for the user to consider:
-  1. Add a rate-based rule downstream that uses the DDoS IP list label as a scope-down condition, applying stricter rate limits to traffic from known DDoS IPs
-  2. During high-risk DDoS periods, temporarily override this rule to Challenge or Block, and revert to Count when the risk subsides
+- [ ] **AWSManagedIPDDoSList at default Count**: this rule only adds the label `awswaf:managed:aws:amazon-ip-list:AWSManagedIPDDoSList` without taking action. If no downstream rule uses this label, the rule provides no protection. Two options for the user to consider:
+  1. Deploy AntiDDoS AMR — it subsumes the ManagedIPDDoSList capability, so this rule is no longer needed when AMR is present
+  2. If the user does not want to deploy AntiDDoS AMR: add a rate-based rule downstream that uses the DDoS IP list label as a scope-down condition, applying stricter rate limits to traffic from known DDoS IPs. This avoids false positives (rate limiting instead of outright blocking) while reducing the impact of DDoS traffic from these IPs
 
 ### AWSManagedRulesAnonymousIpList (WCU: 50)
 
@@ -137,7 +136,7 @@ When different traffic types (browser vs native app) need different mitigation s
 - [ ] Better alternative: use `Accept: text/html` + `GET` method to identify landing page requests (browser navigation)
 - [ ] Use always-on Challenge on landing pages + extended token immunity time (e.g., 4 hours) to replace cookie-based old/new user detection
 - [ ] WAF token is unforgeable and serves as proof of prior Challenge completion
-- [ ] Search engine crawlers send `GET` + `Accept: text/html` — exclude with ASN match if Challenge is applied to landing pages
+- [ ] Search engine crawlers send `GET` + `Accept: text/html` — if Challenge is applied to landing pages, exclude verified crawlers using the `crawler:verified` label (requires the ASN + UA crawler labeling rule to be placed before the Challenge rule; see waf-knowledge.md "ASN + UA Crawler Labeling Rule")
 
 ## 12. Rule Priority Ordering
 
@@ -150,7 +149,7 @@ Compare the Web ACL's rule ordering against the recommended order in waf-knowled
 - [ ] Are rate-based rules placed before Always-on Challenge?
 - [ ] Is Always-on Challenge placed after IP reputation, Anonymous IP, and rate-based rules to minimize Challenge costs?
 - [ ] Are custom rules placed before application layer rule groups (CRS, KnownBadInputs, etc.)?
-- [ ] Is Bot Control (if present) placed last to minimize per-request costs?
+- [ ] Are Bot Control, ATP (Account Takeover Prevention), and ACFP (Account Creation Fraud Prevention) — if present — placed last to minimize per-request costs? All three use per-request pricing and should be placed after cheaper rules.
 - [ ] Could a higher-priority Allow rule cause traffic to skip critical lower-priority protections?
 
 ## 13. Missing Baseline Protections
@@ -166,17 +165,17 @@ Note: WCU cannot be accurately calculated from JSON alone. When recommending add
 
 ## 15. Token Domain Configuration
 
-- [ ] Does `token_domains` include the apex domain? (e.g., `example.com` automatically covers `www.example.com`, `sub.example.com` and all subdomains — no need to list each subdomain separately)
+- [ ] Does `token_domains` include the apex domain? (e.g., `example.com` automatically covers `www.example.com`, `sub.example.com` and all single-level subdomains — no need to list each subdomain separately)
 - [ ] Wildcard (`*`) is NOT needed and should not be used
-- [ ] Are there 4th-level domains (e.g., `a.b.example.com`) that need separate entries? Apex domain only covers up to 3rd-level subdomains.
+- [ ] Are there multi-level subdomains (e.g., `a.b.example.com`) that need separate entries? The apex domain `example.com` only covers `*.example.com` (one level of subdomain). Deeper subdomains like `a.b.example.com` require a separate `token_domains` entry for `b.example.com`.
 
 ## 16. Managed Rule Group Versions
 
 Only check versions for these specific rule groups:
-- **AWSManagedRulesSQLiRuleSet**: if pinned to a version below 2.0, recommend upgrading. Earlier versions have weaker SQLi detection coverage.
-- **AWSManagedRulesBotControlRuleSet**: if pinned to a version below 5.0, recommend upgrading. Earlier versions lack certain Targeted level detection capabilities.
+- **AWSManagedRulesSQLiRuleSet**: if pinned to a version below 2.0, recommend upgrading. The current default version is 1.0, but version 2.0 has significantly higher SQLi detection coverage.
+- **AWSManagedRulesBotControlRuleSet**: if pinned to a version below 5.0, recommend upgrading. The current default version is 1.0, which is outdated. Version 5.0's Common level can identify close to 700 bot types (up from far fewer in 1.0) based on UA and IP, and Targeted level includes substantially more detection rules.
 
-For all other managed rule groups, do not flag version numbers — the version shown in JSON is just the current snapshot and requires no action.
+For all other managed rule groups, do not flag version numbers — the version shown in JSON is just the current snapshot and requires no action. Only SQLiRuleSet and BotControlRuleSet are flagged because their default versions are significantly behind the latest, with meaningful detection capability gaps.
 
 ## 17. Logging and Monitoring
 
@@ -201,7 +200,7 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 
 ## 19. Default Action
 
-- [ ] What is the Web ACL's `default_action`? (Allow or Block) This determines what happens to requests that don't match any rule.
+- [ ] What is the Web ACL's `default_action`? (Allow or Block) This determines what happens to requests that don't match any rule. Note: `default_action` may also contain `CustomRequestHandling` (e.g., adding custom headers to the response) — this is normal configuration and not a security concern by itself.
 - [ ] If `default_action` is Allow: all requests that survive every rule are allowed. Ensure the rule set is comprehensive enough that only legitimate traffic falls through.
 - [ ] If `default_action` is Block: only explicitly allowed traffic passes. This is stricter but may cause false positives if Allow rules are incomplete.
 - [ ] **Redundant trailing Allow-all rule**: If `default_action` is already Allow, check whether the last rule in the Web ACL is a custom rule that matches all requests with Allow action. This is redundant — it wastes WCU and can cause maintenance confusion (e.g., a future maintainer may insert new rules after it, not realizing they will never be evaluated). Recommend removing it.
@@ -218,6 +217,11 @@ For Web ACLs with DDoS protection objectives:
   "Name": "always-on-challenge-html",
   "Priority": 8,
   "Action": { "Challenge": {} },
+  "ChallengeConfig": {
+    "ImmunityTimeProperty": {
+      "ImmunityTime": 14400
+    }
+  },
   "VisibilityConfig": {
     "SampledRequestsEnabled": true,
     "CloudWatchMetricsEnabled": true,
@@ -260,7 +264,7 @@ For Web ACLs with DDoS protection objectives:
 }
 ```
 
-Note: The `NotStatement` above assumes a crawler identification rule (Count+Label) is placed before this rule, labeling verified crawlers with `crawler:verified`. Replace the label key to match whatever label your crawler identification rule produces. If no crawler identification rule exists, add one first (see waf-knowledge.md "Search Engine Crawler Exclusion Pattern").
+Note: The `NotStatement` above assumes a crawler identification rule (Count+Label) is placed before this rule, labeling verified crawlers with `crawler:verified`. Replace the label key to match whatever label your crawler identification rule produces. If no crawler identification rule exists, add one first (see waf-knowledge.md "ASN + UA Crawler Labeling Rule").
 
 - [ ] If present, is the token immunity time extended to at least 4 hours (14400 seconds)? Default 300 seconds works but may cause unnecessary re-challenges for real users.
-- [ ] Is the always-on Challenge rule placed AFTER a crawler identification rule (Count+Label with ASN + UA verification)? The Challenge rule must scope-down to exclude requests labeled as legitimate crawlers, otherwise search engine SEO will be impacted.
+- [ ] Is there a crawler labeling rule (Count+Label with ASN + UA verification, e.g., `crawler:verified`) placed **before** the always-on Challenge rule? Without it, search engine crawlers will be continuously challenged on every HTML page request — not just during DDoS events — preventing them from indexing site content entirely. The always-on Challenge rule must exclude requests with the crawler label in its scope-down. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" for the labeling rule JSON.

@@ -87,10 +87,47 @@
 ### Dual instance pattern
 When browser and native app traffic need different strategies:
 1. **Pre-label native app requests**: Add a Count+Label rule **before** both AMR instances to label native app traffic (e.g., `native-app:identified`). This rule must be at a higher priority (lower number) than both AMR instances — the label must already exist when AMR evaluates the request.
-2. AMR instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW
-3. AMR instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM
+2. AMR instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW (LOW is the default; browser traffic already has `ChallengeAllDuringEvent` as the primary mitigation, so Block sensitivity can stay at default)
+3. AMR instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM (since Challenge is disabled for native apps, Block is the only available mitigation — raise sensitivity from default LOW to MEDIUM for adequate protection)
 
 Implementation: In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save. AWS WAF treats them as two independent rule instances.
+
+### SEO: excluding search engine crawlers from AntiDDoS AMR
+`ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event, including search engine crawlers. Although modern crawlers may support JavaScript execution, real-world cases have been observed where crawlers indexed the Challenge interstitial page (HTTP 202) instead of actual content during DDoS events, severely damaging SEO. The root cause is not fully understood — it may be that crawlers behave differently under high-load conditions, or that the Challenge interstitial is served in a context where the crawler does not retry after token acquisition.
+
+The solution is to place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before AntiDDoS AMR, then add a scope-down to AntiDDoS AMR that excludes requests with the `crawler:verified` label:
+
+```json
+{
+  "NotStatement": {
+    "Statement": {
+      "LabelMatchStatement": {
+        "Scope": "LABEL",
+        "Key": "crawler:verified"
+      }
+    }
+  }
+}
+```
+
+If AntiDDoS AMR already has a scope-down (e.g., for native app exclusion via dual instance pattern), combine them with an `AndStatement`:
+
+```json
+{
+  "AndStatement": {
+    "Statements": [
+      {
+        "NotStatement": {
+          "Statement": {
+            "LabelMatchStatement": { "Scope": "LABEL", "Key": "crawler:verified" }
+          }
+        }
+      },
+      { "...existing scope-down...": {} }
+    ]
+  }
+}
+```
 
 ## Bot Control (AWSManagedRulesBotControlRuleSet)
 
@@ -100,7 +137,7 @@ Implementation: In the Web ACL JSON editor, copy the existing AMR rule entry, pa
   1. **Verified bots** — UA claims to belong to a specific organization (e.g., Googlebot, Bingbot, Route53 Health Check) AND reverse DNS lookup confirms the source IP belongs to that organization. The matching category rule adds labels (`bot:verified` + category + name) but takes **no action**. Bot Control evaluation ends here; the request continues to subsequent Web ACL rules.
   2. **Unverified bots** — UA identifies the bot as belonging to a known category, but the bot cannot be verified via reverse DNS. This includes: bots not belonging to any specific organization (e.g., okhttp, WhatsApp), bots triggered by individual users on personal devices, bots whose business model doesn't involve visiting websites (e.g., scanners, curl), and bots from organizations where individual-triggered requests can't be reverse-DNS-verified (e.g., some Google SaaS developer tools). The matching category rule adds labels (`bot:unverified` + category + name) and applies the **default action (Block)**.
   3. **Unknown non-browser UA** — UA is neither a browser UA nor any recognized bot UA, OR it claims to be an organization bot but reverse DNS verification fails (forged UA). These requests do NOT match any category rule. They fall through to `SignalNonBrowserUserAgent`, which adds `signal:non_browser_user_agent` and applies the **default action (Block)**.
-- Can identify 200+ bot types
+- Can identify close to 700 bot types based on UA and IP (version 5.0+; earlier versions identify significantly fewer)
 
 ### Common level limitations
 - **Only detects bots that self-identify via User-Agent.** If a bot uses a standard browser User-Agent (e.g., Chrome or Firefox UA), Common level will not detect it at all — the request passes through Bot Control as if it were a normal browser request.
@@ -111,7 +148,7 @@ Implementation: In the Web ACL JSON editor, copy the existing AMR rule entry, pa
 ### Common level common misconfigurations
 
 **Overriding CategorySearchEngine/CategorySeo to Allow to "protect SEO":**
-This is unnecessary and potentially harmful, but the actual risk is more nuanced than it appears. Category rules only match **unverified** bots in that category — bots that self-identify as search engine crawlers but cannot be verified via reverse DNS (e.g., individual-triggered Google SaaS tools, personal-device bots). Verified crawlers (e.g., real Googlebot with confirmed reverse DNS) are already handled without any action by the category rule — they pass through with `bot:verified` label regardless of the override. Forged Googlebot UAs (reverse DNS fails) do NOT match `CategorySearchEngine` at all — they fall through to `SignalNonBrowserUserAgent` and are Blocked. Therefore, overriding `CategorySearchEngine` to Allow only affects unverified search engine bots (which would otherwise be Blocked), allowing them to bypass all subsequent WAF rules. Severity: **Low** — the blast radius is limited to unverified bots in that category; it does not enable full WAF bypass for arbitrary attackers. The correct approach: keep default actions. If AntiDDoS AMR's ChallengeAllDuringEvent is a concern for crawlers, scope-down AntiDDoS AMR using ASN + UA double verification (see "Search Engine Crawler Exclusion Pattern"), not Bot Control Allow overrides.
+This is unnecessary and potentially harmful, but the actual risk is more nuanced than it appears. Category rules only match **unverified** bots in that category — bots that self-identify as search engine crawlers but cannot be verified via reverse DNS (e.g., individual-triggered Google SaaS tools, personal-device bots). Verified crawlers (e.g., real Googlebot with confirmed reverse DNS) are already handled without any action by the category rule — they pass through with `bot:verified` label regardless of the override. Forged Googlebot UAs (reverse DNS fails) do NOT match `CategorySearchEngine` at all — they fall through to `SignalNonBrowserUserAgent` and are Blocked. Therefore, overriding `CategorySearchEngine` to Allow only affects unverified search engine bots (which would otherwise be Blocked), allowing them to bypass all subsequent WAF rules. Severity: **Low** — the blast radius is limited to unverified bots in that category; it does not enable full WAF bypass for arbitrary attackers. The correct approach: keep default actions. If AntiDDoS AMR's ChallengeAllDuringEvent is a concern for crawlers, use the Count+Label crawler labeling rule to label verified crawlers, then scope-down both AntiDDoS AMR and Always-on Challenge to exclude that label (see "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern"), not Bot Control Allow overrides.
 
 **Keeping SignalNonBrowserUserAgent and CategoryHttpLibrary at default Block:**
 These two rules block requests with non-browser User-Agents. Default Block frequently causes false positives on legitimate non-browser clients (native apps, API clients, monitoring tools, legitimate HTTP libraries). Best practice is to override both to **Count**. This preserves the labeling (for downstream rules to use) while avoiding false positives.
@@ -180,11 +217,11 @@ These two rules block requests with non-browser User-Agents. Default Block frequ
 Contains three rules:
 - `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot)
 - `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources
-- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities
+- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities, including open proxies and potentially some residential proxies that are exploited as DDoS relay points
 
-AWSManagedIPDDoSList defaults to Count because DDoS IP lists change rapidly — an IP may be a compromised host (botnet) that has since recovered, but the list update lags behind. Blocking by default would risk false positives.
+AWSManagedIPDDoSList defaults to Count because these IPs may belong to legitimate users whose devices were temporarily compromised — blocking them outright would cause false positives.
 
-**Relationship with AntiDDoS AMR**: AntiDDoS AMR only acts after detecting a DDoS event. During normal times and during the detection delay at the start of an attack, known DDoS IPs are not blocked by AMR. AWSManagedIPDDoSList fills this gap by providing IP-intelligence-based protection that is always active.
+**Relationship with AntiDDoS AMR**: AntiDDoS AMR has built-in capability to handle IPs on the ManagedIPDDoSList. When AntiDDoS AMR is deployed, AWSManagedIPDDoSList is not needed — AMR subsumes its functionality. However, if the user does not deploy AntiDDoS AMR, AWSManagedIPDDoSList at default Count only adds a label without taking action. A downstream rule (e.g., a rate-based rule with the DDoS IP label as scope-down) is needed to make it effective.
 
 ### AWSManagedRulesAnonymousIpList (WCU: 50)
 - `AnonymousIPList` (default Block): TOR nodes, temporary proxies, masking services
@@ -196,37 +233,124 @@ AWSManagedIPDDoSList defaults to Count because DDoS IP lists change rapidly — 
 
 - Match requests by source IP's Autonomous System Number
 - Syntax: `"AsnMatchStatement": { "AsnList": [15169, 8075] }`
-- Use case: identify legitimate search engine crawlers. Confirmed ASNs: Google ASN 15169, Bing ASN 8075, Yandex ASN 13238. For other search engines (Baidu, Yahoo Japan, etc.), verify the current ASN list from their official documentation — these engines may use multiple ASNs.
+- Use case: identify legitimate search engine crawlers. Confirmed ASNs: Google ASN 15169, Bing ASN 8075, Yandex ASN 13238 and 208722. For other search engines (Baidu, Yahoo Japan, etc.), verify the current ASN list from their official documentation — these engines may use multiple ASNs.
 - Combine with User-Agent for double verification (ASN is unforgeable, UA is forgeable)
 - Reference: https://aws.amazon.com/cn/blogs/china/aws-waf-guide-10-using-amazon-q-developer-cli-to-solve-conflicts-between-ddos-protection-and-seo/
+
+## ASN + UA Crawler Labeling Rule
+
+The recommended way to identify verified search engine crawlers is a dedicated Count+Label rule placed **before** any rule that needs to exclude crawlers. This rule uses ASN + User-Agent double verification:
+- **ASN** is unforgeable — it identifies the actual network the request originates from
+- **User-Agent** alone is forgeable, but combined with ASN it becomes reliable
+
+Once labeled, downstream rules (AntiDDoS AMR, Always-on Challenge, etc.) can exclude crawlers via a simple `LabelMatchStatement` in their scope-down, without duplicating the ASN+UA logic.
+
+### Why not use Bot Control's `bot:verified` label instead?
+Bot Control Common level does identify verified search engine crawlers and adds the `bot:verified` label. However, Bot Control must be placed **last** in the Web ACL (it is the most expensive rule group at $1–$10/million requests; placing it last minimizes the number of requests it evaluates). This means `bot:verified` does not exist yet when AntiDDoS AMR and Always-on Challenge evaluate the request — both of which must be placed before Bot Control. The ASN+UA labeling rule is therefore always required when crawler exclusion is needed, regardless of whether Bot Control is present.
+
+### Rule JSON
+
+```json
+{
+  "Name": "label-verified-crawlers",
+  "Priority": 5,
+  "Action": {
+    "Count": {}
+  },
+  "RuleLabels": [
+    { "Name": "crawler:verified" }
+  ],
+  "VisibilityConfig": {
+    "SampledRequestsEnabled": true,
+    "CloudWatchMetricsEnabled": true,
+    "MetricName": "label-verified-crawlers"
+  },
+  "Statement": {
+    "OrStatement": {
+      "Statements": [
+        {
+          "AndStatement": {
+            "Statements": [
+              {
+                "ByteMatchStatement": {
+                  "SearchString": "googlebot",
+                  "FieldToMatch": { "SingleHeader": { "Name": "user-agent" } },
+                  "TextTransformations": [{ "Priority": 0, "Type": "LOWERCASE" }],
+                  "PositionalConstraint": "CONTAINS"
+                }
+              },
+              {
+                "AsnMatchStatement": { "AsnList": [15169] }
+              }
+            ]
+          }
+        },
+        {
+          "AndStatement": {
+            "Statements": [
+              {
+                "ByteMatchStatement": {
+                  "SearchString": "bingbot",
+                  "FieldToMatch": { "SingleHeader": { "Name": "user-agent" } },
+                  "TextTransformations": [{ "Priority": 0, "Type": "LOWERCASE" }],
+                  "PositionalConstraint": "CONTAINS"
+                }
+              },
+              {
+                "AsnMatchStatement": { "AsnList": [8075] }
+              }
+            ]
+          }
+        },
+        {
+          "AndStatement": {
+            "Statements": [
+              {
+                "ByteMatchStatement": {
+                  "SearchString": "yandexbot",
+                  "FieldToMatch": { "SingleHeader": { "Name": "user-agent" } },
+                  "TextTransformations": [{ "Priority": 0, "Type": "LOWERCASE" }],
+                  "PositionalConstraint": "CONTAINS"
+                }
+              },
+              {
+                "AsnMatchStatement": { "AsnList": [13238, 208722] }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+### Confirmed ASNs
+- Google: ASN 15169
+- Bing (Microsoft): ASN 8075
+- Yandex: ASN 13238 and ASN 208722
+
+For other search engines (Baidu, Yahoo Japan, etc.), do NOT assume a single ASN covers all crawler IPs. Advise the user to verify the current ASN list from the search engine's official documentation before configuring.
+
+### Extensibility
+To add more search engines, add more `AndStatement` branches inside the `OrStatement`. No changes needed to downstream rules — they all consume the same `crawler:verified` label.
 
 ## Search Engine Crawler Exclusion Pattern
 
 ### Problem
-AntiDDoS AMR's ChallengeAllDuringEvent rule Challenges all challengeable requests during a DDoS event. Search engine crawlers (Googlebot, Bingbot, etc.) cannot execute JavaScript Challenge. When challenged, crawlers may index the Challenge interstitial page (HTTP 202 with JS) instead of actual content, severely damaging SEO rankings and search result appearance.
+Two rules in a typical DDoS-protection Web ACL will Challenge search engine crawlers:
+1. **AntiDDoS AMR's `ChallengeAllDuringEvent`** — Challenges all challengeable requests during a DDoS event
+2. **Always-on Challenge for HTML pages** — Challenges all `GET + Accept: text/html` requests continuously, not just during attacks
+
+Search engine crawlers (Googlebot, Bingbot, etc.) may not reliably complete JavaScript Challenge. Real-world cases have been observed where crawlers indexed the Challenge interstitial page (HTTP 202 with JS) instead of actual content during DDoS events, severely damaging SEO rankings and search result appearance.
 
 ### Why not use Bot Control for this?
-Bot Control can identify verified crawlers, but it costs $10/million requests (Targeted level) or $1/million (Common level). For AntiDDoS scenarios where the goal is simply to exclude crawlers from Challenge, this is unnecessarily expensive.
+Bot Control Common level does identify verified crawlers and adds the `bot:verified` label — but Bot Control must be placed **last** in the Web ACL to minimize per-request costs. This means `bot:verified` does not exist yet when AntiDDoS AMR and Always-on Challenge evaluate the request. Cost aside, the ordering constraint alone makes Bot Control unsuitable for this purpose. See "ASN + UA Crawler Labeling Rule" for the correct approach.
 
-### Solution: ASN + User-Agent double verification scope-down
-Apply a scope-down to the AntiDDoS AMR rule group that excludes requests matching BOTH:
-1. User-Agent contains a search engine bot keyword (e.g., "googlebot", "bingbot") — forgeable alone, but combined with ASN becomes reliable
-2. Source IP belongs to the search engine's ASN (unforgeable) — Google: ASN 15169, Bing: ASN 8075
+### Solution
+Place the "ASN + UA Crawler Labeling Rule" (see above) at a higher priority (lower number) than both AntiDDoS AMR and Always-on Challenge. Then configure each of those rules to exclude requests carrying the `crawler:verified` label via their scope-down.
 
-### Scope-down structure
-The scope-down uses a NOT(Or(And, And)) pattern:
-- NOT → "inspect everything EXCEPT the following"
-  - OR → "any of these crawler patterns"
-    - AND → UA contains "googlebot" AND ASN is 15169
-    - AND → UA contains "bingbot" AND ASN is 8075
-
-This ensures AntiDDoS AMR inspects all traffic except verified search engine crawlers.
-
-### Extensibility
-The same pattern can be extended for other search engines by adding more AND branches inside the OR statement. Confirmed examples:
-- Yandex: UA contains "yandexbot", ASN 13238 and ASN 208722
-
-For other search engines (Baidu, Yahoo Japan, etc.), do NOT assume a single ASN covers all crawler IPs — these engines may use multiple ASNs. Advise the user to verify the current ASN list from the search engine's official documentation before configuring.
+This single labeling rule serves both downstream consumers — no duplication of ASN+UA logic needed.
 
 ## Always-on Challenge for HTML Pages
 
@@ -250,9 +374,9 @@ This narrow scope means always-on Challenge can be safely deployed without impac
 - Configurable at the rule level or Web ACL level
 
 ### Search engine crawler consideration
-- Search engine crawlers send `GET` requests with `Accept: text/html` — they will be challenged
-- Crawlers cannot complete JavaScript Challenge, so always-on Challenge will block them
-- Solution: place the always-on Challenge rule AFTER a Count+Label rule that identifies legitimate crawlers via ASN + User-Agent double verification (see "Search Engine Crawler Exclusion Pattern"), then scope-down the Challenge rule to exclude requests with the crawler label
+- Search engine crawlers send `GET` requests with `Accept: text/html` — they match the always-on Challenge condition and will be challenged on every request, not just during DDoS events
+- Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, so always-on Challenge can continuously disrupt crawler indexing
+- Solution: place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before this rule, then exclude requests with the `crawler:verified` label in the Challenge rule's scope-down (see the always-on-challenge-html rule JSON in checklist.md section 20 for an example that includes this exclusion)
 
 ### Complementary to AntiDDoS AMR
 - AntiDDoS AMR is reactive: it detects anomalies and then starts mitigating
@@ -266,10 +390,10 @@ This narrow scope means always-on Challenge can be safely deployed without impac
 
 ## Token Domain Configuration
 
-- `token_domains` should include the apex domain (e.g., `example.com`), which automatically covers all subdomains up to 3rd level (`www.example.com`, `sub.example.com`, etc.)
+- `token_domains` should include the apex domain (e.g., `example.com`), which automatically covers all single-level subdomains (`www.example.com`, `sub.example.com`, i.e., `*.example.com`)
 - No need to list each subdomain separately
 - Wildcard (`*`) is NOT needed and should not be used
-- 4th-level domains (e.g., `a.b.example.com`) require separate entries — apex domain coverage does not extend that deep
+- Multi-level subdomains (e.g., `a.b.example.com`) require separate entries — the apex domain `example.com` only covers `*.example.com` (one level of subdomain). For `a.b.example.com`, add `b.example.com` to `token_domains`.
 
 ## Recommended Rule Priority Order
 
@@ -285,7 +409,7 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 8. **Always-on Challenge for HTML pages** — Proactive DDoS defense for browser traffic. Placed after IP reputation, Anonymous IP, and rate-based rules so that traffic already filtered by those rules does not incur Challenge costs.
 9. **Custom rules** — Business-specific logic including geo-blocking, URI-based rules, header-based rules, etc.
 10. **Application layer rule groups** (CRS, KnownBadInputs, SQLi, etc.) — OWASP Top 10 and application-specific protections. Placed after custom rules so that business-specific Allow/Block decisions take precedence.
-11. **Bot Control** (optional) — Most expensive rule group (per-request pricing at Targeted level). Place last to minimize the number of requests it evaluates. Only configure if the Web ACL requires bot detection beyond what other rules provide.
+11. **Bot Control, ATP, ACFP** (optional) — Per-request pricing rule groups. Place last to minimize the number of requests they evaluate. Bot Control is the most expensive at Targeted level ($10/million requests). ATP and ACFP also use per-request pricing and should be grouped here.
 
 **Key principles:**
 - Label producers before label consumers
