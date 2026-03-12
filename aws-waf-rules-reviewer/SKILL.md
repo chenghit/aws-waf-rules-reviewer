@@ -19,7 +19,7 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 2. Identify the Web ACL's purpose from context (DDoS protection, bot control, application security, etc.)
 3. **Build a rule execution flow**: Before checking individual items, walk through all rules in priority order and build a mental model of the request lifecycle:
    - For each rule, note: priority, action (Allow/Block/Count/Challenge), labels produced, scope-down conditions, and label dependencies
-   - Identify which rules are "labeling-only" (Count + add label) vs "terminating" (Allow/Block)
+   - Identify which rules are "labeling-only" (Count + add label) vs "terminating" (Allow/Block) vs "conditionally terminating" (Challenge/CAPTCHA — non-terminating for browser HTML requests that can complete the challenge, but effectively Block for non-browser or non-GET requests)
    - Trace how a typical request flows: which rules it hits, which labels accumulate, and where it could be terminated
    - Map label producers → label consumers (e.g., rule at priority 100 adds label X, rule at priority 500 uses label X in scope-down)
    - Identify Allow rules that terminate evaluation early, causing the request to skip all subsequent rules
@@ -36,7 +36,7 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
    b. While reading, check for:
       - Issues the checklist missed (rule ordering problems, missing rule groups, cross-rule interactions, domain-specific risks)
       - Inconsistencies between the Summary table and the detailed findings (missing entries, wrong severity, wrong issue numbers)
-      - Mermaid diagram correctness (are all rules present? are all label dependencies shown with dashed arrows? are all terminating actions branching to terminal nodes?)
+      - Mermaid diagram correctness (are all rules present? are all label dependencies shown with dashed arrows? are terminating actions branching to terminal nodes? Note: Challenge/CAPTCHA is non-terminating for browser HTML requests that can complete the challenge, but terminating (effectively Block) for non-browser or non-GET requests that cannot complete it — the diagram should reflect both paths)
       - Findings that reference wrong rule names or priority numbers
    c. If you find additional issues or errors, append corrections to the report using `fs_write`.
    d. After completing self-review, state in your response: "Self-review completed. Read {N} lines. Found {N} additional issues / no additional issues."
@@ -115,8 +115,9 @@ Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF t
 - Rate-based rule characteristics and overlapping scope-down detection
 - IP reputation rule groups (AWSManagedIPDDoSList default Count rationale, relationship with AntiDDoS AMR)
 - Anonymous IP rule groups (HostingProviderIPList outdated assumption)
-- Always-on Challenge as proactive DDoS defense (scope, immunity time, crawler exclusion)
-- Search engine crawler exclusion pattern (ASN + UA double verification)
+- Always-on Challenge for HTML pages as proactive DDoS defense (only GET + Accept: text/html requests can complete Challenge, so this defense only applies to HTML page requests; scope, immunity time, crawler exclusion)
+- ASN + UA crawler labeling rule (Count+Label pattern, JSON example)
+- Search engine crawler exclusion pattern (label-based scope-down for AntiDDoS AMR and Always-on Challenge)
 - Managed rule group action override mechanics (Count/Allow/Block implications)
 - Recommended rule priority order
 - CRS SizeRestrictions_Body false positive risk
