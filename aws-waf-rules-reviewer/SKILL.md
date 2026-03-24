@@ -24,7 +24,7 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
    - Map label producers → label consumers (e.g., rule at priority 100 adds label X, rule at priority 500 uses label X in scope-down)
    - Identify Allow rules that terminate evaluation early, causing the request to skip all subsequent rules
    This execution flow is your primary analysis tool. Refer back to it when evaluating each checklist item.
-4. Run through the checklist in [references/checklist.md](references/checklist.md)
+4. Run through the checklist in [references/checklist.md](references/checklist.md). When the checklist references a section in waf-knowledge.md, read that section before evaluating the item.
 5. For each issue found, assess severity (Critical/Medium/Low/Awareness) based on criteria below
 6. **Generate the report**: Write the full report including:
    - Summary table
