@@ -41,7 +41,7 @@ For every managed rule group with a scope-down:
 - [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions). Unanchored API path patterns are `contains` matches — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent.
 - [ ] Does the exempt regex cover all API paths that can't handle Challenge?
 - [ ] Check regex `|` operator precedence: `$` only anchors the last branch unless grouped with `()`
-- [ ] **SEO impact**: Does the Web ACL have a crawler labeling rule before AntiDDoS AMR? `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event. Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, severely damaging SEO. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern" for the solution (Count+Label rule with ASN+UA double verification, then scope-down AMR to exclude the label).
+- [ ] **SEO impact**: Does the Web ACL have a crawler labeling rule before AntiDDoS AMR? `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event. Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, severely damaging SEO. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern" for the solution (Count+Label rule with ASN+UA double verification, then scope-down AMR to exclude the label). If recommending adding a crawler labeling rule, copy the full rule JSON from waf-knowledge.md "Rule JSON" into the report for easy copy-paste.
 
 **Key facts**: See waf-knowledge.md "AntiDDoS AMR" for detection mechanism, performance, labels produced, and pricing details.
 
@@ -166,7 +166,7 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 For Web ACLs with DDoS protection objectives:
 
 - [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is the most effective proactive DDoS defense — it takes effect immediately with zero detection delay, unlike AntiDDoS AMR which requires time to establish a baseline. See waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
-- [ ] If not present and the Web ACL has DDoS protection objectives, flag as **Medium** severity and recommend adding it. Provide the following rule JSON directly in the report for easy copy-paste:
+- [ ] If not present and the Web ACL has DDoS protection objectives, flag as **Medium** severity and recommend adding it. Copy the following rule JSON directly into the report (do NOT just reference this checklist — the user needs the JSON in the report itself):
 
 ```json
 {
