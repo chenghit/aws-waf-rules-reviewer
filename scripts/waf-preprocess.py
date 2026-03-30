@@ -203,10 +203,6 @@ def _summarize_statement(stmt: dict) -> dict:
     if not stmt or not isinstance(stmt, dict):
         return {"summary": "EMPTY", "leaf_count": 0, "leaf_types": set(), "samples": None}
 
-    for key in SKIP_KEYS:
-        sk = _to_snake(key) if key[0].isupper() else key
-        stmt.pop(sk, None)
-
     # Leaf: byte_match_statement
     if "byte_match_statement" in stmt:
         bm = stmt["byte_match_statement"]
@@ -397,7 +393,7 @@ def _extract_action(rule: dict) -> str:
     return "unknown"
 
 def _extract_overrides(mg: dict) -> list:
-    overrides = mg.get("rule_action_overrides", mg.get("excluded_rules", []))
+    overrides = mg.get("rule_action_overrides", [])
     result = []
     for o in overrides:
         name = o.get("name", "?")
