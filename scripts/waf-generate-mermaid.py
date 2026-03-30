@@ -39,37 +39,43 @@ def _find_label_refs_in_rule(rule: dict) -> list[str]:
         refs.extend(_find_label_refs_in_statement(sd.get("summary", "")))
     return refs
 
-def _resolve_label_producer(label: str, rules: list, managed_labels: dict) -> str | None:
-    """Find which rule produces a given label. Returns rule name or None."""
+def _resolve_label_producers(label: str, rules: list, managed_labels: dict) -> list[str]:
+    """Find all rules that produce a given label. Returns list of rule names."""
+    producers = []
     # Check custom rule labels
     for r in rules:
         if label in r.get("rule_labels", []):
-            return r["name"]
+            producers.append(r["name"])
+    if producers:
+        return producers
     # Check managed rule group labels (exact match)
     for group_name, labels in managed_labels.get("label_producers", {}).items():
         if label in labels:
-            # Find the rule that uses this managed group
             for r in rules:
                 mg = r.get("managed", {})
                 if mg.get("group_name") == group_name:
-                    return r["name"]
+                    producers.append(r["name"])
+    if producers:
+        return producers
     # Check managed label prefixes (prefix match for category labels etc.)
     for prefix, group_name in managed_labels.get("managed_label_prefixes", {}).items():
         if label.startswith(prefix):
             for r in rules:
                 mg = r.get("managed", {})
                 if mg.get("group_name") == group_name:
-                    return r["name"]
+                    producers.append(r["name"])
+    if producers:
+        return producers
     # Check shared token labels
     for tl in managed_labels.get("shared_token_labels", []):
         if label == tl or label.startswith(tl + ":"):
-            # Could be any token label producer — find the first one in the rules
             for producer_group in managed_labels.get("token_label_producers", []):
                 for r in rules:
                     mg = r.get("managed", {})
                     if mg.get("group_name") == producer_group:
-                        return r["name"]
-    return None
+                        producers.append(r["name"])
+            break
+    return producers
 
 def _build_label_dependencies(rules: list, managed_labels: dict) -> list[dict]:
     """Build list of {producer, consumer, label} dependencies."""
@@ -77,11 +83,12 @@ def _build_label_dependencies(rules: list, managed_labels: dict) -> list[dict]:
     for r in rules:
         refs = _find_label_refs_in_rule(r)
         for label in refs:
-            producer = _resolve_label_producer(label, rules, managed_labels)
-            if producer and producer != r["name"]:
-                deps.append({
-                    "producer": producer,
-                    "consumer": r["name"],
+            producers = _resolve_label_producers(label, rules, managed_labels)
+            for producer in producers:
+                if producer != r["name"]:
+                    deps.append({
+                        "producer": producer,
+                        "consumer": r["name"],
                     "label": label,
                 })
     return deps
