@@ -100,6 +100,27 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 | 🟢 Low | 配置不够优化，但不直接影响安全性 |
 | 🔵 Awareness | 非漏洞 — 用户应了解的运维信息 |
 
+## 性能预期
+
+LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~60KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
+
+| 规则数量 | LLM 分析 thinking 时间 | 脚本步骤耗时 | 总耗时（估算） |
+|---------|----------------------|------------|-------------|
+| 27 条（实测） | ~10 分钟 | < 1 分钟 | ~15 分钟 |
+| 100+ 条（预估） | ~15-20 分钟 | < 1 分钟 | ~25 分钟 |
+
+> Thinking 时间受模型版本影响较大。随着模型对长 context 推理效率的提升，耗时预计会自然下降。
+
+## 示例
+
+`examples/` 目录包含一个完整的输入输出示例：
+
+- `web-acl-example.json` — 组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
+- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文，16 个 findings）
+- `waf-review/` 下的其他文件 — 脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
+
+使用 Claude Sonnet 4.6 模型生成。
+
 ## 检查清单覆盖范围
 
 评审涵盖 18 个类别，分为两个阶段：
