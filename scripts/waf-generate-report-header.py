@@ -121,6 +121,7 @@ def main():
 
 **Web ACL**: {acl_name}
 **Review Date**: {today}
+**Objective**: Review WAF configuration for security issues, misconfigurations, and optimization opportunities
 
 ## Summary
 

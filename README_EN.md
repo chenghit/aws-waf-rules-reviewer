@@ -13,7 +13,8 @@ flowchart LR
     B --> D["Pre-checks"]
     C --> E["LLM Analysis"]
     D --> E
-    E --> F["Mermaid Annotate"]
+    E --> E2["Report Header"]
+    E2 --> F["Mermaid Annotate"]
     F --> G["Report Validate"]
     G --> H["LLM Self-review"]
     H --> I["Review Report"]
@@ -21,6 +22,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
     style E fill:#fff3e0
@@ -70,6 +72,25 @@ Installed structure:
 **Dependencies**: Python 3.10+ (stdlib only, no pip install needed)
 
 For other tools (Claude Code, OpenRouter, etc.), copy the directory to the corresponding skill location. Scripts auto-discover their install path via `glob` — no path configuration needed.
+
+## Supported Models
+
+This tool requires models with sufficient **output token capacity** — review reports can be long, and the self-review step needs additional output space.
+
+**Minimum requirement: 64K output tokens.**
+
+### Kiro CLI Users
+
+Kiro CLI supports only Claude models on Amazon Bedrock. Use `/model` in Kiro to switch models.
+
+| Model | Input Tokens | Output Tokens | Use Case |
+|-------|-------------|--------------|----------|
+| Claude Sonnet 4 | 200K | 64K | ✅ ≤100 rules |
+| Claude Opus 4 | 200K | 64K | ✅ ≤100 rules |
+
+### Other Agent Tool Users
+
+Any model meeting the 64K output requirement will work.
 
 ## Input
 

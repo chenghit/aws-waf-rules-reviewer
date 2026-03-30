@@ -13,7 +13,8 @@ flowchart LR
     B --> D["机械预检"]
     C --> E["LLM 分析"]
     D --> E
-    E --> F["Mermaid 标注"]
+    E --> E2["报告头生成"]
+    E2 --> F["Mermaid 标注"]
     F --> G["报告验证"]
     G --> H["LLM 自审"]
     H --> I["评审报告"]
@@ -21,6 +22,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
     style E fill:#fff3e0
@@ -70,6 +72,25 @@ flowchart LR
 **依赖**: Python 3.10+（标准库，无需 pip install）
 
 对于其他工具（Claude Code、OpenRouter 等），将目录复制到对应的 skill 目录即可。脚本通过 `glob` 自动发现安装位置，无需配置路径。
+
+## 支持的模型
+
+本工具需要具备足够 **output token 容量** 的模型——评审报告可能很长，自审阶段还需要额外的输出空间。
+
+**最低要求：64K output tokens。**
+
+### Kiro CLI 用户
+
+Kiro CLI 仅支持 Amazon Bedrock 上的 Claude 模型。在 Kiro 中使用 `/model` 切换模型。
+
+| 模型 | 输入 Tokens | 输出 Tokens | 适用场景 |
+|------|------------|------------|---------|
+| Claude Sonnet 4 | 200K | 64K | ✅ ≤100 条规则 |
+| Claude Opus 4 | 200K | 64K | ✅ ≤100 条规则 |
+
+### 其他 Agent 工具用户
+
+任何满足 64K output 要求的模型均可使用。
 
 ## 输入
 
