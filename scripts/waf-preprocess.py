@@ -30,8 +30,24 @@ SAMPLE_THRESHOLD = 3  # OR branches with more same-type leaves get sampled
 
 _PASCAL_RE = re.compile(r'(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])')
 
+# Known acronyms that _PASCAL_RE mishandles (consecutive uppercase)
+_ACRONYM_FIXES = {
+    "d_do_s": "ddos",
+    "ur_is": "uris",
+    "a_w_s": "aws",
+    "i_p": "ip",
+    "a_c_l": "acl",
+    "a_r_n": "arn",
+    "x_s_s": "xss",
+    "sq_li": "sqli",
+    "s_q_l": "sql",
+}
+
 def _to_snake(name: str) -> str:
-    return _PASCAL_RE.sub('_', name).lower()
+    result = _PASCAL_RE.sub('_', name).lower()
+    for wrong, right in _ACRONYM_FIXES.items():
+        result = result.replace(wrong, right)
+    return result
 
 def _normalize_keys(obj):
     """Recursively convert all dict keys to snake_case, skipping SKIP_KEYS."""
@@ -114,9 +130,22 @@ def _build_line_index(text: str, rules_key: str) -> dict[int, tuple[int, int]]:
     # Now track braces from rules_line onwards
     depth = 0
     started = False
+    in_string = False
+    escaped = False
     for i in range(rules_line, len(lines)):
         line = lines[i]
         for ch in line:
+            if escaped:
+                escaped = False
+                continue
+            if ch == '\\' and in_string:
+                escaped = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
             if ch == '[' and not started:
                 started = True
                 depth = 0
@@ -347,33 +376,23 @@ def _summarize_logic(op: str, children: list) -> dict:
 # ── Rule extraction ───────────────────────────────────────────────────────
 
 def _extract_action(rule: dict) -> str:
-    # Custom rules: rule_action
-    ra = rule.get("rule_action", {})
-    if ra:
-        for act in ("allow", "block", "count", "challenge", "captcha"):
-            if act in ra:
-                return act
+    # Custom rules: rule_action / action
+    for key in ("rule_action", "action"):
+        ra = rule.get(key, {})
+        if ra and isinstance(ra, dict):
+            for act in ("allow", "block", "count", "challenge", "captcha"):
+                if act in ra:
+                    return act
 
-    # Managed rule groups: rule_group_action
-    rga = rule.get("rule_group_action", {})
-    if rga:
-        if "none" in rga:
-            return "managed_default"
-        for act in ("allow", "block", "count", "challenge", "captcha"):
-            if act in rga:
-                return act
-
-    # PascalCase variants
-    ra = rule.get("Action", {})
-    if ra:
-        for act in ("Allow", "Block", "Count", "Challenge", "Captcha"):
-            if act in ra:
-                return act.lower()
-
-    rga = rule.get("OverrideAction", {})
-    if rga:
-        if "None" in rga or "none" in rga:
-            return "managed_default"
+    # Managed rule groups: rule_group_action / override_action
+    for key in ("rule_group_action", "override_action"):
+        rga = rule.get(key, {})
+        if rga and isinstance(rga, dict):
+            if "none" in rga:
+                return "managed_default"
+            for act in ("allow", "block", "count", "challenge", "captcha"):
+                if act in rga:
+                    return act
 
     return "unknown"
 
@@ -514,6 +533,10 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
         "lines": list(lines) if lines else None,
         "jsonpath": f"{jsonpath_prefix}[{idx}]",
     }
+
+    # Fill scope_down source_lines from rule's source lines
+    if scope_down and lines:
+        scope_down["source_lines"] = list(lines)
 
     result = {
         "name": name,
