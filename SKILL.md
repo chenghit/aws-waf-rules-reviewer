@@ -17,7 +17,12 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 
 Before anything else, locate the scripts directory and compute absolute paths.
 
-1. Find the scripts directory. Use `glob` to search for `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py`. The parent directory of the found file is `scripts_dir`. If not found, fall back to the v1 workflow (skip all script steps, do everything manually as described in the "Fallback: Manual Workflow" section at the end).
+1. Find the scripts directory. Check these paths in order (stop at first match):
+   - `~/.kiro/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
+   - `~/.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
+   - `~/.config/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
+   
+   Use `fs_read` (directory mode) or a simple `ls` check on each path. If none match, use `glob` with pattern `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py` as a last resort. The parent directory of the found file is `scripts_dir`. If still not found, fall back to the v1 workflow (skip all script steps, do everything manually as described in the "Fallback: Manual Workflow" section at the end).
 
 2. Resolve `input_file`: the user provides a file or directory path. Resolve it to an absolute path.
 
