@@ -118,13 +118,13 @@ def _expand_fold_group(mermaid_lines: list, fold_group: dict,
 
 def _annotate_node(line: str, node_id: str, annotation: str) -> str:
     """Add issue annotation to a node's label."""
-    # Node line format: rule_0["P0: name\nAction: ..."]
-    # Insert annotation before the closing bracket
-    if node_id not in line or "-->" in line or "-.->" in line:
+    # Must match exact node_id followed by [ or { (node definition), not substrings
+    if not re.search(rf'\b{re.escape(node_id)}(?=[\[{{])', line):
+        return line
+    if "-->" in line or "-.->" in line:
         return line
 
     # Find the closing bracket pattern and insert annotation before it
-    # Handle both ["..."] and {{"..."}}
     for close_pattern in ('"]', '"}}'):
         if close_pattern in line:
             return line.replace(close_pattern,
