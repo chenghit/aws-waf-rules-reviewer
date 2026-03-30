@@ -37,18 +37,13 @@ For every managed rule group with a scope-down:
 
 - [ ] Is `ChallengeAllDuringEvent` enabled (not overridden to Count)?
 - [ ] If disabled, is there a valid reason? (native app traffic, non-browser clients)
-- [ ] If disabled for native app reasons, recommend dual AMR instance approach. See waf-knowledge.md "Dual instance pattern" for full setup guide (pre-label → two instances with different scope-down and sensitivity).
-  - How to configure two AMR instances: The AWS console does not allow adding the same managed rule group twice. In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save.
+- [ ] If disabled for native app reasons, recommend dual AMR instance approach. See waf-knowledge.md "Dual instance pattern" for full setup guide (pre-label → two instances with different scope-down and sensitivity, including how to configure two AMR instances via JSON editor).
 - [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions). Unanchored API path patterns are `contains` matches — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent.
 - [ ] Does the exempt regex cover all API paths that can't handle Challenge?
 - [ ] Check regex `|` operator precedence: `$` only anchors the last branch unless grouped with `()`
 - [ ] **SEO impact**: Does the Web ACL have a crawler labeling rule before AntiDDoS AMR? `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event. Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, severely damaging SEO. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" and "Search Engine Crawler Exclusion Pattern" for the solution (Count+Label rule with ASN+UA double verification, then scope-down AMR to exclude the label).
 
-**Key facts**:
-- AntiDDoS AMR detection is per-client-IP, not aggregate. Highly distributed low-rate attacks are harder to detect.
-- Detection and mitigation time: "single digit seconds" per official documentation.
-- DDoS traffic detected by AntiDDoS AMR is not charged.
-- `challengeable-request` label is produced by AntiDDoS AMR (based on GET method + URI not matching exempt regex). Native apps sending GET requests can also get this label.
+**Key facts**: See waf-knowledge.md "AntiDDoS AMR" for detection mechanism, performance, labels produced, and pricing details.
 
 ### 4. Challenge Action Applicability
 
@@ -59,12 +54,11 @@ For every rule using Challenge or CAPTCHA action:
 - [ ] For API/POST paths: Challenge or CAPTCHA effectively equals Block. Is this the intended behavior?
 - [ ] If Challenge is used on rate-limit rules for API paths: legitimate users normally won't exceed the threshold, so impact is low — severity should be adjusted accordingly
 
-**Key facts**:
-- Both Challenge and CAPTCHA return an HTTP interstitial that requires JavaScript execution in a browser
-- Neither works for POST requests, API calls, native apps, or non-`text/html` responses — treat both as Block in those contexts
-- Challenge: silent JS puzzle, returns HTTP 202
-- CAPTCHA: visible image puzzle, returns HTTP 405
-- If client already has valid unexpired WAF token, Challenge acts like Count (no interstitial); CAPTCHA always shows the puzzle regardless of token state
+#### Count rules with Challenge/Block intent
+
+- [ ] For every Count rule whose name or context suggests the intended action is Challenge or Block (e.g., `challenge_all_traffic`, `block_bad_ips_staging`): evaluate the rule's statement **as if the action were already the intended action**. If the statement would cause unintended impact when switched (e.g., a broad match that would effectively Block all POST/API/native app traffic), flag as **Medium** — the user may not realize the consequences of flipping the action. Include a clear description of what traffic would be affected after the switch.
+
+**Key facts**: See waf-knowledge.md "Challenge Action", "CAPTCHA Action", and "Key difference from Challenge" for full behavior details (HTTP status codes, token-awareness, what can/cannot be challenged).
 
 ### 5. Bot Control Configuration
 
@@ -92,11 +86,7 @@ For every rule using Challenge or CAPTCHA action:
 
 #### AWSManagedRulesAmazonIpReputationList (WCU: 25)
 
-This rule group contains three rules:
-
-- `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot). Generally safe to keep at default.
-- `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources. Generally safe to keep at default.
-- `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities, including open proxies and potentially some residential proxies that are exploited as DDoS relay points. Default is Count because these IPs may belong to legitimate users whose devices were temporarily compromised — blocking them outright would cause false positives.
+See waf-knowledge.md "AWSManagedRulesAmazonIpReputationList" for rule descriptions and default actions.
 
 - [ ] Are these rule groups actually inspecting all traffic? (Check scope-down)
 - [ ] If scope-down is too narrow, these rule groups provide no value

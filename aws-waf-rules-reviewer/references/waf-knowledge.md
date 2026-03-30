@@ -25,12 +25,17 @@
 - Configurable at Web ACL or rule level
 - After successful Challenge, client is not re-challenged until token expires
 
+### WAF token properties
+- The `aws-waf-token` cookie is cryptographically signed by AWS — it is **unforgeable**. Attackers cannot craft a valid token without completing the Challenge.
+- A valid token serves as proof that the client previously completed a Challenge (or CAPTCHA) successfully.
+- This makes WAF token a reliable replacement for business cookies in security decisions. For example, always-on Challenge on landing pages + extended token immunity time (e.g., 4 hours) can replace cookie-based "new vs returning user" detection — the token proves the user has been verified, without relying on forgeable cookies.
+
 ## CAPTCHA Action
 
 ### How it works
 - Returns HTTP 405 with a visible image puzzle interstitial
 - User must solve the puzzle; on success, client gets/updates `aws-waf-token` cookie
-- Unlike Challenge, CAPTCHA **always shows the puzzle** regardless of whether the client already has a valid token
+- If client already has valid unexpired WAF token with a valid CAPTCHA timestamp, CAPTCHA acts like Count (no puzzle shown) — same token-validation logic as Challenge
 
 ### What can complete CAPTCHA
 - Same constraints as Challenge: browser `GET` requests with `Accept: text/html` over HTTPS
@@ -40,8 +45,9 @@
 - **For POST/API paths, CAPTCHA is effectively equivalent to Block** — the interstitial cannot be completed, so the original request is never resubmitted
 
 ### Key difference from Challenge
-- Challenge: silent JS puzzle, token-aware (skips if valid token exists)
-- CAPTCHA: visible image puzzle, always shown regardless of token state
+- Challenge: silent JS puzzle, returns HTTP 202. Checks challenge solve timestamp in token.
+- CAPTCHA: visible image puzzle, returns HTTP 405. Checks CAPTCHA solve timestamp in token.
+- Both are token-aware: if client has valid unexpired token (with the relevant timestamp), both act like Count (no interstitial). Each checks its own timestamp with its own immunity time.
 - Both require browser JS execution; neither works for non-browser or non-GET requests
 
 ## AntiDDoS AMR (AWSManagedRulesAntiDDoSRuleSet)
@@ -69,7 +75,7 @@
 - Challenge sensitivity: same logic for Challenge action
 
 ### Labels produced
-- `awswaf:managed:aws:anti-ddos:challengeable-request` — GET + URI not matching exempt regex
+- `awswaf:managed:aws:anti-ddos:challengeable-request` — GET + URI not matching exempt regex. Note: native apps sending GET requests also receive this label, even though they cannot complete Challenge.
 - `awswaf:managed:aws:anti-ddos:event-detected` — DDoS event detected, applied to ALL requests
 - `awswaf:managed:aws:anti-ddos:ddos-request` — request from suspicious source
 - `awswaf:managed:aws:anti-ddos:high/medium/low-suspicion-ddos-request` — suspicion level
@@ -90,7 +96,7 @@ When browser and native app traffic need different strategies:
 2. AMR instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW (LOW is the default; browser traffic already has `ChallengeAllDuringEvent` as the primary mitigation, so Block sensitivity can stay at default)
 3. AMR instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM (since Challenge is disabled for native apps, Block is the only available mitigation — raise sensitivity from default LOW to MEDIUM for adequate protection)
 
-Implementation: In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save. AWS WAF treats them as two independent rule instances.
+Implementation: The AWS console does not allow adding the same managed rule group twice. In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save. AWS WAF treats them as two independent rule instances.
 
 ### SEO: excluding search engine crawlers from AntiDDoS AMR
 `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event, including search engine crawlers. Although modern crawlers may support JavaScript execution, real-world cases have been observed where crawlers indexed the Challenge interstitial page (HTTP 202) instead of actual content during DDoS events, severely damaging SEO. The root cause is not fully understood — it may be that crawlers behave differently under high-load conditions, or that the Challenge interstitial is served in a context where the crawler does not retry after token acquisition.
@@ -206,6 +212,10 @@ These two rules block requests with non-browser User-Agents. Default Block frequ
 - For browser paths: legitimate users rarely exceed thresholds
 - Low severity issue in DDoS context
 
+### Native app traffic coverage
+- Native app traffic that bypasses Challenge-based protections (e.g., via scope-down exclusion or because native apps cannot complete Challenge) still needs rate limiting as a defense layer
+- Ensure at least one rate-based rule covers native app traffic paths without relying on Challenge as the action
+
 ### Multiple rate-based rules with overlapping scope-downs
 - If a Web ACL has multiple rate-based rules, and their scope-down conditions overlap or have a containing relationship (e.g., one targets `/api/` and another targets all traffic), only the rule with the lowest threshold will ever trigger for the overlapping traffic
 - The other rules are effectively redundant for that traffic
@@ -215,8 +225,8 @@ These two rules block requests with non-browser User-Agents. Default Block frequ
 
 ### AWSManagedRulesAmazonIpReputationList (WCU: 25)
 Contains three rules:
-- `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot)
-- `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources
+- `AWSManagedIPReputationList` (default Block): known malicious IPs from Amazon threat intelligence (MadPot). Generally safe to keep at default.
+- `AWSManagedReconnaissanceList` (default Block): IPs performing reconnaissance against AWS resources. Generally safe to keep at default.
 - `AWSManagedIPDDoSList` (default **Count**): IPs identified as participating in DDoS activities, including open proxies and potentially some residential proxies that are exploited as DDoS relay points
 
 AWSManagedIPDDoSList defaults to Count because these IPs may belong to legitimate users whose devices were temporarily compromised — blocking them outright would cause false positives.
@@ -376,7 +386,7 @@ This narrow scope means always-on Challenge can be safely deployed without impac
 ### Search engine crawler consideration
 - Search engine crawlers send `GET` requests with `Accept: text/html` — they match the always-on Challenge condition and will be challenged on every request, not just during DDoS events
 - Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, so always-on Challenge can continuously disrupt crawler indexing
-- Solution: place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before this rule, then exclude requests with the `crawler:verified` label in the Challenge rule's scope-down (see the always-on-challenge-html rule JSON in checklist.md section 20 for an example that includes this exclusion)
+- Solution: place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before this rule, then exclude requests with the `crawler:verified` label in the Challenge rule's scope-down (see the always-on-challenge-html rule JSON in checklist.md section 16 for an example that includes this exclusion)
 
 ### Complementary to AntiDDoS AMR
 - AntiDDoS AMR is reactive: it detects anomalies and then starts mitigating
@@ -388,12 +398,25 @@ This narrow scope means always-on Challenge can be safely deployed without impac
 - Provides OWASP Top 10 protection (SQLi, XSS, etc.)
 - `SizeRestrictions_Body` rule blocks request bodies larger than 8KB. This frequently causes false positives on file upload endpoints, API endpoints with large payloads, form submissions with rich content, etc. Most users don't know which of their endpoints need large bodies. When recommending CRS, always advise overriding `SizeRestrictions_Body` to Count.
 
+## AWSManagedRulesKnownBadInputsRuleSet Notes
+
+- Protects against known malicious input patterns: Log4j/Log4Shell (CVE-2021-44228), Java deserialization exploits, and other well-known attack payloads
+- Low WCU cost, low false positive rate — generally safe to enable with default actions
+- Recommended as a baseline rule group alongside CRS
+
 ## Token Domain Configuration
 
 - `token_domains` should include the apex domain (e.g., `example.com`), which automatically covers all single-level subdomains (`www.example.com`, `sub.example.com`, i.e., `*.example.com`)
 - No need to list each subdomain separately
 - Wildcard (`*`) is NOT needed and should not be used
 - Multi-level subdomains (e.g., `a.b.example.com`) require separate entries — the apex domain `example.com` only covers `*.example.com` (one level of subdomain). For `a.b.example.com`, add `b.example.com` to `token_domains`.
+
+## Web ACL Capacity Units (WCU)
+
+- Each Web ACL has a maximum capacity of **5000 WCU**
+- Each rule and rule group consumes WCU based on its complexity (statement types, number of conditions, etc.)
+- WCU cannot be accurately calculated from JSON alone — the AWS console or API shows the actual WCU usage
+- When recommending adding new rules or rule groups, always remind the user to verify remaining WCU capacity
 
 ## Recommended Rule Priority Order
 
@@ -419,6 +442,13 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 
 ## Managed Rule Group Action Overrides
 
+### Version recommendations
+Only these managed rule groups have significant version upgrades worth flagging:
+- **AWSManagedRulesSQLiRuleSet**: version 2.0 has significantly higher SQLi detection coverage than the default 1.0. Recommend upgrading if pinned below 2.0.
+- **AWSManagedRulesBotControlRuleSet**: version 5.0's Common level can identify close to 700 bot types (up from far fewer in 1.0) based on UA and IP, and Targeted level includes substantially more detection rules. The default version is still 1.0, which is outdated. Recommend upgrading if pinned below 5.0.
+
+For all other managed rule groups, the version shown in JSON is just the current snapshot and requires no action.
+
 ### How overrides work
 - Each rule inside a managed rule group has a default action (Block, Count, Challenge, etc.)
 - You can override individual rules to a different action (e.g., Block → Count, Block → Allow)
@@ -439,15 +469,28 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 - This is a legitimate and common pattern ("label then act"), not an anti-pattern itself
 - However, changing a Count rule to Block/Allow breaks this pattern — downstream rules lose the label and may behave unexpectedly
 - When reviewing Count rules, always check if any later rule references labels produced by this rule
+- **Count without labels**: A custom Count rule (not AWS managed) with no `RuleLabels` entry only contributes a CloudWatch metric — downstream rules have no way to act on its match result. This may be intentional (monitoring only) or a misconfiguration (user intended "label then act" but forgot to add labels).
 
 ### Allow based on forgeable conditions
 - User-Agent prefix matching → attacker forges UA to bypass all rules
 - Business cookie existence check → attacker adds cookie to bypass
+- Any custom header value → attacker adds header to bypass
+
+**Forgeable conditions** (attacker can set freely): User-Agent, cookies, custom headers, query parameters, request body content.
+
+**Unforgeable conditions** (attacker cannot control): IP set, WAF token (`aws-waf-token` cookie — cryptographically signed by AWS), HMAC signature (if validated server-side), ASN match (based on source IP's network).
 
 ### HostingProviderIPList misconfiguration
 - Default Block → frequent false positives for enterprise traffic routed through cloud platforms. Override to Count.
 - Override to Allow → cloud-hosted attacks bypass all rules. Override to Count instead.
 - See "IP Reputation Rule Groups" section for full details.
+
+### Count rules with Challenge/Block intent (staging risk)
+- Users often deploy rules in Count mode first to evaluate impact before switching to the intended action (Challenge, Block, etc.)
+- The rule name often reveals the intended action (e.g., `challenge_all_traffic`, `block_suspicious_ips_staging`)
+- Risk: the user may not realize that their statement, when combined with the intended action, would cause unintended collateral damage. For example, a rule that matches all traffic (or all traffic minus a few excluded paths) set to Challenge would effectively Block all POST requests, API calls, and native app traffic — because those requests cannot complete Challenge.
+- This is especially dangerous for broad-match rules intended to become Challenge: the user sees Count metrics showing "X requests matched" and thinks "great, I'll flip it to Challenge" — not realizing that a large portion of those matched requests will be effectively Blocked, not Challenged.
+- Always evaluate the statement as if the action were already the intended action, and flag any mismatch between the statement's scope and what the intended action can actually handle.
 
 ### Scope-down too narrow
 - `URI EXACTLY "/"` on IP reputation rules → only homepage checked
