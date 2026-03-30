@@ -83,7 +83,7 @@ Read these files:
 - For remaining checklist sections not covered by pre_checks or flags → evaluate using waf-summary.json. If the summary lacks detail for a specific check, use `fs_read` with the `source.lines` from the summary to read the original JSON.
 
 **Write the report** to `{output_dir}/waf-review-report.md`:
-- Use `fs_write` `create` for the first write, `append` if needed.
+- Use a single `fs_write` `create` call to write the entire report at once.
 - Report ends with the last Issue section's `---` separator. Do NOT write a conclusion paragraph — the Mermaid appendix will be appended by script in Step 5.
 - Report format: see "Report Format" section below.
 - Rule reference lines MUST use one of these exact formats:
