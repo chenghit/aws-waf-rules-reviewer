@@ -194,7 +194,7 @@ def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
         rid = _safe_id(r["priority"])
         label = _escape_mermaid(_build_node_label(r))
         ob, cb = _node_shape(r)
-        lines.append(f'    {rid}{ob}"{label}"{cb}')
+        lines.append(f'    {rid}{ob}{label}{cb}')
 
         # Terminating action branches
         if r["action"] == "allow":
@@ -267,7 +267,7 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
         rid = _safe_id(r["priority"])
         label = _escape_mermaid(_build_node_label(r))
         ob, cb = _node_shape(r)
-        lines.append(f'    {rid}{ob}"{label}"{cb}')
+        lines.append(f'    {rid}{ob}{label}{cb}')
         node_order.append(rid)
 
         if r["action"] == "allow":
@@ -391,13 +391,14 @@ def main():
     else:
         mermaid_text = _generate_detailed(rules, deps, default_action)
 
-    # Count nodes
+    # Count rule nodes only (skip arrow lines that define inline terminal nodes)
     node_count = 0
     for line in mermaid_text.split("\n"):
         stripped = line.strip()
+        if "-->" in stripped or "-.->" in stripped:
+            continue
         if stripped.startswith("rule_") or stripped.startswith("group_"):
-            if '["' in stripped or '{{' in stripped or '("' in stripped:
-                node_count += 1
+            node_count += 1
 
     # Write mermaid-base.md
     mermaid_md = f"```mermaid\n{mermaid_text}\n```\n"
