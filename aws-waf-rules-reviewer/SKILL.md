@@ -33,13 +33,20 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 7. Save the report to the user's specified location. If no location is specified, save it in the same directory as the input WAF rules file, named `waf-review-report.md`.
 8. **Self-review (MANDATORY — do not skip)**:
    a. Use `fs_read` to read the saved report file from line 1 to the end. You MUST issue this tool call — do not rely on your memory of what you wrote.
-   b. While reading, check for:
-      - Issues the checklist missed (rule ordering problems, missing rule groups, cross-rule interactions, domain-specific risks)
-      - Inconsistencies between the Summary table and the detailed findings (missing entries, wrong severity, wrong issue numbers)
-      - Mermaid diagram correctness (are all rules present? are all label dependencies shown with dashed arrows? are terminating actions branching to terminal nodes? Note: Challenge/CAPTCHA is non-terminating for browser HTML requests that can complete the challenge, but terminating (effectively Block) for non-browser or non-GET requests that cannot complete it — the diagram should reflect both paths)
-      - Findings that reference wrong rule names or priority numbers
-   c. If you find additional issues or errors, append corrections to the report using `fs_write`.
-   d. After completing self-review, state in your response: "Self-review completed. Read {N} lines. Found {N} additional issues / no additional issues."
+   b. **Mechanical checks** (verify each one — these are objective and must all pass):
+      - Count rows in the Summary table. Count `## Issue` sections in the report. The two numbers must match exactly.
+      - For each Summary row, find the corresponding detailed `## Issue` section. Verify the issue number, severity level, and title match exactly.
+      - For each rule name and priority number mentioned in any finding, search the original input JSON to confirm that rule exists with that exact name and priority.
+      - In the Mermaid diagram, count rule nodes. Compare against the total number of rules in the input JSON. Every rule must appear as a node.
+      - In the Mermaid diagram, verify every label dependency has a dashed arrow from producer to consumer, and every terminating action (Allow/Block) branches to a terminal node.
+   c. **Adversarial check** (assume the report contains errors — your job is to find them):
+      - Pick the 2 highest-severity findings. Go back to the original input JSON and re-derive each finding independently from scratch. If your re-derivation disagrees with the report (wrong rule, wrong severity, wrong conclusion), fix the report.
+      - For each finding that recommends a fix, trace the fix through the rule execution flow: does the fix break any other rule or label dependency? If so, add a note to the finding.
+   d. **Cross-reference check**:
+      - For each label mentioned in any finding, verify the producer rule exists in the JSON and has a lower priority number (higher priority) than the consumer rule.
+      - Check whether any rules in the JSON were not mentioned in any finding AND were not covered by any checklist item. If a rule was completely ignored, evaluate whether it deserves a finding.
+   e. If you find errors or additional issues, fix the report using `fs_write`.
+   f. After completing self-review, state: "Self-review completed. Read {N} lines. Mechanical: {pass/N failures}. Adversarial: {N} issues re-derived, {N} corrections. Cross-ref: {N} issues found."
 
 ## Key Principles
 
@@ -109,18 +116,24 @@ Wrap the diagram in a ` ```mermaid ` code block so it renders in GitHub, VS Code
 
 Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF technical details including:
 - Challenge action behavior and limitations
+- CAPTCHA action behavior (HTTP 405, token-awareness, difference from Challenge)
+- WAF token properties (unforgeability, cookie replacement pattern)
 - AntiDDoS AMR mechanics and configuration
 - Bot Control Common vs Targeted level, verification mechanism, limitations, and common misconfigurations
 - Token labeling behavior
-- Rate-based rule characteristics and overlapping scope-down detection
+- Rate-based rule characteristics, overlapping scope-down detection, and native app traffic coverage
 - IP reputation rule groups (AWSManagedIPDDoSList default Count rationale, relationship with AntiDDoS AMR)
 - Anonymous IP rule groups (HostingProviderIPList outdated assumption)
 - Always-on Challenge for HTML pages as proactive DDoS defense (only GET + Accept: text/html requests can complete Challenge, so this defense only applies to HTML page requests; scope, immunity time, crawler exclusion)
 - ASN + UA crawler labeling rule (Count+Label pattern, JSON example)
 - Search engine crawler exclusion pattern (label-based scope-down for AntiDDoS AMR and Always-on Challenge)
+- Managed rule group version recommendations (SQLiRuleSet 2.0, BotControlRuleSet 5.0)
 - Managed rule group action override mechanics (Count/Allow/Block implications)
 - Recommended rule priority order
+- WCU capacity limits (5000 per Web ACL)
 - CRS SizeRestrictions_Body false positive risk
+- KnownBadInputsRuleSet (Log4j, Java deserialization)
 - Token domain configuration (apex domain coverage)
-- Count action as a labeling mechanism and its dependencies
+- Forgeable vs unforgeable matching conditions
+- Count action as a labeling mechanism, its dependencies, and Count-without-labels pitfall
 - Common pitfalls and their solutions
