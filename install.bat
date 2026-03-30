@@ -8,7 +8,7 @@ set AGENT_DIR=%USERPROFILE%\.kiro\agents
 set AGENT_FILE=%AGENT_DIR%\%SKILL_NAME%.json
 
 :: Verify source files exist
-for %%f in (SKILL.md references\checklist.md references\waf-knowledge.md %SKILL_NAME%.json) do (
+for %%f in (SKILL.md references\checklist.md references\waf-knowledge.md %SKILL_NAME%.json scripts\waf-preprocess.py) do (
     if not exist "%SCRIPT_DIR%%%f" (
         echo Error: %%f not found in %SCRIPT_DIR% >&2
         exit /b 1
@@ -31,13 +31,14 @@ if exist "%AGENT_FILE%" (
 if not exist "%SKILL_DIR%" mkdir "%SKILL_DIR%"
 copy "%SCRIPT_DIR%SKILL.md" "%SKILL_DIR%\" >nul
 xcopy "%SCRIPT_DIR%references" "%SKILL_DIR%\references\" /e /i /q >nul
+xcopy "%SCRIPT_DIR%scripts" "%SKILL_DIR%\scripts\" /e /i /q >nul
 
 :: Install agent config
 if not exist "%AGENT_DIR%" mkdir "%AGENT_DIR%"
 copy "%SCRIPT_DIR%%SKILL_NAME%.json" "%AGENT_FILE%" >nul
 
 :: Verify installation
-for %%f in ("%SKILL_DIR%\SKILL.md" "%SKILL_DIR%\references\checklist.md" "%SKILL_DIR%\references\waf-knowledge.md" "%AGENT_FILE%") do (
+for %%f in ("%SKILL_DIR%\SKILL.md" "%SKILL_DIR%\references\checklist.md" "%SKILL_DIR%\references\waf-knowledge.md" "%SKILL_DIR%\scripts\waf-preprocess.py" "%AGENT_FILE%") do (
     if not exist %%f (
         echo Error: installation verification failed — %%f not found >&2
         exit /b 1

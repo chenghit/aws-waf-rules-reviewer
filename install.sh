@@ -8,7 +8,7 @@ AGENT_DIR="$HOME/.kiro/agents"
 AGENT_FILE="$AGENT_DIR/$SKILL_NAME.json"
 
 # Verify source files exist
-for f in SKILL.md references/checklist.md references/waf-knowledge.md "$SKILL_NAME.json"; do
+for f in SKILL.md references/checklist.md references/waf-knowledge.md "$SKILL_NAME.json" scripts/waf-preprocess.py; do
     if [ ! -f "$SCRIPT_DIR/$f" ]; then
         echo "Error: $f not found in $SCRIPT_DIR" >&2
         exit 1
@@ -27,13 +27,14 @@ fi
 mkdir -p "$SKILL_DIR"
 cp "$SCRIPT_DIR/SKILL.md" "$SKILL_DIR/"
 cp -r "$SCRIPT_DIR/references" "$SKILL_DIR/"
+cp -r "$SCRIPT_DIR/scripts" "$SKILL_DIR/"
 
 # Install agent config
 mkdir -p "$AGENT_DIR"
 cp "$SCRIPT_DIR/$SKILL_NAME.json" "$AGENT_FILE"
 
 # Verify installation
-for f in "$SKILL_DIR/SKILL.md" "$SKILL_DIR/references/checklist.md" "$SKILL_DIR/references/waf-knowledge.md" "$AGENT_FILE"; do
+for f in "$SKILL_DIR/SKILL.md" "$SKILL_DIR/references/checklist.md" "$SKILL_DIR/references/waf-knowledge.md" "$SKILL_DIR/scripts/waf-preprocess.py" "$AGENT_FILE"; do
     if [ ! -f "$f" ]; then
         echo "Error: installation verification failed — $f not found" >&2
         exit 1
