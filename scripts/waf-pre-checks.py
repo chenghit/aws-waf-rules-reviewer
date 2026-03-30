@@ -37,46 +37,45 @@ UNFORGEABLE_FIELDS = {
     "ja3_fingerprint", "ja4_fingerprint",
 }
 
+ALL_KNOWN_FIELDS = FORGEABLE_FIELDS | UNFORGEABLE_FIELDS | UNFORGEABLE_STMT_TYPES | {"label_match"}
+
 def _classify_condition(summary: str) -> tuple[list, list]:
     """Parse statement summary and classify conditions as forgeable/unforgeable."""
     forgeable = []
     unforgeable = []
 
-    # Extract leaf conditions from summary
-    # Patterns: "single_header:user-agent STARTS_WITH 'example'"
-    #           "ip_set '<ARN>'"
-    #           "asn_match [15169]"
-    #           "geo_match [US]"
-    #           "ja4_fingerprint EXACTLY '...'"
-    #           "label_match '...'"
-
-    for match in re.finditer(r'(\w[\w:.-]*?)(?:\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS)\s|(?=\s*[\[\'{]))', summary):
+    # Extract known field types from summary (ignore quoted values)
+    # Match patterns like: "single_header:user-agent EXACTLY", "ip_set '...'", "asn_match [..."
+    for match in re.finditer(r'([\w]+(?::[\w:.-]+)?)\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS|\'|\[)', summary):
         field = match.group(1)
-        base_field = field.split(":")[0] if ":" in field else field
+        base_field = field.split(":")[0]
+
+        if base_field not in ALL_KNOWN_FIELDS:
+            continue  # skip non-field tokens (e.g., search_string values)
 
         if base_field in UNFORGEABLE_FIELDS or base_field in UNFORGEABLE_STMT_TYPES:
             unforgeable.append(field)
         elif base_field == "label_match":
-            # Label forgeability depends on source — mark as "label" for LLM
             unforgeable.append(field)
-        elif base_field in FORGEABLE_FIELDS or base_field in ("uri_path", "method", "cookie"):
-            forgeable.append(field)
         else:
-            forgeable.append(field)  # default to forgeable for unknown
+            forgeable.append(field)
 
-    # Also check for specific patterns not caught by regex
-    if "ip_set" in summary and "ip_set" not in [u.split(":")[0] for u in unforgeable]:
-        unforgeable.append("ip_set")
-    if "asn_match" in summary and "asn_match" not in [u.split(":")[0] for u in unforgeable]:
-        unforgeable.append("asn_match")
-    if "geo_match" in summary and "geo_match" not in [u.split(":")[0] for u in unforgeable]:
-        unforgeable.append("geo_match")
+    # Check for statement-level patterns not caught by field regex
+    for stmt_type in UNFORGEABLE_STMT_TYPES:
+        if stmt_type in summary and stmt_type not in [u.split(":")[0] for u in unforgeable]:
+            unforgeable.append(stmt_type)
 
     return forgeable, unforgeable
 
 def _has_uri_constraint(summary: str) -> bool:
-    """Check if statement contains a URI path constraint."""
-    return bool(re.search(r'uri_path\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS)', summary))
+    """Check if statement contains a meaningful URI path constraint.
+    uri_path STARTS_WITH '/' matches all traffic — not a real constraint."""
+    if not re.search(r'uri_path\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS)', summary):
+        return False
+    # STARTS_WITH '/' matches everything — treat as no constraint
+    if re.search(r"uri_path\s+STARTS_WITH\s+'/'", summary):
+        return False
+    return True
 
 # ── Pre-checks ────────────────────────────────────────────────────────────
 
@@ -230,6 +229,36 @@ def _flag_scope_downs(rules: list) -> list:
         })
     return flags
 
+def _split_regex_branches(regex: str) -> list[str]:
+    """Split regex on | only at top level (outside parentheses)."""
+    branches = []
+    depth = 0
+    current = []
+    escaped = False
+    for ch in regex:
+        if escaped:
+            current.append(ch)
+            escaped = False
+            continue
+        if ch == '\\':
+            current.append(ch)
+            escaped = True
+            continue
+        if ch == '(':
+            depth += 1
+            current.append(ch)
+        elif ch == ')':
+            depth -= 1
+            current.append(ch)
+        elif ch == '|' and depth == 0:
+            branches.append(''.join(current))
+            current = []
+        else:
+            current.append(ch)
+    if current:
+        branches.append(''.join(current))
+    return branches
+
 def _flag_exempt_regex(rules: list) -> list:
     """Flag AntiDDoS AMR exempt URI regex branches with anchoring analysis."""
     flags = []
@@ -243,7 +272,7 @@ def _flag_exempt_regex(rules: list) -> list:
             continue
 
         regex_str = exempt[0] if isinstance(exempt, list) and exempt else str(exempt)
-        branches = regex_str.split("|")
+        branches = _split_regex_branches(regex_str)
         branch_analysis = []
         for b in branches:
             b = b.strip()
