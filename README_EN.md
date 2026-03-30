@@ -64,7 +64,7 @@ The review covers 18 categories in two phases:
 1. Allow rules audit (forgeability, bypass risk)
 2. Scope-down statements (too narrow / too broad)
 3. AntiDDoS AMR configuration (ChallengeAllDuringEvent, exempt regex, SEO impact, dual instance pattern)
-4. Challenge action applicability (POST/API/native app limitations)
+4. Challenge action applicability (POST/API/native app limitations, Count-to-Challenge staging risk)
 5. Bot Control configuration (Allow override risks, verified vs unverified bots)
 6. Rate-based rules (activation delay, threshold reasonableness, overlapping scope-down)
 7. IP reputation and anonymous IP rules

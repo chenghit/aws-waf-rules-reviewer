@@ -64,7 +64,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 1. Allow 规则审计（可伪造性、绕过风险）
 2. Scope-down 语句（过窄 / 过宽）
 3. AntiDDoS AMR 配置（ChallengeAllDuringEvent、豁免正则、SEO 影响、双实例模式）
-4. Challenge 动作适用性（POST/API/原生 App 限制）
+4. Challenge 动作适用性（POST/API/原生 App 限制、Count 规则切换风险）
 5. Bot Control 配置（Allow 覆盖风险、verified vs unverified bot）
 6. 速率规则（激活延迟、阈值合理性、重叠 scope-down）
 7. IP 信誉和匿名 IP 规则
