@@ -159,6 +159,11 @@ Read these files:
 - Use `fs_write` `create` for the first write, `append` if needed
 - Report ends with the last Issue section's `---` separator. Do NOT write a conclusion or summary paragraph after the last issue — the Mermaid appendix will be appended by script in Step 5.
 - Report format is the same as v1 (Summary table + Issue sections)
+- Rule reference lines in Issue sections MUST use one of these exact formats:
+  - Single rule: `**Rule**: {name} (priority {N})`
+  - Multiple rules: `**Rules**: {name1} (priority {N1}), {name2} (priority {N2})`
+  - Missing rule: `**Rule**: N/A (missing rule)`
+  This constraint enables mechanical validation by waf-validate-report.py.
 
 **Write issue-rule-mapping.json** to `{output_dir}/issue-rule-mapping.json`:
 ```json

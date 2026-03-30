@@ -81,14 +81,12 @@ Every rule in the `rules` array has this structure:
   "rate_based": {
     "limit": 100,
     "evaluation_window_sec": 60,
-    "aggregate_key_type": "IP | FORWARDED_IP | CUSTOM_KEYS",
-    "scope_down": {
-      "summary": "host EXACTLY 'www.example.com'",
-      "source_lines": [500, 520]
-    }
+    "aggregate_key_type": "IP | FORWARDED_IP | CUSTOM_KEYS"
   },
 
   // --- Scope-down (for managed rule groups and rate-based rules) ---
+  // For rate-based rules, the scope_down is here (not inside rate_based object).
+  // All rule types use this single location for scope_down.
   "scope_down": {
     "summary": "URI EXACTLY '/'",
     "source_lines": [30, 40]
