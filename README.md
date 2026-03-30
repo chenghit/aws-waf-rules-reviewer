@@ -4,29 +4,72 @@
 
 一个用于评审 AWS WAF Web ACL 配置的 [Agent Skill](https://agentskills.io)，帮助发现安全问题、配置错误和优化机会。
 
+## 工作流程
+
+```mermaid
+flowchart LR
+    A["WAF JSON"] --> B["预处理"]
+    B --> C["Mermaid 图生成"]
+    B --> D["机械预检"]
+    C --> E["LLM 分析"]
+    D --> E
+    E --> F["Mermaid 标注"]
+    F --> G["报告验证"]
+    G --> H["LLM 自审"]
+    H --> I["评审报告"]
+
+    style B fill:#e1f5fe
+    style C fill:#e1f5fe
+    style D fill:#e1f5fe
+    style F fill:#e1f5fe
+    style G fill:#e1f5fe
+    style E fill:#fff3e0
+    style H fill:#fff3e0
+```
+
+蓝色 = Python 脚本（确定性），橙色 = LLM 推理
+
+脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。如果脚本未安装，自动回退到纯 LLM 工作流。
+
 ## 功能
 
 给定一个 AWS WAF Web ACL 的 JSON 导出文件，该 skill 会：
 
-1. 构建规则执行流 — 梳理每条规则的优先级、动作、标签和依赖关系
-2. 按 18 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
-3. 生成按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
-4. 在附录中包含 Mermaid 流程图和逐条规则的执行流详情
-5. 自审报告，查找检查清单可能遗漏的问题
+1. **预处理** — 提取结构化规则摘要，压缩输入（56KB → 16KB）
+2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 5 项确定性问题
+3. **LLM 分析** — 按 18 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
+4. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
+5. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
+6. **自审** — 机械验证 + 对抗性检查，确保报告准确性
 
 ## 安装
 
-将 `aws-waf-rules-reviewer` 目录（包含 `SKILL.md` 和 `references/`）复制到你的 AI 编程工具的 skill 目录。例如在 Kiro CLI 中：
+将 `aws-waf-rules-reviewer` 目录复制到你的 AI 编程工具的 skill 目录。例如在 Kiro CLI 中：
+
+```bash
+./install.sh
+```
+
+安装后的目录结构：
 
 ```
 ~/.kiro/skills/aws-waf-rules-reviewer/
 ├── SKILL.md
-└── references/
-    ├── checklist.md
-    └── waf-knowledge.md
+├── references/
+│   ├── checklist.md
+│   └── waf-knowledge.md
+└── scripts/
+    ├── managed-labels.json
+    ├── waf-preprocess.py
+    ├── waf-generate-mermaid.py
+    ├── waf-pre-checks.py
+    ├── waf-annotate-mermaid.py
+    └── waf-validate-report.py
 ```
 
-然后在你的 agent 配置中加载该 skill，具体方式请参考你所使用工具的文档。
+**依赖**: Python 3.10+（标准库，无需 pip install）
+
+对于其他工具（Claude Code、OpenRouter 等），将目录复制到对应的 skill 目录即可。脚本通过 `glob` 自动发现安装位置，无需配置路径。
 
 ## 输入
 
@@ -35,16 +78,16 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 - 从 AWS 控制台导出（Web ACL → "Download web ACL as JSON"）
 - 使用 AWS CLI：`aws wafv2 get-web-acl --name <name> --scope <REGIONAL|CLOUDFRONT> --id <id>`
 
-可以提供 JSON 文件的直接路径，也可以提供包含 JSON 文件的目录路径。
+可以提供 JSON 文件的直接路径，也可以提供包含 JSON 文件的目录路径。支持三种 JSON 格式：AWS CLI 输出（PascalCase）、控制台导出、snake_case 自定义格式。
 
 ## 输出
 
-一份 Markdown 格式的评审报告（`waf-review-report.md`），包含：
+一份 Markdown 格式的评审报告（`waf-review/waf-review-report.md`），包含：
 
 - **摘要表** — 所有发现的问题及其严重程度和影响一览
 - **详细发现** — 每个问题对应的规则、当前配置、问题描述和修复建议
 - **待用户确认项** — 需要业务上下文才能判断严重程度的发现，标记为 ⏳
-- **附录：规则执行流** — Mermaid 流程图提供可视化概览，加上逐条规则的详细列表，展示优先级、动作、标签生产/消费关系和依赖
+- **附录：规则执行流** — Mermaid 流程图，自动标注问题引用
 
 ### 严重程度
 
@@ -85,26 +128,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 版本历史
 
-### v0.2 (2026-03-24)
-
-检查清单从 20 项重组为 18 项（两个阶段）。旧编号到新编号的映射：
-
-| 旧编号 | 新编号 | 变更说明 |
-|--------|--------|----------|
-| 1–5 | 1–5 | 不变 |
-| 6 | 17a | 合并进 Phase 2 "跨规则和标签依赖分析" |
-| 7 | 6 | 重编号 |
-| 8 | 7 | 重编号 |
-| 9 | 17b | 合并进 Phase 2 "跨规则和标签依赖分析" |
-| 10 | — | 合并进 section 3（AntiDDoS AMR 配置） |
-| 11 | 8 | 重编号 |
-| 12 | 18 | 移至 Phase 2 "规则优先级排序" |
-| 13–19 | 9–15 | 重编号 |
-| 20 | 16 | 重编号 |
-
-### v0.1
-
-初始版本。
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 免责声明
 
