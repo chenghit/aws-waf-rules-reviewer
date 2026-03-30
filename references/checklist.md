@@ -37,7 +37,11 @@ For every managed rule group with a scope-down:
 
 - [ ] Is `ChallengeAllDuringEvent` enabled (not overridden to Count)?
 - [ ] If disabled, is there a valid reason? (native app traffic, non-browser clients)
-- [ ] If disabled for native app reasons, recommend dual AMR instance approach. See waf-knowledge.md "Dual instance pattern" for full setup guide (pre-label → two instances with different scope-down and sensitivity, including how to configure two AMR instances via JSON editor).
+- [ ] If disabled for native app reasons, recommend dual AMR instance approach. Copy the following implementation details into the report (the user needs step-by-step instructions, not just a summary):
+  1. Pre-label native app requests with a Count+Label rule before both AMR instances
+  2. AMR instance 1 (browser): scope-down excludes native app label, ChallengeAllDuringEvent enabled, Block LOW
+  3. AMR instance 2 (native app): scope-down matches native app label only, ChallengeAllDuringEvent disabled, Block MEDIUM
+  4. **How to add two AMR instances**: The AWS console does not allow adding the same managed rule group twice. In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new entry, change the `Name` and `MetricName` fields to unique values, then save.
 - [ ] Are exempt URI regexes properly anchored? (`^` for starts-with on API paths, `$` for ends-with on file extensions). Unanchored API path patterns are `contains` matches — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent.
 - [ ] Does the exempt regex cover all API paths that can't handle Challenge?
 - [ ] Check regex `|` operator precedence: `$` only anchors the last branch unless grouped with `()`
