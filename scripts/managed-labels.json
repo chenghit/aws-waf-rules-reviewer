@@ -46,5 +46,18 @@
     "AWSManagedRulesBotControlRuleSet",
     "AWSManagedRulesATPRuleSet",
     "AWSManagedRulesACFPRuleSet"
-  ]
+  ],
+  "forgeability": {
+    "forgeable_field_types": [
+      "single_header", "single_query_argument", "cookie", "cookies",
+      "body", "json_body", "uri_path", "query_string", "method",
+      "header_order", "headers"
+    ],
+    "unforgeable_statement_types": [
+      "ip_set", "asn_match", "geo_match", "rate_based"
+    ],
+    "unforgeable_field_types": [
+      "ja3_fingerprint", "ja4_fingerprint"
+    ]
+  }
 }
