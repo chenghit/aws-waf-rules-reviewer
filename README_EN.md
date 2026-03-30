@@ -73,25 +73,6 @@ Installed structure:
 
 For other tools (Claude Code, OpenRouter, etc.), copy the directory to the corresponding skill location. Scripts auto-discover their install path via `glob` — no path configuration needed.
 
-## Supported Models
-
-This tool requires models with sufficient **output token capacity** — review reports can be long, and the self-review step needs additional output space.
-
-**Minimum requirement: 64K output tokens.**
-
-### Kiro CLI Users
-
-Kiro CLI supports only Claude models on Amazon Bedrock. Use `/model` in Kiro to switch models.
-
-| Model | Input Tokens | Output Tokens | Use Case |
-|-------|-------------|--------------|----------|
-| Claude Sonnet 4 | 200K | 64K | ✅ ≤100 rules |
-| Claude Opus 4 | 200K | 64K | ✅ ≤100 rules |
-
-### Other Agent Tool Users
-
-Any model meeting the 64K output requirement will work.
-
 ## Input
 
 An AWS WAF Web ACL configuration in JSON format. Typically obtained by:
