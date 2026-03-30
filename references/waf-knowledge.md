@@ -179,8 +179,8 @@ These two rules block requests with non-browser User-Agents. Default Block frequ
 - Designed for advanced bot detection (credential stuffing, inventory hoarding), NOT for volumetric DDoS
 
 ### Token labels
-- `awswaf:managed:token:absent/accepted/rejected` — ONLY produced when Bot Control, ATP, or ACFP evaluates the request
-- NOT produced by AntiDDoS AMR or other rule groups
+- `awswaf:managed:token:absent/accepted/rejected` — shared token labels produced by all intelligent threat mitigation rule groups: Bot Control, ATP, ACFP, **and AntiDDoS AMR**
+- These are shared labels with namespace `awswaf:managed:token:*`, not specific to any single rule group
 - `token:absent` means request has no WAF token
 
 ### Key rules for native app considerations

@@ -30,7 +30,7 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
    - Summary table
    - Detailed findings with `⏳ Needs user confirmation` markers where business context is needed
    - **Appendix: Rule Execution Flow** — Mermaid diagram (see Report Format below). This appendix MUST be included in the report.
-7. Save the report to the user's specified location. If no location is specified, save it in the same directory as the input WAF rules file, named `waf-review-report.md`.
+7. Save the report to the user's specified location. If no location is specified, save it in the same directory as the input WAF rules file, named `waf-review-report.md`. Use `fs_write` `create` for the first write, then `fs_write` `append` if the report is too long for a single call. Do NOT pre-plan batches — write as much as you can in the first call, then append the rest if needed.
 8. **Self-review (MANDATORY — do not skip)**:
    a. Use `fs_read` to read the saved report file from line 1 to the end. You MUST issue this tool call — do not rely on your memory of what you wrote.
    b. **Mechanical checks** (verify each one — these are objective and must all pass):

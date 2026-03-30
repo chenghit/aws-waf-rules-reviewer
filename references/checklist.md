@@ -235,7 +235,7 @@ These sections require findings from all Phase 1 sections as input. Run them aft
 
 #### 17a. Label source verification
 
-- [ ] Token status labels (`token:absent`, `token:accepted`, etc.) are ONLY produced by Bot Control, ATP, or ACFP rule groups — not by AntiDDoS AMR or other rules
+- [ ] Token status labels (`token:absent`, `token:accepted`, etc.) are shared labels (`awswaf:managed:token:*`) produced by all intelligent threat mitigation rule groups: Bot Control, ATP, ACFP, and AntiDDoS AMR
 - [ ] `challengeable-request` label IS produced by AntiDDoS AMR
 - [ ] AntiDDoS suspicion labels (`high/medium/low-suspicion-ddos-request`) and `event-detected` label are produced by AntiDDoS AMR
 - [ ] Custom labels from earlier rules can be used in later rules' scope-down or conditions
