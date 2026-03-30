@@ -20,7 +20,10 @@ Before anything else, locate the scripts directory and compute absolute paths.
 1. Find the scripts directory. Check these paths in order (stop at first match):
    - `~/.kiro/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
    - `~/.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
-   - `~/.config/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
+   - `~/.agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
+   - `.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (project-level)
+   - `.agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (project-level)
+   - `.cursor/rules/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (Cursor)
    
    Use `fs_read` (directory mode) or a simple `ls` check on each path. If none match, use `glob` with pattern `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py` as a last resort. The parent directory of the found file is `scripts_dir`. If still not found, fall back to the v1 workflow (skip all script steps, do everything manually as described in the "Fallback: Manual Workflow" section at the end).
 
