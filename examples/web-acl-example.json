@@ -1,0 +1,2921 @@
+{
+  "web_acl": {
+    "owner": "111111111111",
+    "name": "example-prod",
+    "id": "e37e78b0-572a-4738-a11d-111111111111",
+    "payer_token": ":1:d2:bcd3:pid12:11111111111111",
+    "resource_arn": "<ARN_WEBACL_1>",
+    "default_action": {
+      "allow": {}
+    },
+    "description": "REDACTED",
+    "rules": [
+      {
+        "name": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+        "priority": 0,
+        "statement": {
+          "managed_rule_set_statement": {
+            "managed_rule_set_arn": "<ARN_MANAGEDRULESET_4>",
+            "managed_rule_set_version": "Version_1.0",
+            "expiration_policy": "USE_RECOMMENDED_VERSION",
+            "rule_action_overrides": [
+              {
+                "name": "ChallengeAllDuringEvent",
+                "action_to_use": {
+                  "count": {}
+                }
+              }
+            ],
+            "managed_rule_set_configs": [
+              {
+                "aws_managed_rules_anti_d_do_s_rule_set": {
+                  "sensitivity_to_block": "LOW",
+                  "usage_of_challenge_action": "ENABLED",
+                  "sensitivity_to_challenge": "HIGH",
+                  "uris_exempt_from_challenge": [
+                    "\\/query|\\/models|\\/messages|\\/balance|\\/completions|\\/api\\/|\\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "rule_group_action": {
+          "none": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "AWS-AWSManagedRulesAntiDDoSRuleSet"
+        }
+      },
+      {
+        "name": "spec_43_JA4_DDoS",
+        "priority": 1,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "or_statement": {
+                  "statements": [
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d240600_4f054e0fd0cf_17d72b2e486e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d320800_a6df2e0e78d0_36cef8aed422",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d4109h2_32474fa09e75_f42f9b7fb65b",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d4808h2_f2cb7cf206ac_f9b351751198",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0311h2_55b375c5d22e_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0312h2_55b375c5d22e_3371dbe1cf0c",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0313h2_55b375c5d22e_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_1f22a2ca17c4",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0610h2_1841c8e5b05d_4162ed3f4693",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0611h2_1841c8e5b05d_b6f6142ec868",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0810h2_48922242edce_5dcee0618f77",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h1_61a7ad8aa9b6_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h1_61a7ad8aa9b6_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h2_61a7ad8aa9b6_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h2_61a7ad8aa9b6_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1012h2_61a7ad8aa9b6_32cb9d761817",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1211h2_b1fab7fa1c49_c85829a2e736",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1310h2_3a6e105d6037_ec1bb07721af",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1311h2_3a6e105d6037_162665405ad5",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1312h2_df115388da38_d41ae481755e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1513h2_8daaf6152771_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1515h1_8daaf6152771_0a20fe35d3a5",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_02713d6af862",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_973db200687d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1716h2_5b57614c22b0_ea2cbcd64924",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1813h2_e8a523a41297_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1814h1_e8a523a41297_604f15001eed",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1815h2_e8a523a41297_45f260be83e2",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d2014h2_a09f3c656075_2a6581477f52",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d2511h2_e6722d30668e_5bfe1112bb65",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d311100_e8f1e7e78f70_d41ae481755e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d441100_4a0235c0406f_77056f0f1550",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d511000_9e336f1a53ca_752ecfc821cf",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5110h2_9e336f1a53ca_b7fdc08e4d03",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_752ecfc821cf",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5411h2_cd1be1abe4a5_07687f848ef1",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5611h2_73c83d34516f_c0eb666b3ea0",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5910h2_a33745022dd6_c9e58cc61e36",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "count": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "spec_43_JA4_DDoS"
+        }
+      },
+      {
+        "name": "challenge-all-reasonable-specific_path_2",
+        "priority": 2,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "/api/event_logging/batch",
+            "field_to_match": {
+              "uri": {}
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "EXACTLY"
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "challenge-all-reasonable-specific_path"
+        }
+      },
+      {
+        "name": "chat_platform_deny_options_method_2",
+        "priority": 3,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "OPTIONS",
+                  "field_to_match": {
+                    "method": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "or_statement": {
+                  "statements": [
+                    {
+                      "byte_match_statement": {
+                        "search_string": "chat.example.com",
+                        "field_to_match": {
+                          "single_header": {
+                            "name": "host"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "platform.example.com",
+                        "field_to_match": {
+                          "single_header": {
+                            "name": "host"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "block": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "chat_platform_deny_options_method"
+        }
+      },
+      {
+        "name": "probe_service_pass_2",
+        "priority": 4,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "cloud-detect-16TNBPz9L00rabcdefgh",
+            "field_to_match": {
+              "single_header": {
+                "name": "x-detect-header"
+              }
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "EXACTLY"
+          }
+        },
+        "rule_action": {
+          "allow": {}
+        },
+        "rule_labels": [
+          {
+            "name": "probe_service"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "probe_service_pass"
+        }
+      },
+      {
+        "name": "AWS-AWSManagedRulesAmazonIpReputationList",
+        "priority": 5,
+        "statement": {
+          "managed_rule_set_statement": {
+            "managed_rule_set_arn": "<ARN_MANAGEDRULESET_1>",
+            "managed_rule_set_version": "DEFAULT_VERSION",
+            "rule_action_overrides": [
+              {
+                "name": "AWSManagedReconnaissanceList",
+                "action_to_use": {
+                  "challenge": {}
+                }
+              },
+              {
+                "name": "AWSManagedIPDDoSList",
+                "action_to_use": {
+                  "challenge": {}
+                }
+              },
+              {
+                "name": "AWSManagedIPReputationList",
+                "action_to_use": {
+                  "challenge": {}
+                }
+              }
+            ],
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "/",
+                "field_to_match": {
+                  "uri": {}
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            },
+            "visible_scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "/",
+                "field_to_match": {
+                  "uri": {}
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_group_action": {
+          "none": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "AWS-AWSManagedRulesAmazonIpReputationList"
+        }
+      },
+      {
+        "name": "AWS-AWSManagedRulesAnonymousIpList",
+        "priority": 6,
+        "statement": {
+          "managed_rule_set_statement": {
+            "managed_rule_set_arn": "<ARN_MANAGEDRULESET_3>",
+            "managed_rule_set_version": "DEFAULT_VERSION",
+            "rule_action_overrides": [
+              {
+                "name": "AnonymousIPList",
+                "action_to_use": {
+                  "challenge": {}
+                }
+              },
+              {
+                "name": "HostingProviderIPList",
+                "action_to_use": {
+                  "allow": {}
+                }
+              }
+            ],
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "/",
+                "field_to_match": {
+                  "uri": {}
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            },
+            "visible_scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "/",
+                "field_to_match": {
+                  "uri": {}
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_group_action": {
+          "none": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "AWS-AWSManagedRulesAnonymousIpList"
+        }
+      },
+      {
+        "name": "example-com_ratelimit_challenge_2",
+        "priority": 7,
+        "statement": {
+          "rate_based_statement": {
+            "id": "29f67579-78b8-46dd-813f-111111111111_c05cf5ae-736f-43f0-9724-111111111111",
+            "limit": 10,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_6>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_3>"
+            },
+            "scope_down_statement": {
+              "or_statement": {
+                "statements": [
+                  {
+                    "byte_match_statement": {
+                      "search_string": "www.example.com",
+                      "field_to_match": {
+                        "single_header": {
+                          "name": "host"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "EXACTLY"
+                    }
+                  },
+                  {
+                    "byte_match_statement": {
+                      "search_string": "example.com",
+                      "field_to_match": {
+                        "single_header": {
+                          "name": "host"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "EXACTLY"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "example-com_ratelimit_challenge"
+        }
+      },
+      {
+        "name": "APP-BYPASS_2",
+        "priority": 8,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "example",
+            "field_to_match": {
+              "single_header": {
+                "name": "user-agent"
+              }
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "STARTS_WITH"
+          }
+        },
+        "rule_action": {
+          "allow": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "APP-BYPASS"
+        }
+      },
+      {
+        "name": "ban_chat_ipv6_2",
+        "priority": 9,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "ip_set_reference_statement": {
+                  "ip_set_arn": "<ARN_IPSET_7>"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "block": {}
+        },
+        "rule_labels": [
+          {
+            "name": "ban-ipv6:chat"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "ban_chat_ipv6"
+        }
+      },
+      {
+        "name": "platform-all-ratelimit_2",
+        "priority": 10,
+        "statement": {
+          "rate_based_statement": {
+            "id": "2265e541-6fd2-43dd-a244-111111111111_06d93b63-1810-41ae-8e7e-111111111111",
+            "limit": 20,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_5>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_1>"
+            },
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "platform.example.com",
+                "field_to_match": {
+                  "single_header": {
+                    "name": "host"
+                  }
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "platform-all-ratelimit"
+        }
+      },
+      {
+        "name": "chat-all-ratelimit_2",
+        "priority": 11,
+        "statement": {
+          "rate_based_statement": {
+            "id": "be0968ed-ef88-42c5-befe-111111111111_712be802-9efa-4a14-8433-111111111111",
+            "limit": 150,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_4>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_2>"
+            },
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "chat.example.com",
+                "field_to_match": {
+                  "single_header": {
+                    "name": "host"
+                  }
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "chat-all-ratelimit"
+        }
+      },
+      {
+        "name": "chat_challengeable-request_bot_control_2",
+        "priority": 12,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "label_match_statement": {
+                  "scope": "LABEL",
+                  "key": "awswaf:managed:aws:anti-ddos:challengeable-request"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "not_statement": {
+                  "statement": {
+                    "byte_match_statement": {
+                      "search_string": "ab_session_id",
+                      "field_to_match": {
+                        "cookie": {
+                          "match_pattern": {
+                            "included_cookies": [
+                              "ab_session_id"
+                            ]
+                          },
+                          "match_scope": "KEY",
+                          "oversize_handling": "MATCH"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "CONTAINS"
+                    }
+                  }
+                }
+              },
+              {
+                "not_statement": {
+                  "statement": {
+                    "byte_match_statement": {
+                      "search_string": "smidV2",
+                      "field_to_match": {
+                        "cookie": {
+                          "match_pattern": {
+                            "included_cookies": [
+                              "smidV2"
+                            ]
+                          },
+                          "match_scope": "KEY",
+                          "oversize_handling": "MATCH"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "CONTAINS"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "count": {}
+        },
+        "rule_labels": [
+          {
+            "name": "challenge:landingpage"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "landing_page_tag_label"
+        }
+      },
+      {
+        "name": "platform_create_payment_bot_control",
+        "priority": 13,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "platform.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "POST",
+                  "field_to_match": {
+                    "method": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "/api/v1/payments",
+                  "field_to_match": {
+                    "uri": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "rule_labels": [
+          {
+            "name": "challenge:spec"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "post_create_payment_bot_control"
+        }
+      },
+      {
+        "name": "spec_43_JA4_DDoS_2",
+        "priority": 14,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "or_statement": {
+                  "statements": [
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d240600_4f054e0fd0cf_17d72b2e486e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d320800_a6df2e0e78d0_36cef8aed422",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d4109h2_32474fa09e75_f42f9b7fb65b",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t12d4808h2_f2cb7cf206ac_f9b351751198",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0311h2_55b375c5d22e_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0312h2_55b375c5d22e_3371dbe1cf0c",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0313h2_55b375c5d22e_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_1f22a2ca17c4",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0411h2_16476d049b0b_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0610h2_1841c8e5b05d_4162ed3f4693",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0611h2_1841c8e5b05d_b6f6142ec868",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d0810h2_48922242edce_5dcee0618f77",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h1_61a7ad8aa9b6_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h1_61a7ad8aa9b6_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h2_61a7ad8aa9b6_e400ed870cd8",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1011h2_61a7ad8aa9b6_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1012h2_61a7ad8aa9b6_32cb9d761817",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1211h2_b1fab7fa1c49_c85829a2e736",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1310h2_3a6e105d6037_ec1bb07721af",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1311h2_3a6e105d6037_162665405ad5",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1312h2_df115388da38_d41ae481755e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1513h2_8daaf6152771_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1515h1_8daaf6152771_0a20fe35d3a5",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_02713d6af862",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_973db200687d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1516h2_8daaf6152771_d8a2da3f94cd",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1716h2_5b57614c22b0_ea2cbcd64924",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1813h2_e8a523a41297_b17c474a414d",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1814h1_e8a523a41297_604f15001eed",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d1815h2_e8a523a41297_45f260be83e2",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d2014h2_a09f3c656075_2a6581477f52",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d2511h2_e6722d30668e_5bfe1112bb65",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d311100_e8f1e7e78f70_d41ae481755e",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d441100_4a0235c0406f_77056f0f1550",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d511000_9e336f1a53ca_752ecfc821cf",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5110h2_9e336f1a53ca_b7fdc08e4d03",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_752ecfc821cf",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_907ef56aa03f",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5111h2_9e336f1a53ca_f27747103350",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5411h2_cd1be1abe4a5_07687f848ef1",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5611h2_73c83d34516f_c0eb666b3ea0",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "t13d5910h2_a33745022dd6_c9e58cc61e36",
+                        "field_to_match": {
+                          "ja4_fingerprint": {
+                            "fallback_behavior": "NO_MATCH"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "count": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "spec_43_JA4_DDoS"
+        }
+      },
+      {
+        "name": "challenge-all-reasonable-specific_path",
+        "priority": 15,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "/api/event_logging/batch",
+            "field_to_match": {
+              "uri": {}
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "EXACTLY"
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "challenge-all-reasonable-specific_path"
+        }
+      },
+      {
+        "name": "chat_platform_deny_options_method",
+        "priority": 16,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "OPTIONS",
+                  "field_to_match": {
+                    "method": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "or_statement": {
+                  "statements": [
+                    {
+                      "byte_match_statement": {
+                        "search_string": "chat.example.com",
+                        "field_to_match": {
+                          "single_header": {
+                            "name": "host"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    },
+                    {
+                      "byte_match_statement": {
+                        "search_string": "platform.example.com",
+                        "field_to_match": {
+                          "single_header": {
+                            "name": "host"
+                          }
+                        },
+                        "text_transformations": [
+                          {
+                            "priority": 0,
+                            "type": "NONE"
+                          }
+                        ],
+                        "positional_constraint": "EXACTLY"
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "block": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "chat_platform_deny_options_method"
+        }
+      },
+      {
+        "name": "probe_service_pass",
+        "priority": 17,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "cloud-detect-16TNBPz9L00rabcdefgh",
+            "field_to_match": {
+              "single_header": {
+                "name": "x-detect-header"
+              }
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "EXACTLY"
+          }
+        },
+        "rule_action": {
+          "allow": {}
+        },
+        "rule_labels": [
+          {
+            "name": "probe_service"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "probe_service_pass"
+        }
+      },
+      {
+        "name": "example-com_ratelimit_challenge",
+        "priority": 18,
+        "statement": {
+          "rate_based_statement": {
+            "id": "29f67579-78b8-46dd-813f-111111111111_c05cf5ae-736f-43f0-9724-111111111111",
+            "limit": 10,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_6>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_3>"
+            },
+            "scope_down_statement": {
+              "or_statement": {
+                "statements": [
+                  {
+                    "byte_match_statement": {
+                      "search_string": "www.example.com",
+                      "field_to_match": {
+                        "single_header": {
+                          "name": "host"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "EXACTLY"
+                    }
+                  },
+                  {
+                    "byte_match_statement": {
+                      "search_string": "example.com",
+                      "field_to_match": {
+                        "single_header": {
+                          "name": "host"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "EXACTLY"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "example-com_ratelimit_challenge"
+        }
+      },
+      {
+        "name": "APP-BYPASS",
+        "priority": 19,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "example",
+            "field_to_match": {
+              "single_header": {
+                "name": "user-agent"
+              }
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "STARTS_WITH"
+          }
+        },
+        "rule_action": {
+          "allow": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "APP-BYPASS"
+        }
+      },
+      {
+        "name": "ban_chat_ipv6",
+        "priority": 20,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "ip_set_reference_statement": {
+                  "ip_set_arn": "<ARN_IPSET_7>"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "block": {}
+        },
+        "rule_labels": [
+          {
+            "name": "ban-ipv6:chat"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "ban_chat_ipv6"
+        }
+      },
+      {
+        "name": "platform-all-ratelimit",
+        "priority": 21,
+        "statement": {
+          "rate_based_statement": {
+            "id": "2265e541-6fd2-43dd-a244-111111111111_06d93b63-1810-41ae-8e7e-111111111111",
+            "limit": 20,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_5>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_1>"
+            },
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "platform.example.com",
+                "field_to_match": {
+                  "single_header": {
+                    "name": "host"
+                  }
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "platform-all-ratelimit"
+        }
+      },
+      {
+        "name": "chat-all-ratelimit",
+        "priority": 22,
+        "statement": {
+          "rate_based_statement": {
+            "id": "be0968ed-ef88-42c5-befe-111111111111_712be802-9efa-4a14-8433-111111111111",
+            "limit": 150,
+            "time_window": 60,
+            "aggregate_key_type": "IP",
+            "shadow_ip_set_reference_statement": {
+              "shadow_ip_set_v4_arn": "<ARN_IPSET_4>",
+              "shadow_ip_set_v6_arn": "<ARN_IPSET_2>"
+            },
+            "scope_down_statement": {
+              "byte_match_statement": {
+                "search_string": "chat.example.com",
+                "field_to_match": {
+                  "single_header": {
+                    "name": "host"
+                  }
+                },
+                "text_transformations": [
+                  {
+                    "priority": 0,
+                    "type": "NONE"
+                  }
+                ],
+                "positional_constraint": "EXACTLY"
+              }
+            }
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "chat-all-ratelimit"
+        }
+      },
+      {
+        "name": "chat_challengeable-request_bot_control",
+        "priority": 23,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "label_match_statement": {
+                  "scope": "LABEL",
+                  "key": "awswaf:managed:aws:anti-ddos:challengeable-request"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "chat.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "not_statement": {
+                  "statement": {
+                    "byte_match_statement": {
+                      "search_string": "ab_session_id",
+                      "field_to_match": {
+                        "cookie": {
+                          "match_pattern": {
+                            "included_cookies": [
+                              "ab_session_id"
+                            ]
+                          },
+                          "match_scope": "KEY",
+                          "oversize_handling": "MATCH"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "CONTAINS"
+                    }
+                  }
+                }
+              },
+              {
+                "not_statement": {
+                  "statement": {
+                    "byte_match_statement": {
+                      "search_string": "smidV2",
+                      "field_to_match": {
+                        "cookie": {
+                          "match_pattern": {
+                            "included_cookies": [
+                              "smidV2"
+                            ]
+                          },
+                          "match_scope": "KEY",
+                          "oversize_handling": "MATCH"
+                        }
+                      },
+                      "text_transformations": [
+                        {
+                          "priority": 0,
+                          "type": "NONE"
+                        }
+                      ],
+                      "positional_constraint": "CONTAINS"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "count": {}
+        },
+        "rule_labels": [
+          {
+            "name": "challenge:landingpage"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "landing_page_tag_label"
+        }
+      },
+      {
+        "name": "platform_create_payment_bot_control_2",
+        "priority": 24,
+        "statement": {
+          "and_statement": {
+            "statements": [
+              {
+                "byte_match_statement": {
+                  "search_string": "platform.example.com",
+                  "field_to_match": {
+                    "single_header": {
+                      "name": "host"
+                    }
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "POST",
+                  "field_to_match": {
+                    "method": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              },
+              {
+                "byte_match_statement": {
+                  "search_string": "/api/v1/payments",
+                  "field_to_match": {
+                    "uri": {}
+                  },
+                  "text_transformations": [
+                    {
+                      "priority": 0,
+                      "type": "NONE"
+                    }
+                  ],
+                  "positional_constraint": "EXACTLY"
+                }
+              }
+            ]
+          }
+        },
+        "rule_action": {
+          "challenge": {}
+        },
+        "rule_labels": [
+          {
+            "name": "challenge:spec"
+          }
+        ],
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "post_create_payment_bot_control"
+        }
+      },
+      {
+        "name": "AWS-AWSManagedRulesBotControlRuleSet",
+        "priority": 25,
+        "statement": {
+          "managed_rule_set_statement": {
+            "managed_rule_set_arn": "<ARN_MANAGEDRULESET_2>",
+            "managed_rule_set_version": "Version_4.0",
+            "expiration_policy": "USE_RECOMMENDED_VERSION",
+            "rule_action_overrides": [
+              {
+                "name": "TGT_TokenReuseIpLow",
+                "action_to_use": {
+                  "captcha": {}
+                }
+              },
+              {
+                "name": "TGT_TokenAbsent",
+                "action_to_use": {
+                  "challenge": {}
+                }
+              },
+              {
+                "name": "CategorySearchEngine",
+                "action_to_use": {
+                  "allow": {}
+                }
+              },
+              {
+                "name": "CategorySeo",
+                "action_to_use": {
+                  "allow": {}
+                }
+              }
+            ],
+            "scope_down_statement": {
+              "or_statement": {
+                "statements": [
+                  {
+                    "label_match_statement": {
+                      "scope": "LABEL",
+                      "key": "challenge:spec"
+                    }
+                  },
+                  {
+                    "label_match_statement": {
+                      "scope": "LABEL",
+                      "key": "challenge:landingpage"
+                    }
+                  }
+                ]
+              }
+            },
+            "managed_rule_set_configs": [
+              {
+                "aws_managed_rules_bot_control_rule_set": {
+                  "inspection_level": "TARGETED",
+                  "enable_machine_learning": true
+                }
+              }
+            ],
+            "visible_scope_down_statement": {
+              "or_statement": {
+                "statements": [
+                  {
+                    "label_match_statement": {
+                      "scope": "LABEL",
+                      "key": "challenge:spec"
+                    }
+                  },
+                  {
+                    "label_match_statement": {
+                      "scope": "LABEL",
+                      "key": "challenge:landingpage"
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "rule_group_action": {
+          "none": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "AWS-AWSManagedRulesBotControlRuleSet"
+        }
+      },
+      {
+        "name": "allow_all",
+        "priority": 26,
+        "statement": {
+          "byte_match_statement": {
+            "search_string": "/",
+            "field_to_match": {
+              "uri": {}
+            },
+            "text_transformations": [
+              {
+                "priority": 0,
+                "type": "NONE"
+              }
+            ],
+            "positional_constraint": "STARTS_WITH"
+          }
+        },
+        "rule_action": {
+          "allow": {}
+        },
+        "visibility_config": {
+          "sampled_requests_enabled": true,
+          "cloud_watch_metrics_enabled": true,
+          "metric_name": "allow_all"
+        }
+      }
+    ],
+    "visibility_config": {
+      "sampled_requests_enabled": true,
+      "cloud_watch_metrics_enabled": true,
+      "metric_name": "example-prod"
+    },
+    "isolation_status": "ACTIVE",
+    "capacity": 435,
+    "managed_by_fms": false,
+    "label_namespace": "awswaf:111111111111:webacl:example-prod:",
+    "oversize_fields_handling_compliant": true,
+    "token_domains": [
+      "example.com",
+      "www.example.com",
+      "chat.example.com",
+      "platform.example.com",
+      "api.example.com",
+      "api-docs.example.com"
+    ],
+    "retrofitted_by_fms": false,
+    "ddos_protection_config": {
+      "alb_low_reputation_sources": "REACTIVE"
+    },
+    "simplified_web_acl": false,
+    "alb_web_acl_attributes": {
+      "suppress_waf_service_call": false,
+      "l7ko_mode": "REACTIVE",
+      "l7ko_xff_mode": "REACTIVE"
+    }
+  },
+  "lock_token": "dfafff29-178a-47cb-bff4-111111111111"
+}
