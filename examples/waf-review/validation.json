@@ -1,0 +1,21 @@
+{
+  "summary_issue_count": {
+    "status": "PASS",
+    "summary_rows": 16,
+    "issue_sections": 16
+  },
+  "summary_detail_match": {
+    "status": "PASS",
+    "mismatches": []
+  },
+  "rule_references": {
+    "status": "PASS",
+    "invalid_refs": []
+  },
+  "mermaid_completeness": {
+    "status": "PASS",
+    "missing_rules": [],
+    "rule_count": 27,
+    "node_count": 24
+  }
+}

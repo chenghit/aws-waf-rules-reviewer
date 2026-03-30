@@ -1,0 +1,969 @@
+{
+  "schema_version": "1.0",
+  "input_file": "/Users/chencch/tmp/waf-review-report/web-acl-example.json",
+  "input_format": "snake_case_custom",
+  "web_acl": {
+    "name": "example-prod",
+    "id": "e37e78b0-572a-4738-a11d-111111111111",
+    "arn": "<ARN_WEBACL_1>",
+    "description": "REDACTED",
+    "default_action": "allow",
+    "default_action_custom_handling": false,
+    "capacity": 435,
+    "token_domains": [
+      "example.com",
+      "www.example.com",
+      "chat.example.com",
+      "platform.example.com",
+      "api.example.com",
+      "api-docs.example.com"
+    ],
+    "challenge_config": null,
+    "captcha_config": null
+  },
+  "rule_count": 27,
+  "rules": [
+    {
+      "name": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+      "priority": 0,
+      "type": "managed_rule_group",
+      "action": "managed_default",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "managed: AWS/AWSManagedRulesAntiDDoSRuleSet Version_1.0",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          13,
+          51
+        ],
+        "jsonpath": "$.web_acl.rules[0]"
+      },
+      "scope_down": null,
+      "managed": {
+        "vendor": "AWS",
+        "group_name": "AWSManagedRulesAntiDDoSRuleSet",
+        "version": "Version_1.0",
+        "overrides": [
+          {
+            "rule_name": "ChallengeAllDuringEvent",
+            "action": "count"
+          }
+        ],
+        "excluded_rules": [],
+        "config": {
+          "sensitivity_to_block": "LOW",
+          "usage_of_challenge_action": "ENABLED",
+          "sensitivity_to_challenge": "HIGH",
+          "uris_exempt_from_challenge": [
+            "\\/query|\\/models|\\/messages|\\/balance|\\/completions|\\/api\\/|\\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$"
+          ]
+        }
+      }
+    },
+    {
+      "name": "spec_43_JA4_DDoS",
+      "priority": 1,
+      "type": "custom",
+      "action": "count",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "spec_43_JA4_DDoS",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(single_header:host EXACTLY 'chat.example.com', OR(43 byte_match matches))",
+        "leaf_count": 44,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": {
+          "type": "byte_match",
+          "total": 43,
+          "values": [
+            "t12d240600_4f054e0fd0cf_17d72b2e486e",
+            "t12d320800_a6df2e0e78d0_36cef8aed422",
+            "t13d5910h2_a33745022dd6_c9e58cc61e36"
+          ]
+        }
+      },
+      "source": {
+        "lines": [
+          52,
+          823
+        ],
+        "jsonpath": "$.web_acl.rules[1]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "challenge-all-reasonable-specific_path_2",
+      "priority": 2,
+      "type": "custom",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "challenge-all-reasonable-specific_path",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "uri_path EXACTLY '/api/event_logging/batch'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          824,
+          850
+        ],
+        "jsonpath": "$.web_acl.rules[2]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "chat_platform_deny_options_method_2",
+      "priority": 3,
+      "type": "custom",
+      "action": "block",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "chat_platform_deny_options_method",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(method EXACTLY 'OPTIONS', OR(single_header:host EXACTLY 'chat.example.com', single_header:host EXACTLY 'platform.example.com'))",
+        "leaf_count": 3,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          851,
+          923
+        ],
+        "jsonpath": "$.web_acl.rules[3]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "probe_service_pass_2",
+      "priority": 4,
+      "type": "custom",
+      "action": "allow",
+      "rule_labels": [
+        "probe_service"
+      ],
+      "visibility_config": {
+        "metric_name": "probe_service_pass",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "single_header:x-detect-header EXACTLY 'cloud-detect-16TNBPz9L00rabcdefgh'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          924,
+          957
+        ],
+        "jsonpath": "$.web_acl.rules[4]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "AWS-AWSManagedRulesAmazonIpReputationList",
+      "priority": 5,
+      "type": "managed_rule_group",
+      "action": "managed_default",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "AWS-AWSManagedRulesAmazonIpReputationList",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "managed: AWS/AWSManagedRulesAmazonIpReputationList DEFAULT_VERSION",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          958,
+          1025
+        ],
+        "jsonpath": "$.web_acl.rules[5]"
+      },
+      "scope_down": {
+        "summary": "uri_path EXACTLY '/'",
+        "source_lines": [
+          958,
+          1025
+        ]
+      },
+      "managed": {
+        "vendor": "AWS",
+        "group_name": "AWSManagedRulesAmazonIpReputationList",
+        "version": "DEFAULT_VERSION",
+        "overrides": [
+          {
+            "rule_name": "AWSManagedReconnaissanceList",
+            "action": "challenge"
+          },
+          {
+            "rule_name": "AWSManagedIPDDoSList",
+            "action": "challenge"
+          },
+          {
+            "rule_name": "AWSManagedIPReputationList",
+            "action": "challenge"
+          }
+        ],
+        "excluded_rules": [],
+        "config": null
+      }
+    },
+    {
+      "name": "AWS-AWSManagedRulesAnonymousIpList",
+      "priority": 6,
+      "type": "managed_rule_group",
+      "action": "managed_default",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "AWS-AWSManagedRulesAnonymousIpList",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "managed: AWS/AWSManagedRulesAnonymousIpList DEFAULT_VERSION",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1026,
+          1087
+        ],
+        "jsonpath": "$.web_acl.rules[6]"
+      },
+      "scope_down": {
+        "summary": "uri_path EXACTLY '/'",
+        "source_lines": [
+          1026,
+          1087
+        ]
+      },
+      "managed": {
+        "vendor": "AWS",
+        "group_name": "AWSManagedRulesAnonymousIpList",
+        "version": "DEFAULT_VERSION",
+        "overrides": [
+          {
+            "rule_name": "AnonymousIPList",
+            "action": "challenge"
+          },
+          {
+            "rule_name": "HostingProviderIPList",
+            "action": "allow"
+          }
+        ],
+        "excluded_rules": [],
+        "config": null
+      }
+    },
+    {
+      "name": "example-com_ratelimit_challenge_2",
+      "priority": 7,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "example-com_ratelimit_challenge",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=10, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1088,
+          1151
+        ],
+        "jsonpath": "$.web_acl.rules[7]"
+      },
+      "scope_down": {
+        "summary": "OR(single_header:host EXACTLY 'www.example.com', single_header:host EXACTLY 'example.com')",
+        "source_lines": [
+          1088,
+          1151
+        ]
+      },
+      "rate_based": {
+        "limit": 10,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "APP-BYPASS_2",
+      "priority": 8,
+      "type": "custom",
+      "action": "allow",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "APP-BYPASS",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "single_header:user-agent STARTS_WITH 'example'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1152,
+          1180
+        ],
+        "jsonpath": "$.web_acl.rules[8]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "ban_chat_ipv6_2",
+      "priority": 9,
+      "type": "custom",
+      "action": "block",
+      "rule_labels": [
+        "ban-ipv6:chat"
+      ],
+      "visibility_config": {
+        "metric_name": "ban_chat_ipv6",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(ip_set '<ARN_IPSET_7>', single_header:host EXACTLY 'chat.example.com')",
+        "leaf_count": 2,
+        "leaf_types": [
+          "byte_match",
+          "ip_set"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1181,
+          1225
+        ],
+        "jsonpath": "$.web_acl.rules[9]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "platform-all-ratelimit_2",
+      "priority": 10,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "platform-all-ratelimit",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=20, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1226,
+          1266
+        ],
+        "jsonpath": "$.web_acl.rules[10]"
+      },
+      "scope_down": {
+        "summary": "single_header:host EXACTLY 'platform.example.com'",
+        "source_lines": [
+          1226,
+          1266
+        ]
+      },
+      "rate_based": {
+        "limit": 20,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "chat-all-ratelimit_2",
+      "priority": 11,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "chat-all-ratelimit",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=150, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1267,
+          1307
+        ],
+        "jsonpath": "$.web_acl.rules[11]"
+      },
+      "scope_down": {
+        "summary": "single_header:host EXACTLY 'chat.example.com'",
+        "source_lines": [
+          1267,
+          1307
+        ]
+      },
+      "rate_based": {
+        "limit": 150,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "chat_challengeable-request_bot_control_2",
+      "priority": 12,
+      "type": "custom",
+      "action": "count",
+      "rule_labels": [
+        "challenge:landingpage"
+      ],
+      "visibility_config": {
+        "metric_name": "landing_page_tag_label",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(label_match 'awswaf:managed:aws:anti-ddos:challengeable-request' (scope=LABEL), single_header:host EXACTLY 'chat.example.com', NOT(cookie CONTAINS 'ab_session_id'), NOT(cookie CONTAINS 'smidV2'))",
+        "leaf_count": 4,
+        "leaf_types": [
+          "byte_match",
+          "label_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1308,
+          1407
+        ],
+        "jsonpath": "$.web_acl.rules[12]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "platform_create_payment_bot_control",
+      "priority": 13,
+      "type": "custom",
+      "action": "challenge",
+      "rule_labels": [
+        "challenge:spec"
+      ],
+      "visibility_config": {
+        "metric_name": "post_create_payment_bot_control",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(single_header:host EXACTLY 'platform.example.com', method EXACTLY 'POST', uri_path EXACTLY '/api/v1/payments')",
+        "leaf_count": 3,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          1408,
+          1477
+        ],
+        "jsonpath": "$.web_acl.rules[13]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "spec_43_JA4_DDoS_2",
+      "priority": 14,
+      "type": "custom",
+      "action": "count",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "spec_43_JA4_DDoS",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(single_header:host EXACTLY 'chat.example.com', OR(43 byte_match matches))",
+        "leaf_count": 44,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": {
+          "type": "byte_match",
+          "total": 43,
+          "values": [
+            "t12d240600_4f054e0fd0cf_17d72b2e486e",
+            "t12d320800_a6df2e0e78d0_36cef8aed422",
+            "t13d5910h2_a33745022dd6_c9e58cc61e36"
+          ]
+        }
+      },
+      "source": {
+        "lines": [
+          1478,
+          2249
+        ],
+        "jsonpath": "$.web_acl.rules[14]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "challenge-all-reasonable-specific_path",
+      "priority": 15,
+      "type": "custom",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "challenge-all-reasonable-specific_path",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "uri_path EXACTLY '/api/event_logging/batch'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2250,
+          2276
+        ],
+        "jsonpath": "$.web_acl.rules[15]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "chat_platform_deny_options_method",
+      "priority": 16,
+      "type": "custom",
+      "action": "block",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "chat_platform_deny_options_method",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(method EXACTLY 'OPTIONS', OR(single_header:host EXACTLY 'chat.example.com', single_header:host EXACTLY 'platform.example.com'))",
+        "leaf_count": 3,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2277,
+          2349
+        ],
+        "jsonpath": "$.web_acl.rules[16]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "probe_service_pass",
+      "priority": 17,
+      "type": "custom",
+      "action": "allow",
+      "rule_labels": [
+        "probe_service"
+      ],
+      "visibility_config": {
+        "metric_name": "probe_service_pass",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "single_header:x-detect-header EXACTLY 'cloud-detect-16TNBPz9L00rabcdefgh'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2350,
+          2383
+        ],
+        "jsonpath": "$.web_acl.rules[17]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "example-com_ratelimit_challenge",
+      "priority": 18,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "example-com_ratelimit_challenge",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=10, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2384,
+          2447
+        ],
+        "jsonpath": "$.web_acl.rules[18]"
+      },
+      "scope_down": {
+        "summary": "OR(single_header:host EXACTLY 'www.example.com', single_header:host EXACTLY 'example.com')",
+        "source_lines": [
+          2384,
+          2447
+        ]
+      },
+      "rate_based": {
+        "limit": 10,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "APP-BYPASS",
+      "priority": 19,
+      "type": "custom",
+      "action": "allow",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "APP-BYPASS",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "single_header:user-agent STARTS_WITH 'example'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2448,
+          2476
+        ],
+        "jsonpath": "$.web_acl.rules[19]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "ban_chat_ipv6",
+      "priority": 20,
+      "type": "custom",
+      "action": "block",
+      "rule_labels": [
+        "ban-ipv6:chat"
+      ],
+      "visibility_config": {
+        "metric_name": "ban_chat_ipv6",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(ip_set '<ARN_IPSET_7>', single_header:host EXACTLY 'chat.example.com')",
+        "leaf_count": 2,
+        "leaf_types": [
+          "byte_match",
+          "ip_set"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2477,
+          2521
+        ],
+        "jsonpath": "$.web_acl.rules[20]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "platform-all-ratelimit",
+      "priority": 21,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "platform-all-ratelimit",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=20, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2522,
+          2562
+        ],
+        "jsonpath": "$.web_acl.rules[21]"
+      },
+      "scope_down": {
+        "summary": "single_header:host EXACTLY 'platform.example.com'",
+        "source_lines": [
+          2522,
+          2562
+        ]
+      },
+      "rate_based": {
+        "limit": 20,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "chat-all-ratelimit",
+      "priority": 22,
+      "type": "rate_based",
+      "action": "challenge",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "chat-all-ratelimit",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "rate_based(limit=150, window=60s)",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2563,
+          2603
+        ],
+        "jsonpath": "$.web_acl.rules[22]"
+      },
+      "scope_down": {
+        "summary": "single_header:host EXACTLY 'chat.example.com'",
+        "source_lines": [
+          2563,
+          2603
+        ]
+      },
+      "rate_based": {
+        "limit": 150,
+        "evaluation_window_sec": 60,
+        "aggregate_key_type": "IP"
+      }
+    },
+    {
+      "name": "chat_challengeable-request_bot_control",
+      "priority": 23,
+      "type": "custom",
+      "action": "count",
+      "rule_labels": [
+        "challenge:landingpage"
+      ],
+      "visibility_config": {
+        "metric_name": "landing_page_tag_label",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(label_match 'awswaf:managed:aws:anti-ddos:challengeable-request' (scope=LABEL), single_header:host EXACTLY 'chat.example.com', NOT(cookie CONTAINS 'ab_session_id'), NOT(cookie CONTAINS 'smidV2'))",
+        "leaf_count": 4,
+        "leaf_types": [
+          "byte_match",
+          "label_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2604,
+          2703
+        ],
+        "jsonpath": "$.web_acl.rules[23]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "platform_create_payment_bot_control_2",
+      "priority": 24,
+      "type": "custom",
+      "action": "challenge",
+      "rule_labels": [
+        "challenge:spec"
+      ],
+      "visibility_config": {
+        "metric_name": "post_create_payment_bot_control",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "AND(single_header:host EXACTLY 'platform.example.com', method EXACTLY 'POST', uri_path EXACTLY '/api/v1/payments')",
+        "leaf_count": 3,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2704,
+          2773
+        ],
+        "jsonpath": "$.web_acl.rules[24]"
+      },
+      "scope_down": null
+    },
+    {
+      "name": "AWS-AWSManagedRulesBotControlRuleSet",
+      "priority": 25,
+      "type": "managed_rule_group",
+      "action": "managed_default",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "AWS-AWSManagedRulesBotControlRuleSet",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "managed: AWS/AWSManagedRulesBotControlRuleSet Version_4.0",
+        "leaf_count": 0,
+        "leaf_types": [],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2774,
+          2862
+        ],
+        "jsonpath": "$.web_acl.rules[25]"
+      },
+      "scope_down": {
+        "summary": "OR(label_match 'challenge:spec' (scope=LABEL), label_match 'challenge:landingpage' (scope=LABEL))",
+        "source_lines": [
+          2774,
+          2862
+        ]
+      },
+      "managed": {
+        "vendor": "AWS",
+        "group_name": "AWSManagedRulesBotControlRuleSet",
+        "version": "Version_4.0",
+        "overrides": [
+          {
+            "rule_name": "TGT_TokenReuseIpLow",
+            "action": "captcha"
+          },
+          {
+            "rule_name": "TGT_TokenAbsent",
+            "action": "challenge"
+          },
+          {
+            "rule_name": "CategorySearchEngine",
+            "action": "allow"
+          },
+          {
+            "rule_name": "CategorySeo",
+            "action": "allow"
+          }
+        ],
+        "excluded_rules": [],
+        "config": {
+          "inspection_level": "TARGETED",
+          "enable_machine_learning": true
+        }
+      }
+    },
+    {
+      "name": "allow_all",
+      "priority": 26,
+      "type": "custom",
+      "action": "allow",
+      "rule_labels": [],
+      "visibility_config": {
+        "metric_name": "allow_all",
+        "sampled_requests_enabled": true,
+        "cloudwatch_metrics_enabled": true
+      },
+      "statement": {
+        "summary": "uri_path STARTS_WITH '/'",
+        "leaf_count": 1,
+        "leaf_types": [
+          "byte_match"
+        ],
+        "samples": null
+      },
+      "source": {
+        "lines": [
+          2863,
+          2889
+        ],
+        "jsonpath": "$.web_acl.rules[26]"
+      },
+      "scope_down": null
+    }
+  ]
+}
