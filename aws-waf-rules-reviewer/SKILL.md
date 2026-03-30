@@ -13,40 +13,118 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 
 ## Workflow
 
-1. **Locate and read the WAF rules**: The user provides a file path or directory path.
-   - If a file path: read it directly
-   - If a directory path: look for JSON files containing Web ACL configuration (typically containing `"Rules"` array and `"DefaultAction"` fields). Use `glob` and `grep` to find them.
-2. Identify the Web ACL's purpose from context (DDoS protection, bot control, application security, etc.)
-3. **Build a rule execution flow**: Before checking individual items, walk through all rules in priority order and build a mental model of the request lifecycle:
-   - For each rule, note: priority, action (Allow/Block/Count/Challenge), labels produced, scope-down conditions, and label dependencies
-   - Identify which rules are "labeling-only" (Count + add label) vs "terminating" (Allow/Block) vs "conditionally terminating" (Challenge/CAPTCHA — non-terminating for browser HTML requests that can complete the challenge, but effectively Block for non-browser or non-GET requests)
-   - Trace how a typical request flows: which rules it hits, which labels accumulate, and where it could be terminated
-   - Map label producers → label consumers (e.g., rule at priority 100 adds label X, rule at priority 500 uses label X in scope-down)
-   - Identify Allow rules that terminate evaluation early, causing the request to skip all subsequent rules
-   This execution flow is your primary analysis tool. Refer back to it when evaluating each checklist item.
-4. Run through the checklist in [references/checklist.md](references/checklist.md). When the checklist references a section in waf-knowledge.md, read that section before evaluating the item.
-5. For each issue found, assess severity (Critical/Medium/Low/Awareness) based on criteria below
-6. **Generate the report**: Write the full report including:
-   - Summary table
-   - Detailed findings with `⏳ Needs user confirmation` markers where business context is needed
-   - **Appendix: Rule Execution Flow** — Mermaid diagram (see Report Format below). This appendix MUST be included in the report.
-7. Save the report to the user's specified location. If no location is specified, save it in the same directory as the input WAF rules file, named `waf-review-report.md`.
-8. **Self-review (MANDATORY — do not skip)**:
-   a. Use `fs_read` to read the saved report file from line 1 to the end. You MUST issue this tool call — do not rely on your memory of what you wrote.
-   b. **Mechanical checks** (verify each one — these are objective and must all pass):
-      - Count rows in the Summary table. Count `## Issue` sections in the report. The two numbers must match exactly.
-      - For each Summary row, find the corresponding detailed `## Issue` section. Verify the issue number, severity level, and title match exactly.
-      - For each rule name and priority number mentioned in any finding, search the original input JSON to confirm that rule exists with that exact name and priority.
-      - In the Mermaid diagram, count rule nodes. Compare against the total number of rules in the input JSON. Every rule must appear as a node.
-      - In the Mermaid diagram, verify every label dependency has a dashed arrow from producer to consumer, and every terminating action (Allow/Block) branches to a terminal node.
-   c. **Adversarial check** (assume the report contains errors — your job is to find them):
-      - Pick the 2 highest-severity findings. Go back to the original input JSON and re-derive each finding independently from scratch. If your re-derivation disagrees with the report (wrong rule, wrong severity, wrong conclusion), fix the report.
-      - For each finding that recommends a fix, trace the fix through the rule execution flow: does the fix break any other rule or label dependency? If so, add a note to the finding.
-   d. **Cross-reference check**:
-      - For each label mentioned in any finding, verify the producer rule exists in the JSON and has a lower priority number (higher priority) than the consumer rule.
-      - Check whether any rules in the JSON were not mentioned in any finding AND were not covered by any checklist item. If a rule was completely ignored, evaluate whether it deserves a finding.
-   e. If you find errors or additional issues, fix the report using `fs_write`.
-   f. After completing self-review, state: "Self-review completed. Read {N} lines. Mechanical: {pass/N failures}. Adversarial: {N} issues re-derived, {N} corrections. Cross-ref: {N} issues found."
+### Step 0: Locate scripts and resolve paths
+
+Before anything else, locate the scripts directory and compute absolute paths.
+
+1. Find the scripts directory. Use `glob` to search for `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py`. The parent directory of the found file is `scripts_dir`. If not found, fall back to the v1 workflow (skip all script steps, do everything manually as described in the "Fallback: Manual Workflow" section at the end).
+
+2. Resolve `input_file`: the user provides a file or directory path. Resolve it to an absolute path.
+
+3. Compute `output_dir`: `{parent directory of input_file}/waf-review` as an absolute path.
+
+All subsequent script commands use these absolute paths. Example:
+```
+scripts_dir = /home/user/.kiro/skills/aws-waf-rules-reviewer/scripts
+input_file  = /home/user/waf-export/waf-rules.json
+output_dir  = /home/user/waf-export/waf-review
+```
+
+### Step 1: Preprocess
+
+```bash
+python3 "{scripts_dir}/waf-preprocess.py" "{input_file}" "{output_dir}"
+```
+
+Parse the `---RESULT---` block:
+- `STATUS: OK` → proceed. Note the `INPUT_FILE` value (resolved path, useful if user gave a directory).
+- `STATUS: FATAL` → report error to user and stop.
+
+### Step 2: Generate base Mermaid diagram
+
+```bash
+python3 "{scripts_dir}/waf-generate-mermaid.py" "{output_dir}"
+```
+
+Parse `---RESULT---`. Proceed on OK.
+
+### Step 3: Run mechanical pre-checks
+
+```bash
+python3 "{scripts_dir}/waf-pre-checks.py" "{output_dir}" "{input_file}"
+```
+
+Parse `---RESULT---`. Proceed on OK.
+
+### Step 4: LLM analysis
+
+Read these files:
+- `{output_dir}/waf-summary.json` — structured rule summaries (primary input)
+- `{output_dir}/pre-checks.json` — mechanical check results + flags
+- [references/checklist.md](references/checklist.md) — review checklist
+- [references/waf-knowledge.md](references/waf-knowledge.md) — domain knowledge (read sections as referenced by checklist)
+
+**Build rule execution flow** from waf-summary.json: walk through all rules in priority order and build a mental model of the request lifecycle. For each rule, note priority, action, labels produced, scope-down conditions, and label dependencies. Map label producers → consumers. Identify Allow rules that terminate evaluation early. This execution flow is your primary analysis tool.
+
+**Run through the checklist:**
+- For `pre_checks` items with status `FAIL` → adopt the finding directly into the report. Verify it makes sense in context, but do not re-derive from scratch.
+- For `pre_checks` items with status `PASS` → skip (no finding needed).
+- For `flags` → use as starting points for LLM reasoning. The flag provides extracted data; you determine severity and whether it's actually an issue.
+- For remaining checklist sections not covered by pre_checks or flags → evaluate using waf-summary.json. If the summary lacks detail for a specific check, use `fs_read` with the `source.lines` from the summary to read the original JSON.
+
+**Write the report** to `{output_dir}/waf-review-report.md`:
+- Use `fs_write` `create` for the first write, `append` if needed.
+- Report ends with the last Issue section's `---` separator. Do NOT write a conclusion paragraph — the Mermaid appendix will be appended by script in Step 5.
+- Report format: see "Report Format" section below.
+- Rule reference lines MUST use one of these exact formats:
+  - Single rule: `**Rule**: {name} (priority {N})`
+  - Multiple rules: `**Rules**: {name1} (priority {N1}), {name2} (priority {N2})`
+  - Missing rule: `**Rule**: N/A (missing rule)`
+
+**Write issue-rule-mapping.json** to `{output_dir}/issue-rule-mapping.json`:
+```json
+{
+  "annotations": {
+    "AWS-AWSManagedRulesAntiDDoSRuleSet": "⚠️ Issue #2, #8",
+    "DSAPP-BYPASS": "⚠️ Issue #1"
+  }
+}
+```
+Only include issues that reference an existing rule in the Web ACL. Issues about missing rules (e.g., "No Always-on Challenge rule") or global concerns (e.g., WCU reminder) are NOT included.
+
+### Step 5: Annotate Mermaid and append to report
+
+```bash
+python3 "{scripts_dir}/waf-annotate-mermaid.py" "{output_dir}"
+```
+
+Parse `---RESULT---`. Proceed on OK.
+
+### Step 6: Validate report
+
+```bash
+python3 "{scripts_dir}/waf-validate-report.py" "{output_dir}" "{input_file}"
+```
+
+Parse `---RESULT---`. Read `{output_dir}/validation.json`.
+
+### Step 7: Self-review
+
+Read `{output_dir}/validation.json`.
+
+**Mechanical check results** (from validation.json):
+- If any check has status `FAIL` → fix the report using `fs_write`, then re-run Step 6. Maximum 2 retries. If validation still fails after 3 total attempts, report remaining errors to the user and stop.
+- If all `PASS` → proceed to adversarial check.
+
+**Adversarial check** (assume the report contains errors — your job is to find them):
+- Pick the 2 highest-severity findings. Go back to waf-summary.json (and original JSON via `source.lines` if needed) and re-derive each finding independently from scratch. If your re-derivation disagrees with the report, fix it.
+- For each finding that recommends a fix, trace the fix through the rule execution flow: does the fix break any other rule or label dependency? If so, add a note to the finding.
+
+**Cross-reference check:**
+- For each label mentioned in any finding, verify the producer rule exists and has a lower priority number (higher priority) than the consumer rule.
+- Check whether any rules in waf-summary.json were completely ignored (no finding, no pre_check coverage). If an ignored rule deserves a finding, add it.
+
+State: "Self-review completed. Mechanical: {results from validation.json}. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} found."
 
 ## Key Principles
 
@@ -87,23 +165,9 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 - {recommendation}
 
 ---
-
-## Appendix: Rule Execution Flow
-
-Generate a Mermaid `flowchart TD` diagram showing the complete rule execution flow. The diagram must include:
-- Each rule as a node, labeled with: priority, name, and action
-- Solid arrows for request flow (top to bottom in priority order)
-- Dashed arrows for label dependencies (from producer rule to consumer rule, annotated with the label name)
-- Terminating actions (Allow/Block) branch to a terminal node (✅ Allowed / 🚫 Blocked); Challenge/CAPTCHA on non-browser paths also branch to 🚫 Blocked with a note
-- Non-terminating actions (Count, or Challenge with valid token) flow to the next rule
-- Diamond shapes for rules with scope-down conditions
-- Key overrides noted inline on managed rule group nodes (e.g., "ChallengeAllDuringEvent→Count")
-- Issue references on affected nodes (e.g., "⚠️ Issue #4")
-- Final node showing the default action for unmatched requests
-
-Wrap the diagram in a ` ```mermaid ` code block so it renders in GitHub, VS Code, Typora, etc.
-
 ```
+
+The Mermaid appendix is generated by scripts and appended automatically in Step 5. Do NOT generate the Mermaid diagram yourself.
 
 ## Severity Criteria
 
@@ -137,3 +201,19 @@ Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF t
 - Forgeable vs unforgeable matching conditions
 - Count action as a labeling mechanism, its dependencies, and Count-without-labels pitfall
 - Common pitfalls and their solutions
+
+## Fallback: Manual Workflow
+
+If scripts are not found in Step 0 (e.g., only SKILL.md and references/ were installed without scripts/), fall back to the original manual workflow:
+
+1. Read the WAF JSON directly (file or directory discovery).
+2. Build rule execution flow manually from the JSON.
+3. Run through the full checklist manually — all 18 sections, no pre-checks to skip.
+4. Generate the complete report including the Mermaid diagram (you must generate it yourself).
+5. Self-review: read the saved report and perform all checks manually:
+   - Count Summary rows vs Issue sections.
+   - Verify rule names and priorities against the JSON.
+   - Verify Mermaid diagram completeness.
+   - Adversarial check: re-derive the 2 highest-severity findings from scratch.
+   - Cross-reference check: verify label dependencies and check for ignored rules.
+6. State self-review results.
