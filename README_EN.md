@@ -13,7 +13,8 @@ flowchart LR
     B --> D["Pre-checks"]
     C --> E["LLM Analysis"]
     D --> E
-    E --> F["Mermaid Annotate"]
+    E --> E2["Report Header"]
+    E2 --> F["Mermaid Annotate"]
     F --> G["Report Validate"]
     G --> H["LLM Self-review"]
     H --> I["Review Report"]
@@ -21,6 +22,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
     style E fill:#fff3e0
@@ -129,6 +131,52 @@ The review covers 18 categories in two phases:
 ## Version History
 
 See [CHANGELOG.md](CHANGELOG.md).
+
+## Supported Models
+
+This tool requires a model with sufficient **output token capacity** — the review report can be long, and the self-review stage needs additional output headroom.
+
+**Minimum requirement: 64K output tokens.**
+
+### Kiro CLI Users
+
+Kiro CLI only supports Claude models on Amazon Bedrock. Switch models with `/model` in Kiro.
+
+| Model | Input Tokens | Output Tokens | Use Case |
+|-------|-------------|--------------|----------|
+| Claude Sonnet 4.6 (1M) | 1M | 64K | ✅ Default — ≤100 rules |
+| Claude Opus 4.6 (1M) | 1M | 128K | ✅ >100 rules, complex configs |
+| Claude Opus 4.5 | 200K | 64K | ✅ ≤100 rules |
+| Claude Sonnet 4.5 | 200K | 64K | ✅ ≤100 rules |
+| Claude Opus 4.1 | 200K | 64K | ✅ ≤100 rules |
+
+### Other Agent Tool Users
+
+Any model meeting the 64K output requirement should work. The following models have been confirmed to meet the minimum:
+
+#### Chinese Providers
+
+| Model | Provider | Input Tokens | Output Tokens | Notes |
+|-------|----------|-------------|--------------|-------|
+| MiMo-V2-Pro | Xiaomi | 1M | 128K | 1T-param MoE (42B active) |
+| Kimi K2.5 | Moonshot AI | 256K | 64K | 1T-param MoE (32B active) |
+| GLM5 Turbo | Z.AI (Zhipu) | ~203K | 131K | Optimized for OpenClaw agent workflows |
+| MiniMax M2.5 | MiniMax | 196K | 64K | 230B MoE (10B active) |
+| Step 3.5 Flash | StepFun | 256K | 256K | 196B MoE (11B active) |
+
+#### International Providers
+
+| Model | Provider | Input Tokens | Output Tokens | Notes |
+|-------|----------|-------------|--------------|-------|
+| Amazon Nova 2 Lite | Amazon | 1M | 64K | Available via OpenRouter |
+| GPT-5.3 Codex | OpenAI | 400K | 128K | Code/engineering focused |
+| GPT-5.4 | OpenAI | 922K | 128K | First mainline reasoning model with Codex capabilities |
+| Grok 4 | xAI | 256K | 256K | Reasoning always-on; pricing doubles above 128K input |
+| Gemini 2.5 Pro | Google | 1M | 64K | Adaptive thinking |
+| Gemini 2.5 Flash | Google | 1M | 64K | Controllable thinking budget |
+| Gemini 3.1 Pro Preview | Google | 1M | 64K | Multimodal flagship |
+
+> These models are not tested with this tool. Compatibility depends on how well your agent framework maps the skill orchestration logic to the model's API.
 
 ## Disclaimer
 
