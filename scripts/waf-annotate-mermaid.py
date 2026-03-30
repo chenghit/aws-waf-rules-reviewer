@@ -53,49 +53,67 @@ def _build_fold_lookup(metadata: dict) -> dict[str, dict]:
     return lookup
 
 
+def _build_node_label(name: str, priority: int, summary_rules: list) -> str:
+    """Build a full node label from waf-summary.json rule data."""
+    rule = next((r for r in summary_rules if r["name"] == name), None)
+    if not rule:
+        return f"P{priority}: {name}"
+    action_map = {"managed_default": "Managed", "allow": "Allow", "block": "Block",
+                  "count": "Count", "challenge": "Challenge", "captcha": "CAPTCHA"}
+    action = action_map.get(rule.get("action", ""), rule.get("action", "?"))
+    parts = [f"P{priority}: {name}", f"Action: {action}"]
+    mg = rule.get("managed")
+    if mg:
+        overrides = mg.get("overrides", [])
+        if overrides:
+            ov = [f"{o['rule_name']}→{action_map.get(o['action'], o['action'])}"
+                  for o in overrides[:3]]
+            if len(overrides) > 3:
+                ov.append(f"+{len(overrides)-3} more")
+            parts.append("Overrides: " + ", ".join(ov))
+    sd = rule.get("scope_down")
+    if sd:
+        s = sd.get("summary", "")
+        if len(s) > 60:
+            s = s[:57] + "..."
+        parts.append(f"Scope: {s}")
+    return "\\n".join(parts)
+
+
 def _expand_fold_group(mermaid_lines: list, fold_group: dict,
-                        metadata: dict) -> list[str]:
+                        metadata: dict, summary_rules: list) -> list[str]:
     """Replace a fold group node with individual rule nodes.
     Returns new lines with the group node replaced by expanded nodes."""
     gid = f"group_{fold_group['priorities'][0]}_{fold_group['priorities'][-1]}"
     new_lines = []
     for line in mermaid_lines:
         stripped = line.strip()
-        if stripped.startswith(gid):
-            # Replace group node with individual nodes
+        # Only expand node definition lines (gid followed by [ or {), not arrow lines
+        if stripped.startswith(gid) and len(stripped) > len(gid) and stripped[len(gid)] in ('[', '{'):
+            # Replace group node with individual expanded nodes
             for i, name in enumerate(fold_group["rule_names"]):
                 priority = fold_group["priorities"][i]
                 node_id = f"rule_{priority}"
-                # Find rule info from metadata
-                rule_meta = next((r for r in metadata["rules"]
-                                  if r["name"] == name), None)
-                if rule_meta:
-                    new_lines.append(f'    {node_id}["{name}\\nP{priority}"]')
+                label = _build_node_label(name, priority, summary_rules)
+                # Determine shape from rule data
+                rule = next((r for r in summary_rules if r["name"] == name), None)
+                if rule and (rule.get("scope_down") or rule.get("type") == "rate_based"):
+                    new_lines.append(f'    {node_id}{{{{"{label}"}}}}')
+                else:
+                    new_lines.append(f'    {node_id}["{label}"]')
+            # Add internal flow arrows
+            for i in range(len(fold_group["priorities"]) - 1):
+                curr = f"rule_{fold_group['priorities'][i]}"
+                nxt = f"rule_{fold_group['priorities'][i + 1]}"
+                new_lines.append(f"    {curr} --> {nxt}")
             continue
-        # Update arrows referencing the group id
+        # Arrow lines referencing the group id — replace with first rule id
         if gid in stripped:
-            # Replace group references with first/last rule of the group
             first_id = f"rule_{fold_group['priorities'][0]}"
             line = line.replace(gid, first_id)
         new_lines.append(line)
 
-    # Add internal flow arrows between expanded nodes
-    insert_lines = []
-    for i in range(len(fold_group["priorities"]) - 1):
-        curr = f"rule_{fold_group['priorities'][i]}"
-        nxt = f"rule_{fold_group['priorities'][i + 1]}"
-        insert_lines.append(f"    {curr} --> {nxt}")
-
-    # Insert after the last expanded node
-    last_priority = fold_group["priorities"][-1]
-    last_id = f"rule_{last_priority}"
-    result = []
-    for line in new_lines:
-        result.append(line)
-        if line.strip().startswith(last_id) and "-->" not in line:
-            result.extend(insert_lines)
-
-    return result
+    return new_lines
 
 
 def _annotate_node(line: str, node_id: str, annotation: str) -> str:
@@ -135,6 +153,12 @@ def main():
     mapping = _load_json(mapping_path)
     annotations = mapping.get("annotations", {})
 
+    # Load summary for full rule labels during fold group expansion
+    summary_path = os.path.join(output_dir, "waf-summary.json")
+    summary_rules = []
+    if os.path.isfile(summary_path):
+        summary_rules = _load_json(summary_path).get("rules", [])
+
     if not annotations:
         # No annotations — just copy base to final and append
         Path(os.path.join(output_dir, "mermaid-final.md")).write_text(
@@ -160,7 +184,7 @@ def main():
             fg = fold_lookup[rule_name]
             fg_key = f"{fg['priorities'][0]}_{fg['priorities'][-1]}"
             if fg_key not in expanded_groups:
-                lines = _expand_fold_group(lines, fg, metadata)
+                lines = _expand_fold_group(lines, fg, metadata, summary_rules)
                 expanded_groups.add(fg_key)
 
     # Phase 2: Apply annotations to node lines
