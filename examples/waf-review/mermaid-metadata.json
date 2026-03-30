@@ -1,0 +1,215 @@
+{
+  "mode": "grouped",
+  "rule_count": 27,
+  "node_count": 24,
+  "rules": [
+    {
+      "name": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+      "priority": 0,
+      "node_id": "rule_0"
+    },
+    {
+      "name": "spec_43_JA4_DDoS",
+      "priority": 1,
+      "node_id": "rule_1"
+    },
+    {
+      "name": "challenge-all-reasonable-specific_path_2",
+      "priority": 2,
+      "node_id": "rule_2"
+    },
+    {
+      "name": "chat_platform_deny_options_method_2",
+      "priority": 3,
+      "node_id": "rule_3"
+    },
+    {
+      "name": "probe_service_pass_2",
+      "priority": 4,
+      "node_id": "rule_4"
+    },
+    {
+      "name": "AWS-AWSManagedRulesAmazonIpReputationList",
+      "priority": 5,
+      "node_id": "rule_5"
+    },
+    {
+      "name": "AWS-AWSManagedRulesAnonymousIpList",
+      "priority": 6,
+      "node_id": "rule_6"
+    },
+    {
+      "name": "example-com_ratelimit_challenge_2",
+      "priority": 7,
+      "node_id": "rule_7"
+    },
+    {
+      "name": "APP-BYPASS_2",
+      "priority": 8,
+      "node_id": "rule_8"
+    },
+    {
+      "name": "ban_chat_ipv6_2",
+      "priority": 9,
+      "node_id": "rule_9"
+    },
+    {
+      "name": "platform-all-ratelimit_2",
+      "priority": 10,
+      "node_id": "rule_10"
+    },
+    {
+      "name": "chat-all-ratelimit_2",
+      "priority": 11,
+      "node_id": "rule_11"
+    },
+    {
+      "name": "chat_challengeable-request_bot_control_2",
+      "priority": 12,
+      "node_id": "rule_12"
+    },
+    {
+      "name": "platform_create_payment_bot_control",
+      "priority": 13,
+      "node_id": "rule_13"
+    },
+    {
+      "name": "spec_43_JA4_DDoS_2",
+      "priority": 14,
+      "node_id": "rule_14"
+    },
+    {
+      "name": "challenge-all-reasonable-specific_path",
+      "priority": 15,
+      "node_id": "rule_15"
+    },
+    {
+      "name": "chat_platform_deny_options_method",
+      "priority": 16,
+      "node_id": "rule_16"
+    },
+    {
+      "name": "probe_service_pass",
+      "priority": 17,
+      "node_id": "rule_17"
+    },
+    {
+      "name": "example-com_ratelimit_challenge",
+      "priority": 18,
+      "node_id": "rule_18"
+    },
+    {
+      "name": "APP-BYPASS",
+      "priority": 19,
+      "node_id": "rule_19"
+    },
+    {
+      "name": "ban_chat_ipv6",
+      "priority": 20,
+      "node_id": "rule_20"
+    },
+    {
+      "name": "platform-all-ratelimit",
+      "priority": 21,
+      "node_id": "rule_21"
+    },
+    {
+      "name": "chat-all-ratelimit",
+      "priority": 22,
+      "node_id": "rule_22"
+    },
+    {
+      "name": "chat_challengeable-request_bot_control",
+      "priority": 23,
+      "node_id": "rule_23"
+    },
+    {
+      "name": "platform_create_payment_bot_control_2",
+      "priority": 24,
+      "node_id": "rule_24"
+    },
+    {
+      "name": "AWS-AWSManagedRulesBotControlRuleSet",
+      "priority": 25,
+      "node_id": "rule_25"
+    },
+    {
+      "name": "allow_all",
+      "priority": 26,
+      "node_id": "rule_26"
+    }
+  ],
+  "label_dependencies": [
+    {
+      "producer": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+      "consumer": "chat_challengeable-request_bot_control_2",
+      "label": "awswaf:managed:aws:anti-ddos:challengeable-request"
+    },
+    {
+      "producer": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+      "consumer": "chat_challengeable-request_bot_control",
+      "label": "awswaf:managed:aws:anti-ddos:challengeable-request"
+    },
+    {
+      "producer": "platform_create_payment_bot_control",
+      "consumer": "AWS-AWSManagedRulesBotControlRuleSet",
+      "label": "challenge:spec"
+    },
+    {
+      "producer": "platform_create_payment_bot_control_2",
+      "consumer": "AWS-AWSManagedRulesBotControlRuleSet",
+      "label": "challenge:spec"
+    },
+    {
+      "producer": "chat_challengeable-request_bot_control_2",
+      "consumer": "AWS-AWSManagedRulesBotControlRuleSet",
+      "label": "challenge:landingpage"
+    },
+    {
+      "producer": "chat_challengeable-request_bot_control",
+      "consumer": "AWS-AWSManagedRulesBotControlRuleSet",
+      "label": "challenge:landingpage"
+    }
+  ],
+  "fold_groups": [
+    {
+      "start_idx": 5,
+      "end_idx": 6,
+      "rule_names": [
+        "AWS-AWSManagedRulesAmazonIpReputationList",
+        "AWS-AWSManagedRulesAnonymousIpList"
+      ],
+      "priorities": [
+        5,
+        6
+      ],
+      "label": "P5-P6: 2 managed rule groups"
+    },
+    {
+      "start_idx": 10,
+      "end_idx": 11,
+      "rule_names": [
+        "platform-all-ratelimit_2",
+        "chat-all-ratelimit_2"
+      ],
+      "priorities": [
+        10,
+        11
+      ],
+      "label": "P10-P11: 2 rate-based rules"
+    },
+    {
+      "start_idx": 21,
+      "end_idx": 22,
+      "rule_names": [
+        "platform-all-ratelimit",
+        "chat-all-ratelimit"
+      ],
+      "priorities": [
+        21,
+        22
+      ],
+      "label": "P21-P22: 2 rate-based rules"
+    }
+  ]
+}

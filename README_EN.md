@@ -100,6 +100,27 @@ A Markdown report (`waf-review/waf-review-report.md`) containing:
 | 🟢 Low | Suboptimal configuration without direct security impact |
 | 🔵 Awareness | Not a vulnerability — operational information the user should know |
 
+## Performance Expectations
+
+The LLM analysis step's duration is primarily driven by reference context size (checklist + knowledge base, ~60KB combined), not rule count. Measured with Claude Sonnet 4.6 (1M):
+
+| Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
+|-----------|---------------------------|-------------|-------------------|
+| 27 rules (measured) | ~10 min | < 1 min | ~15 min |
+| 100+ rules (estimated) | ~15-20 min | < 1 min | ~25 min |
+
+> Thinking time varies significantly across model versions. As models improve long-context reasoning efficiency, these times are expected to decrease.
+
+## Examples
+
+The `examples/` directory contains a complete input/output example:
+
+- `web-acl-example.json` — assembled 27-rule WAF configuration (covers AntiDDoS AMR, Bot Control, rate-based, custom rules, and other typical scenarios)
+- `waf-review/waf-review-report.md` — actual review report output (Chinese, 16 findings)
+- `waf-review/` other files — script-generated intermediate files (summary, pre-checks, Mermaid diagrams, etc.)
+
+Generated using Claude Sonnet 4.6.
+
 ## Checklist Coverage
 
 The review covers 18 categories in two phases:

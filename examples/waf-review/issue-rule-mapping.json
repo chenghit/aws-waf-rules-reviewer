@@ -1,0 +1,23 @@
+{
+  "annotations": {
+    "APP-BYPASS_2": "⚠️ Issue #1",
+    "APP-BYPASS": "⚠️ Issue #1",
+    "AWS-AWSManagedRulesAmazonIpReputationList": "⚠️ Issue #2",
+    "AWS-AWSManagedRulesAnonymousIpList": "⚠️ Issue #2, #3",
+    "AWS-AWSManagedRulesAntiDDoSRuleSet": "⚠️ Issue #4, #7",
+    "probe_service_pass_2": "⚠️ Issue #10",
+    "probe_service_pass": "⚠️ Issue #10",
+    "AWS-AWSManagedRulesBotControlRuleSet": "⚠️ Issue #11, #12",
+    "spec_43_JA4_DDoS": "⚠️ Issue #13",
+    "spec_43_JA4_DDoS_2": "⚠️ Issue #9, #13",
+    "challenge-all-reasonable-specific_path": "⚠️ Issue #9",
+    "chat_platform_deny_options_method": "⚠️ Issue #9",
+    "example-com_ratelimit_challenge": "⚠️ Issue #9",
+    "ban_chat_ipv6": "⚠️ Issue #9",
+    "platform-all-ratelimit": "⚠️ Issue #9",
+    "chat-all-ratelimit": "⚠️ Issue #9",
+    "chat_challengeable-request_bot_control": "⚠️ Issue #9",
+    "platform_create_payment_bot_control_2": "⚠️ Issue #9",
+    "allow_all": "⚠️ Issue #15"
+  }
+}

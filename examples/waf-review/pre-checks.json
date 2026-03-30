@@ -1,0 +1,250 @@
+{
+  "pre_checks": {
+    "token_domain": {
+      "status": "FAIL",
+      "finding": "Redundant subdomains (covered by apex): www.example.com, chat.example.com, platform.example.com, api.example.com, api-docs.example.com",
+      "domains": [
+        "example.com",
+        "www.example.com",
+        "chat.example.com",
+        "platform.example.com",
+        "api.example.com",
+        "api-docs.example.com"
+      ],
+      "redundant": [
+        "www.example.com",
+        "chat.example.com",
+        "platform.example.com",
+        "api.example.com",
+        "api-docs.example.com"
+      ],
+      "missing_apex": []
+    },
+    "managed_versions": {
+      "status": "FAIL",
+      "finding": "AWS-AWSManagedRulesBotControlRuleSet: BotControlRuleSet version Version_4.0 < 5.0 (recommend upgrading)",
+      "details": [
+        "AWS-AWSManagedRulesBotControlRuleSet: BotControlRuleSet version Version_4.0 < 5.0 (recommend upgrading)"
+      ]
+    },
+    "default_action_redundancy": {
+      "status": "FAIL",
+      "finding": "Rule 'allow_all' (priority 26) matches all traffic with Allow, but default_action is already Allow. This rule is redundant.",
+      "rule": "allow_all",
+      "priority": 26
+    },
+    "count_without_labels": {
+      "status": "FAIL",
+      "finding": "Custom Count rules without labels (metric-only): spec_43_JA4_DDoS, spec_43_JA4_DDoS_2",
+      "rules": [
+        {
+          "name": "spec_43_JA4_DDoS",
+          "priority": 1
+        },
+        {
+          "name": "spec_43_JA4_DDoS_2",
+          "priority": 14
+        }
+      ]
+    },
+    "wcu_reminder": {
+      "status": "INFO",
+      "finding": "Current WCU: 435/5000. Verify capacity before adding new rules."
+    }
+  },
+  "flags": {
+    "allow_rules": [
+      {
+        "name": "probe_service_pass_2",
+        "priority": 4,
+        "statement_summary": "single_header:x-detect-header EXACTLY 'cloud-detect-16TNBPz9L00rabcdefgh'",
+        "forgeable_conditions": [
+          "single_header:x-detect-header"
+        ],
+        "unforgeable_conditions": [],
+        "all_forgeable": true,
+        "blast_radius": "global"
+      },
+      {
+        "name": "APP-BYPASS_2",
+        "priority": 8,
+        "statement_summary": "single_header:user-agent STARTS_WITH 'example'",
+        "forgeable_conditions": [
+          "single_header:user-agent"
+        ],
+        "unforgeable_conditions": [],
+        "all_forgeable": true,
+        "blast_radius": "global"
+      },
+      {
+        "name": "probe_service_pass",
+        "priority": 17,
+        "statement_summary": "single_header:x-detect-header EXACTLY 'cloud-detect-16TNBPz9L00rabcdefgh'",
+        "forgeable_conditions": [
+          "single_header:x-detect-header"
+        ],
+        "unforgeable_conditions": [],
+        "all_forgeable": true,
+        "blast_radius": "global"
+      },
+      {
+        "name": "APP-BYPASS",
+        "priority": 19,
+        "statement_summary": "single_header:user-agent STARTS_WITH 'example'",
+        "forgeable_conditions": [
+          "single_header:user-agent"
+        ],
+        "unforgeable_conditions": [],
+        "all_forgeable": true,
+        "blast_radius": "global"
+      },
+      {
+        "name": "allow_all",
+        "priority": 26,
+        "statement_summary": "uri_path STARTS_WITH '/'",
+        "forgeable_conditions": [
+          "uri_path"
+        ],
+        "unforgeable_conditions": [],
+        "all_forgeable": true,
+        "blast_radius": "global"
+      }
+    ],
+    "scope_downs": [
+      {
+        "rule": "AWS-AWSManagedRulesAmazonIpReputationList",
+        "priority": 5,
+        "rule_type": "managed_rule_group",
+        "scope_down_summary": "uri_path EXACTLY '/'",
+        "source_lines": [
+          958,
+          1025
+        ]
+      },
+      {
+        "rule": "AWS-AWSManagedRulesAnonymousIpList",
+        "priority": 6,
+        "rule_type": "managed_rule_group",
+        "scope_down_summary": "uri_path EXACTLY '/'",
+        "source_lines": [
+          1026,
+          1087
+        ]
+      },
+      {
+        "rule": "example-com_ratelimit_challenge_2",
+        "priority": 7,
+        "rule_type": "rate_based",
+        "scope_down_summary": "OR(single_header:host EXACTLY 'www.example.com', single_header:host EXACTLY 'example.com')",
+        "source_lines": [
+          1088,
+          1151
+        ]
+      },
+      {
+        "rule": "platform-all-ratelimit_2",
+        "priority": 10,
+        "rule_type": "rate_based",
+        "scope_down_summary": "single_header:host EXACTLY 'platform.example.com'",
+        "source_lines": [
+          1226,
+          1266
+        ]
+      },
+      {
+        "rule": "chat-all-ratelimit_2",
+        "priority": 11,
+        "rule_type": "rate_based",
+        "scope_down_summary": "single_header:host EXACTLY 'chat.example.com'",
+        "source_lines": [
+          1267,
+          1307
+        ]
+      },
+      {
+        "rule": "example-com_ratelimit_challenge",
+        "priority": 18,
+        "rule_type": "rate_based",
+        "scope_down_summary": "OR(single_header:host EXACTLY 'www.example.com', single_header:host EXACTLY 'example.com')",
+        "source_lines": [
+          2384,
+          2447
+        ]
+      },
+      {
+        "rule": "platform-all-ratelimit",
+        "priority": 21,
+        "rule_type": "rate_based",
+        "scope_down_summary": "single_header:host EXACTLY 'platform.example.com'",
+        "source_lines": [
+          2522,
+          2562
+        ]
+      },
+      {
+        "rule": "chat-all-ratelimit",
+        "priority": 22,
+        "rule_type": "rate_based",
+        "scope_down_summary": "single_header:host EXACTLY 'chat.example.com'",
+        "source_lines": [
+          2563,
+          2603
+        ]
+      },
+      {
+        "rule": "AWS-AWSManagedRulesBotControlRuleSet",
+        "priority": 25,
+        "rule_type": "managed_rule_group",
+        "scope_down_summary": "OR(label_match 'challenge:spec' (scope=LABEL), label_match 'challenge:landingpage' (scope=LABEL))",
+        "source_lines": [
+          2774,
+          2862
+        ]
+      }
+    ],
+    "exempt_regex_branches": [
+      {
+        "rule": "AWS-AWSManagedRulesAntiDDoSRuleSet",
+        "priority": 0,
+        "full_regex": "\\/query|\\/models|\\/messages|\\/balance|\\/completions|\\/api\\/|\\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$",
+        "branches": [
+          {
+            "pattern": "\\/query",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\/models",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\/messages",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\/balance",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\/completions",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\/api\\/",
+            "anchored_start": false,
+            "anchored_end": false
+          },
+          {
+            "pattern": "\\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$",
+            "anchored_start": false,
+            "anchored_end": true
+          }
+        ]
+      }
+    ]
+  }
+}
