@@ -128,23 +128,7 @@ The review covers 18 categories in two phases:
 
 ## Version History
 
-### v0.3 (2026-03-30)
-
-- Added 5 Python preprocessing scripts to reduce LLM reasoning burden
-- Added structured self-review (mechanical validation script + adversarial LLM checks)
-- Fixed CAPTCHA token behavior description (valid token skips puzzle)
-- Fixed token labels source description (AntiDDoS AMR also produces shared token labels)
-- Checklist dedup: domain knowledge consolidated into waf-knowledge.md
-- Added Count-to-Challenge staging risk check
-- Added report JSON example output instructions
-
-### v0.2 (2026-03-24)
-
-Checklist reorganized from 20 items to 18 items (two phases).
-
-### v0.1
-
-Initial release.
+See [CHANGELOG.md](CHANGELOG.md).
 
 ## Disclaimer
 

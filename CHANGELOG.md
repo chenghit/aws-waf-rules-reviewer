@@ -1,0 +1,39 @@
+# Changelog
+
+## v0.3 (2026-03-30)
+
+- Added 5 Python preprocessing scripts to reduce LLM reasoning burden
+  - `waf-preprocess.py`: structured rule extraction (56KB → 16KB)
+  - `waf-generate-mermaid.py`: auto Mermaid diagram with label dependency discovery
+  - `waf-pre-checks.py`: 5 mechanical checks + forgeability/scope-down/regex flags
+  - `waf-annotate-mermaid.py`: issue annotation on Mermaid nodes with fold group expansion
+  - `waf-validate-report.py`: report structure validation
+- Structured self-review (mechanical validation script + adversarial LLM checks)
+- Fixed CAPTCHA token behavior (valid token skips puzzle)
+- Fixed token labels source (AntiDDoS AMR also produces shared token labels)
+- Checklist dedup: domain knowledge consolidated into waf-knowledge.md
+- Added Count-to-Challenge staging risk check
+- Added report JSON example output instructions
+- SKILL.md rewritten for script-based pipeline with manual fallback
+- Glob-based script path discovery (works with any install location)
+
+## v0.2 (2026-03-24)
+
+Checklist reorganized from 20 items to 18 items (two phases).
+
+| Old # | New # | Change |
+|-------|-------|--------|
+| 1–5 | 1–5 | Unchanged |
+| 6 | 17a | Merged into Phase 2 cross-rule analysis |
+| 7 | 6 | Renumbered |
+| 8 | 7 | Renumbered |
+| 9 | 17b | Merged into Phase 2 fix impact analysis |
+| 10 | — | Merged into section 3 (AntiDDoS AMR) |
+| 11 | 8 | Renumbered |
+| 12 | 18 | Moved to Phase 2 priority ordering |
+| 13–19 | 9–15 | Renumbered |
+| 20 | 16 | Renumbered |
+
+## v0.1
+
+Initial release.

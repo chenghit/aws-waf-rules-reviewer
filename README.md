@@ -128,23 +128,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 版本历史
 
-### v0.3 (2026-03-30)
-
-- 新增 5 个 Python 预处理脚本，大幅减少 LLM 推理负担
-- 新增结构化自审（机械验证脚本 + 对抗性 LLM 检查）
-- 修复 CAPTCHA token 行为描述（有效 token 时跳过 puzzle）
-- 修复 token labels 来源描述（AntiDDoS AMR 也产生共享 token labels）
-- checklist 去重：领域知识统一到 waf-knowledge.md
-- 新增 Count-to-Challenge staging risk 检查项
-- 新增报告内 JSON 示例输出指引
-
-### v0.2 (2026-03-24)
-
-检查清单从 20 项重组为 18 项（两个阶段）。
-
-### v0.1
-
-初始版本。
+见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 免责声明
 
