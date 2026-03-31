@@ -92,7 +92,6 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 - Read `references/antiddos-amr.md`.
 - Analyze section 3. Append findings to report using `fs_write` `append`.
 - If recommending dual AMR instance: include the 4-step implementation details AND the JSON editor instruction from the knowledge file. The user needs step-by-step guidance, not just a summary.
-- If recommending crawler exclusion for AMR: include the scope-down JSON from the knowledge file.
 
 **Step 4.3** — Section 4 (Challenge/CAPTCHA applicability):
 - Read `references/challenge-captcha.md`.
