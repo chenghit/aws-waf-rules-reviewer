@@ -37,8 +37,8 @@ def _count_summary_rows(report: str) -> int:
     count = 0
     for line in report.split("\n"):
         stripped = line.strip()
-        if stripped.startswith("| ") and ("严重" in stripped or "Severity" in stripped
-                                           or "Issue" in stripped or "问题" in stripped):
+        if not in_summary and stripped.startswith("| ") and ("严重" in stripped or "Severity" in stripped
+                                           or "问题" in stripped):
             in_summary = True
             continue
         if in_summary and stripped.startswith("|"):
