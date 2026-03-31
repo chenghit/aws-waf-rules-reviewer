@@ -181,6 +181,7 @@ def _check_prechecks_coverage(report: str, prechecks: dict) -> dict:
         "challenge_on_post_api": ["post.*challenge", "challenge.*post", "challenge.*api.*block",
                                    "api.*challenge.*block", "等同于 block", "等效于 block"],
         "hosting_provider_allow": ["hostingprovideriplist"],
+        "wcu_reminder": ["wcu", "容量", "capacity"],
     }
 
     for name, check in prechecks.get("pre_checks", {}).items():

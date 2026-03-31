@@ -184,9 +184,9 @@ def _check_wcu_reminder(web_acl: dict) -> dict:
     """Check #10: WCU capacity reminder."""
     capacity = web_acl.get("capacity")
     if capacity is not None:
-        return {"status": "INFO",
+        return {"status": "FAIL",
                 "finding": f"Current WCU: {capacity}/5000. Verify capacity before adding new rules."}
-    return {"status": "INFO",
+    return {"status": "FAIL",
             "finding": "WCU capacity unknown (not in JSON). Verify in AWS Console before adding rules."}
 
 def _check_challenge_on_post_api(rules: list) -> dict:
