@@ -127,7 +127,7 @@ The LLM analysis step's duration is primarily driven by reference context size (
 The `examples/` directory contains a complete input/output example:
 
 - `web-acl-example.json` — assembled 27-rule WAF configuration (covers AntiDDoS AMR, Bot Control, rate-based, custom rules, and other typical scenarios)
-- `waf-review/waf-review-report.md` — actual review report output (Chinese, 16 findings)
+- `waf-review/waf-review-report.md` — actual review report output (Chinese)
 - `waf-review/` other files — script-generated intermediate files (summary, pre-checks, Mermaid diagrams, etc.)
 
 Generated using Claude Sonnet 4.6.

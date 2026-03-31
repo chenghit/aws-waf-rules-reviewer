@@ -127,7 +127,7 @@ LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checkli
 `examples/` 目录包含一个完整的输入输出示例：
 
 - `web-acl-example.json` — 组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
-- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文，16 个 findings）
+- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文）
 - `waf-review/` 下的其他文件 — 脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
 
 使用 Claude Sonnet 4.6 模型生成。
