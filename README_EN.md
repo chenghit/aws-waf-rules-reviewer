@@ -11,8 +11,9 @@ flowchart LR
     A["WAF JSON"] --> B["Preprocess"]
     B --> C["Mermaid Gen"]
     B --> D["Pre-checks"]
+    D --> D2["Appendix Gen"]
     C --> E["LLM Analysis"]
-    D --> E
+    D2 --> E
     E --> E2["Report Header"]
     E2 --> F["Mermaid Annotate"]
     F --> G["Report Validate"]
@@ -22,6 +23,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style D2 fill:#e1f5fe
     style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
@@ -38,7 +40,7 @@ Scripts handle structured extraction, diagram generation, and mechanical validat
 Given an AWS WAF Web ACL JSON export, this skill:
 
 1. **Preprocesses** — extracts structured rule summaries, compresses input (56KB → 16KB)
-2. **Pre-checks** — automatically detects token domain redundancy, outdated versions, redundant rules, and 5 other deterministic issues
+2. **Pre-checks** — automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (6 checks total)
 3. **LLM analysis** — reviews against an 18-item checklist covering Allow rule audits, scope-down validation, AntiDDoS AMR configuration, Bot Control settings, SEO impact, rate limiting, cross-rule dependencies, and more
 4. **Report generation** — severity-rated findings (Critical / Medium / Low / Awareness)
 5. **Mermaid flow diagram** — auto-generated rule execution flow with issue annotations
@@ -46,7 +48,7 @@ Given an AWS WAF Web ACL JSON export, this skill:
 
 ## Installation
 
-Copy SKILL.md, references/ and scripts/ to your AI coding tool's skill directory. For Kiro CLI:
+Copy the directory to your AI coding tool's skill directory. For Kiro CLI:
 
 ```bash
 cp -r aws-waf-rules-reviewer ~/.kiro/skills/
@@ -111,7 +113,7 @@ A Markdown report (`waf-review/waf-review-report.md`) containing:
 
 ## Performance Expectations
 
-The LLM analysis step's duration is primarily driven by reference context size (checklist + knowledge base, ~60KB combined), not rule count. Measured with Claude Sonnet 4.6 (1M):
+The LLM analysis step's duration is primarily driven by reference context size (checklist + knowledge base, ~40KB combined), not rule count. Measured with Claude Sonnet 4.6 (1M):
 
 | Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
 |-----------|---------------------------|-------------|-------------------|

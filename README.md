@@ -11,8 +11,9 @@ flowchart LR
     A["WAF JSON"] --> B["预处理"]
     B --> C["Mermaid 图生成"]
     B --> D["机械预检"]
+    D --> D2["附录生成"]
     C --> E["LLM 分析"]
-    D --> E
+    D2 --> E
     E --> E2["报告头生成"]
     E2 --> F["Mermaid 标注"]
     F --> G["报告验证"]
@@ -22,6 +23,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style D2 fill:#e1f5fe
     style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
@@ -38,7 +40,7 @@ flowchart LR
 给定一个 AWS WAF Web ACL 的 JSON 导出文件，该 skill 会：
 
 1. **预处理** — 提取结构化规则摘要，压缩输入（56KB → 16KB）
-2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 5 项确定性问题
+2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 6 项确定性问题
 3. **LLM 分析** — 按 18 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
 4. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 5. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
@@ -46,7 +48,7 @@ flowchart LR
 
 ## 安装
 
-将 SKILL.md、references/ 和 scripts/ 复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
+将目录复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
 
 ```bash
 cp -r aws-waf-rules-reviewer ~/.kiro/skills/
@@ -111,7 +113,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 性能预期
 
-LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~60KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
+LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~40KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
 
 | 规则数量 | LLM 分析 thinking 时间 | 脚本步骤耗时 | 总耗时（估算） |
 |---------|----------------------|------------|-------------|
