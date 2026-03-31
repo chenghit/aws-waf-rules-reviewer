@@ -181,6 +181,7 @@ Read `{output_dir}/validation.json`.
 **Cross-reference check:**
 - For each label mentioned in any finding, verify the producer rule exists and has a lower priority number (higher priority) than the consumer rule.
 - Check whether any rules in waf-summary.json were completely ignored (no finding, no pre_check coverage). If an ignored rule deserves a finding, add it.
+- Verify all checklist sections from Steps 4.1–4.9 were analyzed. If a section was skipped (no finding and no explicit "not applicable"), re-read the relevant knowledge file and evaluate it now.
 
 State: "Self-review completed. Mechanical: {results from validation.json}. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} found."
 
