@@ -189,6 +189,42 @@ def _check_wcu_reminder(web_acl: dict) -> dict:
     return {"status": "INFO",
             "finding": "WCU capacity unknown (not in JSON). Verify in AWS Console before adding rules."}
 
+def _check_challenge_on_post_api(rules: list) -> dict:
+    """Check #4: Challenge/CAPTCHA on POST or API paths (effectively Block)."""
+    flagged = []
+    for r in rules:
+        if r["action"] not in ("challenge", "captcha"):
+            continue
+        summary = r.get("statement", {}).get("summary", "")
+        reasons = []
+        if "method EXACTLY 'POST'" in summary or "method EXACTLY 'PUT'" in summary:
+            reasons.append("targets POST/PUT requests")
+        if "/api/" in summary or "/api'" in summary:
+            reasons.append("targets API path")
+        if reasons:
+            flagged.append({"name": r["name"], "priority": r["priority"],
+                            "reasons": reasons})
+    if flagged:
+        details = "; ".join(f"{f['name']} (P{f['priority']}): {', '.join(f['reasons'])}" for f in flagged)
+        return {"status": "FAIL",
+                "finding": f"Challenge/CAPTCHA on non-browser paths (effectively Block): {details}",
+                "rules": flagged}
+    return {"status": "PASS", "finding": None}
+
+def _check_hosting_provider_allow(rules: list) -> dict:
+    """Check #7: HostingProviderIPList overridden to Allow (dangerous)."""
+    for r in rules:
+        mg = r.get("managed")
+        if not mg:
+            continue
+        for override in mg.get("overrides", []):
+            if override.get("rule_name") == "HostingProviderIPList" and override.get("action") == "allow":
+                return {"status": "FAIL",
+                        "finding": f"HostingProviderIPList overridden to Allow in {r['name']} (priority {r['priority']}). "
+                                   f"Cloud-hosted attack traffic bypasses all subsequent rules. Override to Count instead.",
+                        "rule": r["name"], "priority": r["priority"]}
+    return {"status": "PASS", "finding": None}
+
 # ── Flags ─────────────────────────────────────────────────────────────────
 
 def _flag_allow_rules(rules: list) -> list:
@@ -326,6 +362,8 @@ def main():
         "default_action_redundancy": _check_default_action_redundancy(web_acl, rules),
         "count_without_labels": _check_count_without_labels(rules),
         "wcu_reminder": _check_wcu_reminder(web_acl),
+        "challenge_on_post_api": _check_challenge_on_post_api(rules),
+        "hosting_provider_allow": _check_hosting_provider_allow(rules),
     }
 
     # Build flags

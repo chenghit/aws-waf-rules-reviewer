@@ -166,6 +166,54 @@ def _check_mermaid_completeness(metadata: dict) -> dict:
             "rule_count": rule_count, "node_count": node_count}
 
 
+def _check_prechecks_coverage(report: str, prechecks: dict) -> dict:
+    """Check that every FAIL pre-check has a corresponding finding in the report."""
+    report_lower = report.lower()
+    missing = []
+
+    # Keywords that must appear in the report for each check type.
+    # If defined, keyword match is required (rule name alone is not sufficient).
+    required_keywords = {
+        "token_domain": ["token_domain", "token domain", "冗余子域", "redundant subdomain"],
+        "managed_versions": ["5.0", "2.0", "版本", "version"],
+        "default_action_redundancy": ["allow_all", "冗余", "redundant"],
+        "count_without_labels": ["无标签", "without label", "仅产生指标", "metric-only"],
+        "challenge_on_post_api": ["post.*challenge", "challenge.*post", "challenge.*api.*block",
+                                   "api.*challenge.*block", "等同于 block", "等效于 block"],
+        "hosting_provider_allow": ["hostingprovideriplist"],
+    }
+
+    for name, check in prechecks.get("pre_checks", {}).items():
+        if check.get("status") != "FAIL":
+            continue
+        found = False
+        # If we have specific keywords for this check, use them
+        if name in required_keywords:
+            for kw in required_keywords[name]:
+                if re.search(kw, report_lower):
+                    found = True
+                    break
+        else:
+            # Fallback: check if rule name or finding text appears
+            rule_name = check.get("rule", "")
+            if rule_name and rule_name.lower() in report_lower:
+                found = True
+            rules = check.get("rules", [])
+            if not found and rules:
+                for r in rules:
+                    rname = r.get("name", "") if isinstance(r, dict) else str(r)
+                    if rname.lower() in report_lower:
+                        found = True
+                        break
+        if not found:
+            finding = check.get("finding", "")
+            missing.append({"check": name, "finding": finding[:100]})
+    if missing:
+        return {"status": "FAIL", "missing": missing,
+                "detail": f"{len(missing)} pre-check FAIL items not found in report"}
+    return {"status": "PASS", "missing": []}
+
+
 def main():
     if len(sys.argv) < 3:
         _fatal("Usage: waf-validate-report.py <output_dir> <input_file>")
@@ -183,6 +231,10 @@ def main():
     summary = _load_json(summary_path)
     metadata = _load_json(meta_path)
 
+    # Load pre-checks if available
+    prechecks_path = os.path.join(output_dir, "pre-checks.json")
+    prechecks = _load_json(prechecks_path) if os.path.isfile(prechecks_path) else None
+
     # Run checks
     checks = {
         "summary_issue_count": _check_summary_issue_count(report),
@@ -190,6 +242,8 @@ def main():
         "rule_references": _check_rule_references(report, summary),
         "mermaid_completeness": _check_mermaid_completeness(metadata),
     }
+    if prechecks:
+        checks["prechecks_coverage"] = _check_prechecks_coverage(report, prechecks)
 
     # Write output
     output_file = os.path.join(output_dir, "validation.json")
