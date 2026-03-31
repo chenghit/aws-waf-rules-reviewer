@@ -107,10 +107,10 @@ See waf-knowledge.md "AWSManagedRulesAmazonIpReputationList" for rule descriptio
 ### 8. Landing Page and Cookie-based Logic
 
 - [ ] Are business cookies used for security decisions? (cookies are forgeable)
-- [ ] Better alternative: use `Accept: text/html` + `GET` method to identify landing page requests (browser navigation)
+- [ ] Better alternative: use a Count+Label rule to tag landing page URIs (e.g., `/`, `/login`, `/signup`), then apply always-on Challenge on the labeled requests
 - [ ] Use always-on Challenge on landing pages + extended token immunity time (e.g., 4 hours) to replace cookie-based old/new user detection
 - [ ] WAF token is unforgeable and serves as proof of prior Challenge completion
-- [ ] Search engine crawlers send `GET` + `Accept: text/html` — if Challenge is applied to landing pages, exclude verified crawlers using the `crawler:verified` label (requires the ASN + UA crawler labeling rule to be placed before the Challenge rule; see waf-knowledge.md "ASN + UA Crawler Labeling Rule")
+- [ ] If Challenge is applied to landing pages, exclude verified crawlers using the `crawler:verified` label (requires the ASN + UA crawler labeling rule to be placed before the Challenge rule; see waf-knowledge.md "ASN + UA Crawler Labeling Rule")
 
 ### 9. Missing Baseline Protections
 
@@ -165,69 +165,17 @@ In either case, the reviewer cannot know the actual value or its secrecy level.
 - [ ] If `default_action` is Block: only explicitly allowed traffic passes. This is stricter but may cause false positives if Allow rules are incomplete.
 - [ ] **Redundant trailing Allow-all rule**: If `default_action` is already Allow, check whether the last rule in the Web ACL is a custom rule that matches all requests with Allow action. This is redundant — it wastes WCU and can cause maintenance confusion (e.g., a future maintainer may insert new rules after it, not realizing they will never be evaluated). Recommend removing it.
 
-### 16. Always-on Challenge for HTML Pages
+### 16. Always-on Challenge for Landing Pages
 
 For Web ACLs with DDoS protection objectives:
 
-- [ ] Is there an always-on Challenge rule targeting browser HTML page requests (`GET` + `Accept` contains `text/html`)? This is the most effective proactive DDoS defense — it takes effect immediately with zero detection delay, unlike AntiDDoS AMR which requires time to establish a baseline. See waf-knowledge.md "Always-on Challenge for HTML Pages" for rationale.
-- [ ] If not present and the Web ACL has DDoS protection objectives, flag as **Medium** severity and recommend adding it. Copy the following rule JSON directly into the report (do NOT just reference this checklist — the user needs the JSON in the report itself):
-
-```json
-{
-  "Name": "always-on-challenge-html",
-  "Priority": 8,
-  "Action": { "Challenge": {} },
-  "ChallengeConfig": {
-    "ImmunityTimeProperty": {
-      "ImmunityTime": 14400
-    }
-  },
-  "VisibilityConfig": {
-    "SampledRequestsEnabled": true,
-    "CloudWatchMetricsEnabled": true,
-    "MetricName": "always-on-challenge-html"
-  },
-  "Statement": {
-    "AndStatement": {
-      "Statements": [
-        {
-          "ByteMatchStatement": {
-            "FieldToMatch": { "Method": {} },
-            "PositionalConstraint": "EXACTLY",
-            "SearchString": "GET",
-            "TextTransformations": [{ "Priority": 0, "Type": "NONE" }]
-          }
-        },
-        {
-          "ByteMatchStatement": {
-            "FieldToMatch": {
-              "SingleHeader": { "Name": "accept" }
-            },
-            "PositionalConstraint": "CONTAINS",
-            "SearchString": "text/html",
-            "TextTransformations": [{ "Priority": 0, "Type": "NONE" }]
-          }
-        },
-        {
-          "NotStatement": {
-            "Statement": {
-              "LabelMatchStatement": {
-                "Scope": "LABEL",
-                "Key": "crawler:verified"
-              }
-            }
-          }
-        }
-      ]
-    }
-  }
-}
-```
-
-Note: The `NotStatement` above assumes a crawler identification rule (Count+Label) is placed before this rule, labeling verified crawlers with `crawler:verified`. Replace the label key to match whatever label your crawler identification rule produces. If no crawler identification rule exists, add one first (see waf-knowledge.md "ASN + UA Crawler Labeling Rule").
-
+- [ ] Is there an always-on Challenge targeting landing page URIs? This is the most effective proactive DDoS defense — it takes effect immediately with zero detection delay, unlike AntiDDoS AMR which requires time to establish a baseline. See waf-knowledge.md "Always-on Challenge for Landing Pages" for rationale and implementation details. Note: the rule may not be named "always-on challenge" — look for any custom rule with Challenge action that targets specific URIs or uses `Accept: text/html` as a condition. If such a rule exists but uses `Accept: text/html` instead of URI-based matching, recommend migrating to the landing page URI approach (text/html matching does not challenge DDoS scripts that omit the Accept header).
+- [ ] If not present and the Web ACL has DDoS protection objectives, flag as **Medium** severity and recommend adding it using the two-rule pattern (same Count+Label → consume pattern as crawler labeling and native app identification):
+  1. **Label rule**: Count+Label rule matching landing page URIs (e.g., `/`, `/login`, `/signup`, `/index.html`) with a custom label such as `custom:landing-page`. The user must define their own URI list based on their application.
+  2. **Challenge rule**: matches the `custom:landing-page` label, applies Challenge action, excludes verified crawlers via `NotStatement` on `crawler:verified` label.
+  Do NOT provide JSON examples — the Count+Label pattern is already demonstrated by the crawler labeling rule (waf-knowledge.md "ASN + UA Crawler Labeling Rule"). The user can follow the same pattern.
 - [ ] If present, is the token immunity time extended to at least 4 hours (14400 seconds)? Default 300 seconds works but may cause unnecessary re-challenges for real users.
-- [ ] Is there a crawler labeling rule (Count+Label with ASN + UA verification, e.g., `crawler:verified`) placed **before** the always-on Challenge rule? Without it, search engine crawlers will be continuously challenged on every HTML page request — not just during DDoS events — preventing them from indexing site content entirely. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" for the labeling rule JSON.
+- [ ] Is there a crawler labeling rule (Count+Label with ASN + UA verification, e.g., `crawler:verified`) placed **before** the always-on Challenge rule? Without it, search engine crawlers will be continuously challenged on every landing page request — not just during DDoS events — preventing them from indexing site content entirely. See waf-knowledge.md "ASN + UA Crawler Labeling Rule" for the labeling rule JSON.
 
 ---
 

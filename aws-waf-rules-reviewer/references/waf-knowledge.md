@@ -350,7 +350,7 @@ To add more search engines, add more `AndStatement` branches inside the `OrState
 ### Problem
 Two rules in a typical DDoS-protection Web ACL will Challenge search engine crawlers:
 1. **AntiDDoS AMR's `ChallengeAllDuringEvent`** — Challenges all challengeable requests during a DDoS event
-2. **Always-on Challenge for HTML pages** — Challenges all `GET + Accept: text/html` requests continuously, not just during attacks
+2. **Always-on Challenge for landing pages** — Challenges requests to landing page URIs continuously, not just during attacks
 
 Search engine crawlers (Googlebot, Bingbot, etc.) may not reliably complete JavaScript Challenge. Real-world cases have been observed where crawlers indexed the Challenge interstitial page (HTTP 202 with JS) instead of actual content during DDoS events, severely damaging SEO rankings and search result appearance.
 
@@ -362,21 +362,25 @@ Place the "ASN + UA Crawler Labeling Rule" (see above) at a higher priority (low
 
 This single labeling rule serves both downstream consumers — no duplication of ASN+UA logic needed.
 
-## Always-on Challenge for HTML Pages
+## Always-on Challenge for Landing Pages
 
 ### Why it is effective for DDoS protection
 - Most DDoS attack tools are not real browsers — they cannot execute JavaScript and therefore cannot pass Challenge or obtain a WAF token
-- Always-on Challenge is preventive, not reactive: it filters non-browser traffic continuously, without waiting for AntiDDoS AMR to detect an attack
+- Always-on Challenge is preventive, not reactive: it filters non-browser traffic on landing page paths continuously, without waiting for AntiDDoS AMR to detect an attack
 - **Takes effect immediately with zero detection delay** — attack traffic is blocked from the first request, unlike AntiDDoS AMR which requires time to establish a baseline before it can detect anomalies
 - Legitimate users with a valid WAF token are not affected: Challenge acts like Count for requests with an unexpired token, so real users experience the JS verification only once, then browse uninterrupted for the token's lifetime
 - **Severity when absent**: Medium — this is the most effective proactive DDoS defense for browser traffic; its absence means the Web ACL relies entirely on reactive AMR detection with an unavoidable delay window
 
-### What it affects and what it does NOT affect
-Always-on Challenge only matches requests where the `Accept` header contains `text/html` (contains match, not exact) and the method is `GET`. This means:
-- ✅ Affects: browser navigation requests (HTML pages)
-- ❌ Does NOT affect: API calls (JSON/XML responses), file downloads, native app traffic, SPA API requests, static assets (CSS/JS/images), POST/PUT/DELETE requests, CORS preflight OPTIONS requests
+### Implementation: two-rule pattern (Count+Label → Challenge)
 
-This narrow scope means always-on Challenge can be safely deployed without impacting APIs, native apps, file downloads, or single-page application backends.
+Always-on Challenge uses the same Count+Label → consume pattern as crawler labeling and native app identification:
+
+1. **Label rule** (Count+Label): a custom rule that matches landing page URIs (e.g., `/`, `/login`, `/signup`, `/index.html`) and adds a label such as `custom:landing-page`. This rule uses Count action so the request continues to subsequent rules.
+2. **Challenge rule**: a custom rule that matches the `custom:landing-page` label and applies Challenge action. Exclude verified crawlers by adding a `NotStatement` for the `crawler:verified` label (requires the ASN + UA crawler labeling rule to be placed before this rule).
+
+This approach is URI-based, not Accept-header-based. DDoS scripts requesting landing page paths will be challenged regardless of what Accept header they send. API paths, native app endpoints, and static assets are not affected because they don't match the landing page URI list.
+
+The user must define their own landing page URI list based on their application. Common examples: `/`, `/login`, `/signup`, `/register`, `/index.html`, `/index.php`, `/home`.
 
 ### Token immunity time
 - Default immunity time is 300 seconds (5 minutes), which works but may concern some users about UX impact
@@ -384,14 +388,14 @@ This narrow scope means always-on Challenge can be safely deployed without impac
 - Configurable at the rule level or Web ACL level
 
 ### Search engine crawler consideration
-- Search engine crawlers send `GET` requests with `Accept: text/html` — they match the always-on Challenge condition and will be challenged on every request, not just during DDoS events
+- Search engine crawlers request landing page URIs — they will match the label rule and be challenged on every request, not just during DDoS events
 - Search engine crawlers may not reliably complete JavaScript Challenge — real-world cases show crawlers indexing the Challenge interstitial page instead of actual content, so always-on Challenge can continuously disrupt crawler indexing
-- Solution: place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before this rule, then exclude requests with the `crawler:verified` label in the Challenge rule's scope-down (see the always-on-challenge-html rule JSON in checklist.md section 16 for an example that includes this exclusion)
+- Solution: place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before the Challenge rule, then exclude requests with the `crawler:verified` label in the Challenge rule's statement
 
 ### Complementary to AntiDDoS AMR
 - AntiDDoS AMR is reactive: it detects anomalies and then starts mitigating
-- Always-on Challenge is proactive: it requires proof of browser capability before any HTML content is served
-- Together they provide defense in depth: always-on Challenge handles the bulk of non-browser DDoS traffic instantly, while AntiDDoS AMR handles sophisticated attacks that use real browsers or target non-challengeable paths
+- Always-on Challenge is proactive: it requires proof of browser capability before any landing page content is served
+- Together they provide defense in depth: always-on Challenge handles the bulk of non-browser DDoS traffic on landing pages instantly, while AntiDDoS AMR handles sophisticated attacks that use real browsers or target non-landing-page paths
 
 ## AWSManagedRulesCommonRuleSet (CRS) Notes
 
@@ -424,12 +428,12 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 
 1. **IP whitelist (Allow)** — Trusted IPs (monitoring probes, internal services, etc.) bypass all subsequent rules. Volume is typically small and does not materially affect AntiDDoS AMR baseline.
 2. **IP blacklist (Block)** — Known malicious IPs blocked immediately. Keeps them out of AntiDDoS AMR baseline, which actually improves baseline accuracy.
-3. **Count+Label rules** — Tag traffic types (e.g., native app identification, crawler identification via ASN+UA) for use by downstream rules' scope-down conditions. Must be placed before any rule that consumes these labels.
+3. **Count+Label rules** — Tag traffic types (e.g., native app identification, crawler identification via ASN+UA, landing page URI labeling) for use by downstream rules' scope-down conditions. Must be placed before any rule that consumes these labels.
 4. **AntiDDoS AMR** — Needs to see as much traffic as possible to build an accurate baseline. Place as early as possible, but after IP whitelist/blacklist and any labeling rules it depends on for scope-down (e.g., native app label for dual-AMR, crawler label for SEO exclusion).
 5. **IP reputation rule group** (AWSManagedRulesAmazonIpReputationList) — Low WCU (25), filters known malicious IPs. Placed after AntiDDoS AMR so AMR sees the full traffic pattern.
 6. **Anonymous IP rule group** (AWSManagedRulesAnonymousIpList) — Filters anonymous/hosting provider IPs. Placed after AMR for the same reason.
 7. **Rate-based rules** — Rate limiting as a defense layer. Placed before Always-on Challenge to reduce the volume of requests that reach Challenge.
-8. **Always-on Challenge for HTML pages** — Proactive DDoS defense for browser traffic. Placed after IP reputation, Anonymous IP, and rate-based rules so that traffic already filtered by those rules does not incur Challenge costs.
+8. **Always-on Challenge for landing pages** (Challenge rule only) — Proactive DDoS defense. Consumes the `custom:landing-page` label produced by the Count+Label rule in position 3. Placed after IP reputation, Anonymous IP, and rate-based rules so that traffic already filtered by those rules does not incur Challenge costs.
 9. **Custom rules** — Business-specific logic including geo-blocking, URI-based rules, header-based rules, etc.
 10. **Application layer rule groups** (CRS, KnownBadInputs, SQLi, etc.) — OWASP Top 10 and application-specific protections. Placed after custom rules so that business-specific Allow/Block decisions take precedence.
 11. **Bot Control, ATP, ACFP** (optional) — Per-request pricing rule groups. Place last to minimize the number of requests they evaluate. Bot Control is the most expensive at Targeted level ($10/million requests). ATP and ACFP also use per-request pricing and should be grouped here.
