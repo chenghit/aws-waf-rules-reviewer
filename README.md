@@ -11,8 +11,9 @@ flowchart LR
     A["WAF JSON"] --> B["预处理"]
     B --> C["Mermaid 图生成"]
     B --> D["机械预检"]
+    D --> D2["附录生成"]
     C --> E["LLM 分析"]
-    D --> E
+    D2 --> E
     E --> E2["报告头生成"]
     E2 --> F["Mermaid 标注"]
     F --> G["报告验证"]
@@ -22,6 +23,7 @@ flowchart LR
     style B fill:#e1f5fe
     style C fill:#e1f5fe
     style D fill:#e1f5fe
+    style D2 fill:#e1f5fe
     style E2 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
@@ -31,14 +33,14 @@ flowchart LR
 
 蓝色 = Python 脚本（确定性），橙色 = LLM 推理
 
-脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。如果脚本未安装，自动回退到纯 LLM 工作流。
+脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。
 
 ## 功能
 
 给定一个 AWS WAF Web ACL 的 JSON 导出文件，该 skill 会：
 
 1. **预处理** — 提取结构化规则摘要，压缩输入（56KB → 16KB）
-2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 5 项确定性问题
+2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 6 项确定性问题
 3. **LLM 分析** — 按 18 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
 4. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 5. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
@@ -46,10 +48,10 @@ flowchart LR
 
 ## 安装
 
-将 `aws-waf-rules-reviewer` 目录复制到你的 AI 编程工具的 skill 目录。例如在 Kiro CLI 中：
+将目录复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
 
 ```bash
-./install.sh
+cp -r aws-waf-rules-reviewer ~/.kiro/skills/
 ```
 
 安装后的目录结构：
@@ -111,12 +113,12 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 性能预期
 
-LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~60KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
+LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~40KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
 
 | 规则数量 | LLM 分析 thinking 时间 | 脚本步骤耗时 | 总耗时（估算） |
 |---------|----------------------|------------|-------------|
-| 27 条（实测） | ~10 分钟 | < 1 分钟 | ~15 分钟 |
-| 100+ 条（预估） | ~15-20 分钟 | < 1 分钟 | ~25 分钟 |
+| 27 条（实测） | ~5 分钟 | < 1 分钟 | ~10 分钟 |
+| 100+ 条（预估） | ~10 分钟 | < 1 分钟 | ~15 分钟 |
 
 > Thinking 时间受模型版本影响较大。随着模型对长 context 推理效率的提升，耗时预计会自然下降。
 
@@ -125,7 +127,7 @@ LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checkli
 `examples/` 目录包含一个完整的输入输出示例：
 
 - `web-acl-example.json` — 组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
-- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文，16 个 findings）
+- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文）
 - `waf-review/` 下的其他文件 — 脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
 
 使用 Claude Sonnet 4.6 模型生成。
