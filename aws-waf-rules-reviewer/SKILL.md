@@ -196,7 +196,7 @@ Consult [references/waf-knowledge.md](references/waf-knowledge.md) for AWS WAF t
 - Rate-based rule characteristics, overlapping scope-down detection, and native app traffic coverage
 - IP reputation rule groups (AWSManagedIPDDoSList default Count rationale, relationship with AntiDDoS AMR)
 - Anonymous IP rule groups (HostingProviderIPList outdated assumption)
-- Always-on Challenge for HTML pages as proactive DDoS defense (only GET + Accept: text/html requests can complete Challenge, so this defense only applies to HTML page requests; scope, immunity time, crawler exclusion)
+- Always-on Challenge for landing pages as proactive DDoS defense (URI-based labeling, two-rule Count+Label → Challenge pattern, immunity time, crawler exclusion)
 - ASN + UA crawler labeling rule (Count+Label pattern, JSON example)
 - Search engine crawler exclusion pattern (label-based scope-down for AntiDDoS AMR and Always-on Challenge)
 - Managed rule group version recommendations (SQLiRuleSet 2.0, BotControlRuleSet 5.0)
