@@ -86,7 +86,7 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 - For `pre_checks` items with status `FAIL` → adopt the finding directly.
 - For `pre_checks` items with status `PASS` → skip.
 - For `flags` → use as starting points for reasoning.
-- Write findings to `{output_dir}/waf-review-report.md` using `fs_write` `create`.
+- Write findings to `{output_dir}/waf-review-report.md` using `fs_write` `create`. If no findings for these sections, still create the file (write an empty string).
 
 **Step 4.2** — Section 3 (AntiDDoS AMR):
 - Read `references/antiddos-amr.md`.
