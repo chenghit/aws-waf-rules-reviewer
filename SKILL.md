@@ -91,6 +91,8 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 **Step 4.2** — Section 3 (AntiDDoS AMR):
 - Read `references/antiddos-amr.md`.
 - Analyze section 3. Append findings to report using `fs_write` `append`.
+- If recommending dual AMR instance: include the 4-step implementation details AND the JSON editor instruction from the knowledge file. The user needs step-by-step guidance, not just a summary.
+- If recommending crawler exclusion for AMR: include the scope-down JSON from the knowledge file.
 
 **Step 4.3** — Section 4 (Challenge/CAPTCHA applicability):
 - Read `references/challenge-captcha.md`.
@@ -99,6 +101,7 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 **Step 4.4** — Section 5 (Bot Control):
 - Read `references/bot-control.md`.
 - Analyze section 5. Append findings.
+- If recommending native app scope-down or SDK integration: include specific rule names and override instructions from the knowledge file.
 
 **Step 4.5** — Sections 6, 7 (Rate-based, IP reputation):
 - Read `references/rate-based.md` and `references/ip-reputation.md`.
@@ -107,6 +110,8 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 **Step 4.6** — Sections 8, 16 (Landing page, Always-on Challenge):
 - Read `references/crawler-seo.md`.
 - Analyze sections 8 and 16. Append findings.
+- If recommending a crawler labeling rule: copy the full rule JSON from the knowledge file into the report for easy user copy-paste.
+- If recommending always-on challenge: describe the two-rule pattern with enough detail for the user to implement.
 
 **Step 4.7** — Sections 12, 18 (Versions, Priority order):
 - Read `references/managed-overrides.md`.
