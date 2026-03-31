@@ -39,47 +39,10 @@
 - DDoS traffic detected and mitigated is NOT charged
 
 ### Dual instance pattern
-When browser and native app traffic need different strategies:
-1. **Pre-label native app requests**: Add a Count+Label rule **before** both AMR instances to label native app traffic (e.g., `native-app:identified`). This rule must be at a higher priority (lower number) than both AMR instances — the label must already exist when AMR evaluates the request.
-2. AMR instance 1 (browser traffic): scope-down to exclude the native app label, `ChallengeAllDuringEvent` enabled, Block LOW (LOW is the default; browser traffic already has `ChallengeAllDuringEvent` as the primary mitigation, so Block sensitivity can stay at default)
-3. AMR instance 2 (native app traffic): scope-down to match the native app label only, `ChallengeAllDuringEvent` disabled, Block MEDIUM (since Challenge is disabled for native apps, Block is the only available mitigation — raise sensitivity from default LOW to MEDIUM for adequate protection)
-
-Implementation: The AWS console does not allow adding the same managed rule group twice. In the Web ACL JSON editor, copy the existing AMR rule entry, paste it as a new custom rule, change the `Name` and `MetricName` fields to unique values, then save. AWS WAF treats them as two independent rule instances.
+When browser and native app traffic need different strategies, use two AMR instances with different scope-downs and sensitivity settings. See **Appendix B** in the review report for the full implementation steps.
 
 ### SEO: excluding search engine crawlers from AntiDDoS AMR
 `ChallengeAllDuringEvent` will Challenge all challengeable requests during a DDoS event, including search engine crawlers. Although modern crawlers may support JavaScript execution, real-world cases have been observed where crawlers indexed the Challenge interstitial page (HTTP 202) instead of actual content during DDoS events, severely damaging SEO. The root cause is not fully understood — it may be that crawlers behave differently under high-load conditions, or that the Challenge interstitial is served in a context where the crawler does not retry after token acquisition.
 
-The solution is to place the "ASN + UA Crawler Labeling Rule" (see "ASN + UA Crawler Labeling Rule" section) before AntiDDoS AMR, then add a scope-down to AntiDDoS AMR that excludes requests with the `crawler:verified` label:
-
-```json
-{
-  "NotStatement": {
-    "Statement": {
-      "LabelMatchStatement": {
-        "Scope": "LABEL",
-        "Key": "crawler:verified"
-      }
-    }
-  }
-}
-```
-
-If AntiDDoS AMR already has a scope-down (e.g., for native app exclusion via dual instance pattern), combine them with an `AndStatement`:
-
-```json
-{
-  "AndStatement": {
-    "Statements": [
-      {
-        "NotStatement": {
-          "Statement": {
-            "LabelMatchStatement": { "Scope": "LABEL", "Key": "crawler:verified" }
-          }
-        }
-      },
-      { "...existing scope-down...": {} }
-    ]
-  }
-}
-```
+The solution is to place the "ASN + UA Crawler Labeling Rule" (see crawler-seo.md) before AntiDDoS AMR, then add a scope-down to AntiDDoS AMR that excludes requests with the `crawler:verified` label. See **Appendix B** for the scope-down JSON.
 

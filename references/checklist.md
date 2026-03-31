@@ -88,9 +88,8 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules.
 
 ### 11. Token Domain Configuration
 
-- [ ] Apex domain covers single-level subdomains automatically
+- [ ] Apex domain covers all subdomains at any depth automatically (suffix-based matching)
 - [ ] Wildcard (*) not needed
-- [ ] Multi-level subdomains (a.b.example.com) need separate entry for b.example.com
 
 ### 12. Managed Rule Group Versions
 

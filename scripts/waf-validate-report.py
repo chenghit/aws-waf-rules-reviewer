@@ -167,51 +167,33 @@ def _check_mermaid_completeness(metadata: dict) -> dict:
 
 
 def _check_prechecks_coverage(report: str, prechecks: dict) -> dict:
-    """Check that every FAIL pre-check has a corresponding finding in the report."""
-    report_lower = report.lower()
+    """Check that every FAIL pre-check has its rule referenced in a **Rule**: line."""
+    # Extract all rule names from **Rule**:/**Rules**: lines
+    rule_refs = {r["name"].lower() for r in _extract_rule_refs(report)}
+
     missing = []
-
-    # Keywords that must appear in the report for each check type.
-    # If defined, keyword match is required (rule name alone is not sufficient).
-    required_keywords = {
-        "token_domain": ["token_domain", "token domain", "冗余子域", "redundant subdomain"],
-        "managed_versions": ["5.0", "2.0", "版本", "version"],
-        "default_action_redundancy": ["allow_all", "冗余", "redundant"],
-        "count_without_labels": ["无标签", "without label", "仅产生指标", "metric-only"],
-        "challenge_on_post_api": ["post.*challenge", "challenge.*post", "challenge.*api.*block",
-                                   "api.*challenge.*block", "等同于 block", "等效于 block"],
-        "hosting_provider_allow": ["hostingprovideriplist"],
-        "wcu_reminder": ["wcu", "容量", "capacity"],
-    }
-
     for name, check in prechecks.get("pre_checks", {}).items():
         if check.get("status") != "FAIL":
             continue
-        found = False
-        # If we have specific keywords for this check, use them
-        if name in required_keywords:
-            for kw in required_keywords[name]:
-                if re.search(kw, report_lower):
-                    found = True
-                    break
-        else:
-            # Fallback: check if rule name or finding text appears
-            rule_name = check.get("rule", "")
-            if rule_name and rule_name.lower() in report_lower:
-                found = True
-            rules = check.get("rules", [])
-            if not found and rules:
-                for r in rules:
-                    rname = r.get("name", "") if isinstance(r, dict) else str(r)
-                    if rname.lower() in report_lower:
-                        found = True
-                        break
+        # Collect rule names from the pre-check result
+        check_rules = []
+        if "rule" in check:
+            check_rules.append(check["rule"])
+        for r in check.get("rules", []):
+            rname = r.get("name", "") if isinstance(r, dict) else str(r)
+            if rname:
+                check_rules.append(rname)
+        if not check_rules:
+            continue  # No specific rule to match (e.g., global checks)
+        # At least one rule from this check must appear in report
+        found = any(r.lower() in rule_refs for r in check_rules)
         if not found:
             finding = check.get("finding", "")
-            missing.append({"check": name, "finding": finding[:100]})
+            missing.append({"check": name, "rules": check_rules,
+                            "finding": finding[:100]})
     if missing:
         return {"status": "FAIL", "missing": missing,
-                "detail": f"{len(missing)} pre-check FAIL items not found in report"}
+                "detail": f"{len(missing)} pre-check FAIL items not found in report **Rule**: lines"}
     return {"status": "PASS", "missing": []}
 
 

@@ -59,12 +59,21 @@ flowchart LR
 ├── SKILL.md
 ├── references/
 │   ├── checklist.md
-│   └── waf-knowledge.md
+│   ├── antiddos-amr.md
+│   ├── bot-control.md
+│   ├── challenge-captcha.md
+│   ├── common-patterns.md
+│   ├── crawler-seo.md
+│   ├── ip-reputation.md
+│   ├── managed-overrides.md
+│   └── rate-based.md
 └── scripts/
     ├── managed-labels.json
     ├── waf-preprocess.py
     ├── waf-generate-mermaid.py
     ├── waf-pre-checks.py
+    ├── waf-generate-appendix.py
+    ├── waf-generate-report-header.py
     ├── waf-annotate-mermaid.py
     └── waf-validate-report.py
 ```

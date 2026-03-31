@@ -66,6 +66,16 @@ python3 "{scripts_dir}/waf-pre-checks.py" "{output_dir}" "{input_file}"
 
 Parse `---RESULT---`. Proceed on OK.
 
+### Step 3b: Generate appendix
+
+```bash
+python3 "{scripts_dir}/waf-generate-appendix.py" "{output_dir}"
+```
+
+Generates `appendix.md` with fixed reference content (rule JSON templates, implementation steps, priority order table, override recommendations). This file is appended to the final report automatically in Step 5. When your findings recommend these fixed patterns, reference the appendix (e.g., "implementation steps see Appendix B") instead of reproducing the content.
+
+Parse `---RESULT---`. Proceed on OK.
+
 ### Step 4: LLM analysis
 
 **CRITICAL: Do NOT delegate Step 4 to a subagent. Perform all analysis yourself in this session.**
@@ -90,12 +100,14 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 - Run through these checklist sections using waf-summary.json and pre-checks.json only. No knowledge files needed.
 - For `pre_checks` items with status `FAIL` → adopt the finding directly.
 - For `pre_checks` items with status `PASS` → skip.
+- WCU and CRS SizeRestrictions_Body: do NOT write findings for these. They are covered by Appendix E and F.
 - Append findings to report using `fs_write` `append`.
 
 **Step 4.3** — Section 3 (AntiDDoS AMR):
 - Read `references/antiddos-amr.md`.
 - Analyze section 3. Append findings to report using `fs_write` `append`.
-- If recommending dual AMR instance: include the 4-step implementation details AND the JSON editor instruction from the knowledge file. The user needs step-by-step guidance, not just a summary.
+- If recommending dual AMR instance: reference Appendix B for implementation steps.
+- If recommending crawler exclusion: reference Appendix A for the labeling rule and Appendix B for the scope-down JSON.
 
 **Step 4.4** — Section 4 (Challenge/CAPTCHA applicability):
 - Read `references/challenge-captcha.md`.
@@ -104,7 +116,7 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 **Step 4.5** — Section 5 (Bot Control):
 - Read `references/bot-control.md`.
 - Analyze section 5. Append findings.
-- If recommending native app scope-down or SDK integration: include specific rule names and override instructions from the knowledge file.
+- If recommending native app scope-down or SDK integration: include specific rule names and override instructions from the knowledge file. Reference Appendix F for common override recommendations.
 
 **Step 4.6** — Sections 6, 7 (Rate-based, IP reputation):
 - Read `references/rate-based.md` and `references/ip-reputation.md`.
@@ -113,12 +125,13 @@ Now run through the checklist in sub-steps. Each sub-step analyzes specific sect
 **Step 4.7** — Sections 8, 16 (Landing page, Always-on Challenge):
 - Read `references/crawler-seo.md`.
 - Analyze sections 8 and 16. Append findings.
-- If recommending a crawler labeling rule: copy the full rule JSON from the knowledge file into the report for easy user copy-paste.
-- If recommending always-on challenge: describe the two-rule pattern with enough detail for the user to implement.
+- If recommending a crawler labeling rule: reference Appendix A for the full rule JSON.
+- If recommending always-on challenge: reference Appendix C for the two-rule pattern.
 
 **Step 4.8** — Sections 12, 18 (Versions, Priority order):
 - Read `references/managed-overrides.md`.
 - Analyze sections 12 and 18. Append findings.
+- For priority order issues: reference Appendix D for the recommended order.
 
 **Step 4.9** — Section 17 (Cross-rule deps, label analysis):
 - Read `references/common-patterns.md`.
