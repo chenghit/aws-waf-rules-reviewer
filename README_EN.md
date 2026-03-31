@@ -117,8 +117,8 @@ The LLM analysis step's duration is primarily driven by reference context size (
 
 | Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
 |-----------|---------------------------|-------------|-------------------|
-| 27 rules (measured) | ~10 min | < 1 min | ~15 min |
-| 100+ rules (estimated) | ~15-20 min | < 1 min | ~25 min |
+| 27 rules (measured) | ~5 min | < 1 min | ~10 min |
+| 100+ rules (estimated) | ~10 min | < 1 min | ~15 min |
 
 > Thinking time varies significantly across model versions. As models improve long-context reasoning efficiency, these times are expected to decrease.
 
