@@ -49,9 +49,7 @@ flowchart LR
 将 SKILL.md、references/ 和 scripts/ 复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
 
 ```bash
-mkdir -p ~/.kiro/skills/aws-waf-rules-reviewer
-cp SKILL.md ~/.kiro/skills/aws-waf-rules-reviewer/
-cp -r references scripts ~/.kiro/skills/aws-waf-rules-reviewer/
+cp -r aws-waf-rules-reviewer ~/.kiro/skills/
 ```
 
 安装后的目录结构：

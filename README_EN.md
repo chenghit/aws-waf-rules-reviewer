@@ -49,9 +49,7 @@ Given an AWS WAF Web ACL JSON export, this skill:
 Copy SKILL.md, references/ and scripts/ to your AI coding tool's skill directory. For Kiro CLI:
 
 ```bash
-mkdir -p ~/.kiro/skills/aws-waf-rules-reviewer
-cp SKILL.md ~/.kiro/skills/aws-waf-rules-reviewer/
-cp -r references scripts ~/.kiro/skills/aws-waf-rules-reviewer/
+cp -r aws-waf-rules-reviewer ~/.kiro/skills/
 ```
 
 Installed structure:
