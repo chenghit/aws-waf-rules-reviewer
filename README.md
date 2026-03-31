@@ -31,7 +31,7 @@ flowchart LR
 
 蓝色 = Python 脚本（确定性），橙色 = LLM 推理
 
-脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。如果脚本未安装，自动回退到纯 LLM 工作流。
+脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。
 
 ## 功能
 
@@ -46,10 +46,12 @@ flowchart LR
 
 ## 安装
 
-将 `aws-waf-rules-reviewer` 目录复制到你的 AI 编程工具的 skill 目录。例如在 Kiro CLI 中：
+将 SKILL.md、references/ 和 scripts/ 复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
 
 ```bash
-./install.sh
+mkdir -p ~/.kiro/skills/aws-waf-rules-reviewer
+cp SKILL.md ~/.kiro/skills/aws-waf-rules-reviewer/
+cp -r references scripts ~/.kiro/skills/aws-waf-rules-reviewer/
 ```
 
 安装后的目录结构：

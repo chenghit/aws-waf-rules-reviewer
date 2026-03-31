@@ -31,7 +31,7 @@ flowchart LR
 
 Blue = Python scripts (deterministic), Orange = LLM reasoning
 
-Scripts handle structured extraction, diagram generation, and mechanical validation. LLM focuses on security analysis and report writing. Falls back to pure LLM workflow if scripts are not installed.
+Scripts handle structured extraction, diagram generation, and mechanical validation. LLM focuses on security analysis and report writing.
 
 ## What It Does
 
@@ -46,10 +46,12 @@ Given an AWS WAF Web ACL JSON export, this skill:
 
 ## Installation
 
-Copy the `aws-waf-rules-reviewer` directory to your AI coding tool's skill directory. For Kiro CLI:
+Copy SKILL.md, references/ and scripts/ to your AI coding tool's skill directory. For Kiro CLI:
 
 ```bash
-./install.sh
+mkdir -p ~/.kiro/skills/aws-waf-rules-reviewer
+cp SKILL.md ~/.kiro/skills/aws-waf-rules-reviewer/
+cp -r references scripts ~/.kiro/skills/aws-waf-rules-reviewer/
 ```
 
 Installed structure:
