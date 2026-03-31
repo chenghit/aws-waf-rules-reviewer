@@ -209,6 +209,14 @@ def main():
     # Append to report
     _append_to_report(report_path, final_mermaid)
 
+    # Append appendix if exists
+    appendix_path = os.path.join(output_dir, "appendix.md")
+    if os.path.isfile(appendix_path):
+        appendix_text = Path(appendix_path).read_text(encoding="utf-8")
+        with open(report_path, "a", encoding="utf-8") as f:
+            f.write(appendix_text)
+        print("Appended appendix.md to report", file=sys.stderr)
+
     print(f"Applied {applied} annotations, expanded {len(expanded_groups)} fold groups",
           file=sys.stderr)
     _print_result(applied)

@@ -131,6 +131,11 @@ def main():
 
 """
 
+    # Strip existing header if present (idempotent re-runs)
+    first_issue = re.search(r'^## Issue \d+', report, re.MULTILINE)
+    if first_issue:
+        report = report[first_issue.start():]
+
     # Prepend header to report
     new_report = header + report
     Path(report_path).write_text(new_report, encoding="utf-8")
