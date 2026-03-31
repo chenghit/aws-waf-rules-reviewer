@@ -428,12 +428,12 @@ The following is a recommended ordering for rules in a Web ACL. Not all rule typ
 
 1. **IP whitelist (Allow)** — Trusted IPs (monitoring probes, internal services, etc.) bypass all subsequent rules. Volume is typically small and does not materially affect AntiDDoS AMR baseline.
 2. **IP blacklist (Block)** — Known malicious IPs blocked immediately. Keeps them out of AntiDDoS AMR baseline, which actually improves baseline accuracy.
-3. **Count+Label rules** — Tag traffic types (e.g., native app identification, crawler identification via ASN+UA) for use by downstream rules' scope-down conditions. Must be placed before any rule that consumes these labels.
+3. **Count+Label rules** — Tag traffic types (e.g., native app identification, crawler identification via ASN+UA, landing page URI labeling) for use by downstream rules' scope-down conditions. Must be placed before any rule that consumes these labels.
 4. **AntiDDoS AMR** — Needs to see as much traffic as possible to build an accurate baseline. Place as early as possible, but after IP whitelist/blacklist and any labeling rules it depends on for scope-down (e.g., native app label for dual-AMR, crawler label for SEO exclusion).
 5. **IP reputation rule group** (AWSManagedRulesAmazonIpReputationList) — Low WCU (25), filters known malicious IPs. Placed after AntiDDoS AMR so AMR sees the full traffic pattern.
 6. **Anonymous IP rule group** (AWSManagedRulesAnonymousIpList) — Filters anonymous/hosting provider IPs. Placed after AMR for the same reason.
 7. **Rate-based rules** — Rate limiting as a defense layer. Placed before Always-on Challenge to reduce the volume of requests that reach Challenge.
-8. **Always-on Challenge for landing pages** — Proactive DDoS defense for landing page URIs. Placed after IP reputation, Anonymous IP, and rate-based rules so that traffic already filtered by those rules does not incur Challenge costs.
+8. **Always-on Challenge for landing pages** (Challenge rule only) — Proactive DDoS defense. Consumes the `custom:landing-page` label produced by the Count+Label rule in position 3. Placed after IP reputation, Anonymous IP, and rate-based rules so that traffic already filtered by those rules does not incur Challenge costs.
 9. **Custom rules** — Business-specific logic including geo-blocking, URI-based rules, header-based rules, etc.
 10. **Application layer rule groups** (CRS, KnownBadInputs, SQLi, etc.) — OWASP Top 10 and application-specific protections. Placed after custom rules so that business-specific Allow/Block decisions take precedence.
 11. **Bot Control, ATP, ACFP** (optional) — Per-request pricing rule groups. Place last to minimize the number of requests they evaluate. Bot Control is the most expensive at Targeted level ($10/million requests). ATP and ACFP also use per-request pricing and should be grouped here.
