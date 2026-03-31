@@ -1,3 +1,4 @@
 .DS_Store
 /waf-review-report.md
 __pycache__/
+docs/
