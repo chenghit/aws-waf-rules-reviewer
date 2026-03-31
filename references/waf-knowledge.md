@@ -366,7 +366,7 @@ This single labeling rule serves both downstream consumers — no duplication of
 
 ### Why it is effective for DDoS protection
 - Most DDoS attack tools are not real browsers — they cannot execute JavaScript and therefore cannot pass Challenge or obtain a WAF token
-- Always-on Challenge is preventive, not reactive: it filters non-browser traffic continuously, without waiting for AntiDDoS AMR to detect an attack
+- Always-on Challenge is preventive, not reactive: it filters non-browser traffic on landing page paths continuously, without waiting for AntiDDoS AMR to detect an attack
 - **Takes effect immediately with zero detection delay** — attack traffic is blocked from the first request, unlike AntiDDoS AMR which requires time to establish a baseline before it can detect anomalies
 - Legitimate users with a valid WAF token are not affected: Challenge acts like Count for requests with an unexpired token, so real users experience the JS verification only once, then browse uninterrupted for the token's lifetime
 - **Severity when absent**: Medium — this is the most effective proactive DDoS defense for browser traffic; its absence means the Web ACL relies entirely on reactive AMR detection with an unavoidable delay window
