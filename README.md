@@ -142,7 +142,7 @@ LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checkli
 13. 日志和监控
 14. byte_match_statement 中的哈希/不透明 search_string
 15. Default Action（冗余的尾部 Allow-all 规则检测）
-16. HTML 页面 Always-on Challenge（主动 DDoS 防御、免疫时间、爬虫排除）
+16. Landing Page Always-on Challenge（主动 DDoS 防御、免疫时间、爬虫排除）
 
 **Phase 2: 全局交叉检查**
 

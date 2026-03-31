@@ -142,7 +142,7 @@ The review covers 18 categories in two phases:
 13. Logging and monitoring
 14. Hashed/opaque search_string in byte_match_statement
 15. Default action (redundant trailing Allow-all detection)
-16. Always-on Challenge for HTML pages (proactive DDoS defense, immunity time, crawler exclusion)
+16. Always-on Challenge for landing pages (proactive DDoS defense, immunity time, crawler exclusion)
 
 **Phase 2: Global Cross-checks**
 
