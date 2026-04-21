@@ -76,83 +76,60 @@ Generates `appendix.md` with fixed reference content (rule JSON templates, imple
 
 Parse `---RESULT---`. Proceed on OK.
 
+### Step 3c: Generate scripted findings
+
+Determine the `--lang` flag from the user's language:
+- Chinese → `--lang zh`
+- English → `--lang en`
+- Other → `--lang en` (you will translate scripted findings in Step 4)
+
+```bash
+python3 "{scripts_dir}/waf-generate-findings.py" "{output_dir}" --lang {lang}
+```
+
+Generates deterministic findings for checklist sections that can be fully evaluated by script (forgeable Allow rules, scope-down issues, ChallengeAllDuringEvent, unanchored regex, missing baseline, token domain, etc.). Outputs:
+- `scripted-findings.md` — complete Issue section Markdown
+- `findings-metadata.json` — structured metadata including `llm_sections`, `next_issue_number`, and `issue_rule_mapping`
+
+Parse `---RESULT---`. Proceed on OK.
+
 ### Step 4: LLM analysis
 
 **CRITICAL: Do NOT delegate Step 4 to a subagent. Perform all analysis yourself in this session.**
 
 Read these files:
-- `{output_dir}/waf-summary.json` — structured rule summaries (primary input)
-- `{output_dir}/pre-checks.json` — mechanical check results + flags
+- `{output_dir}/scripted-findings.md` — scripted findings (primary input for the report)
+- `{output_dir}/findings-metadata.json` — metadata: `llm_sections`, `next_issue_number`, `llm_context`
+- `{output_dir}/waf-summary.json` — structured rule summaries
 - [references/checklist.md](references/checklist.md) — review checklist
 
-**Build rule execution flow** from waf-summary.json: walk through all rules in priority order and build a mental model of the request lifecycle. For each rule, note priority, action, labels produced, scope-down conditions, and label dependencies. Map label producers → consumers. Identify Allow rules that terminate evaluation early. This execution flow is your primary analysis tool.
+**Step 4.0: Adopt scripted findings**
 
-Now run through the checklist in sub-steps. Each sub-step analyzes specific sections, writes findings, then moves on. Number issues sequentially across all sub-steps (#1, #2, #3... continuing from the previous sub-step).
+If `--lang` matches the user's language, copy `scripted-findings.md` content into `{output_dir}/waf-review-report.md` verbatim using `fs_write` `create`.
 
-**Step 4.1** — Sections 1, 2 (Allow rules, Scope-down):
-- Run through checklist sections 1 and 2 using waf-summary.json and pre-checks.json only.
-- For `pre_checks` items with status `FAIL` → adopt the finding directly.
-- For `pre_checks` items with status `PASS` → skip.
-- For `flags` → use as starting points for reasoning.
-- Write findings to `{output_dir}/waf-review-report.md` using `fs_write` `create`. If no findings for these sections, still create the file (write an empty string).
+If the user's language is not en/zh (i.e., `--lang en` was used as fallback), translate the scripted findings into the user's language and write the translated version.
 
-**Step 4.2** — Sections 9, 10, 11, 13, 14, 15 (Missing baseline, WCU, Token domain, Logging, Opaque strings, Default action):
-- Run through these checklist sections using waf-summary.json and pre-checks.json only. No knowledge files needed.
-- For `pre_checks` items with status `FAIL` → adopt the finding directly.
-- For `pre_checks` items with status `PASS` → skip.
-- WCU and CRS SizeRestrictions_Body: do NOT write findings for these. They are covered by Appendix E and F.
-- Append findings to report using `fs_write` `append`.
+**Sanity check**: Scan `findings-metadata.json` scripted issues against `waf-summary.json`. If any scripted finding contradicts the summary (e.g., "missing CRS" but CRS is present in rules), flag it and override — remove or rewrite that finding.
 
-**Step 4.3** — Section 3 (AntiDDoS AMR):
-- Read `references/antiddos-amr.md`.
-- Analyze section 3. Append findings to report using `fs_write` `append`.
-- If recommending dual AMR instance: reference Appendix B for implementation steps.
-- If recommending crawler exclusion: reference Appendix A for the labeling rule and Appendix B for the scope-down JSON.
+**Step 4.1+: Analyze remaining sections**
 
-**Step 4.4** — Section 4 (Challenge/CAPTCHA applicability):
-- Read `references/challenge-captcha.md`.
-- Analyze section 4. Append findings.
+Read `llm_sections` from `findings-metadata.json`. Only analyze the sections listed there. Number your findings starting from `next_issue_number`.
 
-**Step 4.5** — Section 5 (Bot Control):
-- Read `references/bot-control.md`.
-- Analyze section 5. Append findings.
-- If recommending native app scope-down or SDK integration: include specific rule names and override instructions from the knowledge file. Reference Appendix F for common override recommendations.
+**Build rule execution flow** from waf-summary.json: walk through all rules in priority order and build a mental model of the request lifecycle. For each rule, note priority, action, labels produced, scope-down conditions, and label dependencies. Map label producers → consumers. Identify Allow rules that terminate evaluation early.
 
-**Step 4.6** — Sections 6, 7 (Rate-based, IP reputation):
-- Read `references/rate-based.md` and `references/ip-reputation.md`.
-- Analyze sections 6 and 7. Append findings.
+For each section in `llm_sections`, read the relevant reference file and analyze:
 
-**Step 4.7** — Sections 8, 16 (Landing page, Always-on Challenge):
-- Read `references/crawler-seo.md`.
-- Analyze sections 8 and 16. Append findings.
-- If recommending a crawler labeling rule: reference Appendix A for the full rule JSON.
-- If recommending always-on challenge: reference Appendix C for the two-rule pattern.
+- **Section 5** (Bot Control): Read `references/bot-control.md`. Evaluate overall Bot Control strategy (Common vs Targeted level, native app implications). The CategorySearchEngine/CategorySeo Allow finding is already scripted — do not duplicate it. If a forgeable UA-based Allow rule was found (check `llm_context.ua_allow_found`), analyze the native app → Bot Control implication. Reference Appendix F for common override recommendations.
+- **Section 8** (Landing page / cookie logic): Read `references/crawler-seo.md`. Evaluate cookie-based security decisions, WAF token alternatives.
+- **Section 17** (Cross-rule deps + fix impact): Read `references/common-patterns.md`. Section 17a (Count rules without labels) is already scripted — skip it. Only analyze 17b: for each fix recommended in the report (both scripted and your own), trace affected traffic through the full rule chain. Does fix A break rule B? Remove a label? Document recommended fix order and simultaneous changes needed.
 
-**Step 4.8** — Sections 12, 18 (Versions, Priority order):
-- Read `references/managed-overrides.md`.
-- Analyze sections 12 and 18. Append findings.
-- For priority order issues: reference Appendix D for the recommended order.
+Append your findings to the report using `fs_write` `append`.
 
-**Step 4.9** — Section 17 (Cross-rule deps, label analysis):
-- Read `references/common-patterns.md`.
-- Analyze section 17 using all findings written so far. Append findings.
-
-After all sub-steps, write `{output_dir}/issue-rule-mapping.json`:
-```json
-{
-  "annotations": {
-    "AWS-AWSManagedRulesAntiDDoSRuleSet": "⚠️ Issue #2, #8",
-    "DSAPP-BYPASS": "⚠️ Issue #1"
-  }
-}
-```
-Only include issues that reference an existing rule in the Web ACL. Issues about missing rules (e.g., "No Always-on Challenge rule") or global concerns (e.g., WCU reminder) are NOT included.
-
-**Report format rules (apply to all sub-steps):**
+**Report format rules:**
 - **Do NOT write a report header or Summary table** — generated by script in Step 4b.
 - Each finding: `## Issue N (severity): {title}` format (see "Report Format" below).
 - Rule reference lines MUST use: `**Rule**: {name} (priority {N})` or `**Rules**: ...` or `**Rule**: N/A (missing rule)`.
-- Cross-references to earlier issues: use issue number. To later issues: use descriptive text.
+- Cross-references to scripted findings: use their issue number. To later issues: use descriptive text.
 - End the last Issue section with `---`. Do NOT write a conclusion paragraph.
 
 ### Step 4b: Generate report header and Summary table
@@ -162,6 +139,14 @@ python3 "{scripts_dir}/waf-generate-report-header.py" "{output_dir}"
 ```
 
 Reads Issue sections from the report, extracts severity and title, generates a Summary table (sorted by severity for display), and prepends the report header + Summary table. Parse `---RESULT---`. Proceed on OK.
+
+### Step 4c: Build issue-rule mapping
+
+```bash
+python3 "{scripts_dir}/waf-build-issue-map.py" "{output_dir}"
+```
+
+Merges scripted findings' rule mappings (from `findings-metadata.json`) with LLM findings' `**Rule**:` lines to produce `issue-rule-mapping.json`. Parse `---RESULT---`. Proceed on OK.
 
 ### Step 5: Annotate Mermaid and append to report
 
@@ -187,14 +172,13 @@ Read `{output_dir}/validation.json`.
 - If any check has status `FAIL` → fix the report using `fs_write`, then re-run Step 6. Maximum 2 retries. If validation still fails after 3 total attempts, report remaining errors to the user and stop.
 - If all `PASS` → proceed to adversarial check.
 
-**Adversarial check** (assume the report contains errors — your job is to find them):
-- Pick the 2 highest-severity findings. Go back to waf-summary.json (and original JSON via `source.lines` if needed) and re-derive each finding independently from scratch. If your re-derivation disagrees with the report, fix it.
+**Adversarial check** (only for LLM-generated findings — scripted findings are deterministic and do not need re-derivation):
+- Pick the 2 highest-severity LLM-generated findings (issue numbers ≥ `next_issue_number`). Go back to waf-summary.json (and original JSON via `source.lines` if needed) and re-derive each finding independently from scratch. If your re-derivation disagrees with the report, fix it.
 - For each finding that recommends a fix, trace the fix through the rule execution flow: does the fix break any other rule or label dependency? If so, add a note to the finding.
 
-**Cross-reference check:**
+**Cross-reference check** (covers all findings — both scripted and LLM):
 - For each label mentioned in any finding, verify the producer rule exists and has a lower priority number (higher priority) than the consumer rule.
 - Check whether any rules in waf-summary.json were completely ignored (no finding, no pre_check coverage). If an ignored rule deserves a finding, add it.
-- Verify all checklist sections from Steps 4.1–4.9 were analyzed. If a section was skipped (no finding and no explicit "not applicable"), re-read the relevant knowledge file and evaluate it now.
 
 State: "Self-review completed. Mechanical: {results from validation.json}. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} found."
 
