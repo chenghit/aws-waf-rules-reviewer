@@ -17,17 +17,19 @@ Review AWS WAF Web ACL configurations to identify security issues, misconfigurat
 
 Before anything else, locate the scripts directory and compute absolute paths.
 
-1. Find the scripts directory. Check these paths in order (stop at first match):
-   - `~/.kiro/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
-   - `~/.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
-   - `~/.codex/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
-   - `~/.agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py`
-   - `.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (project-level)
-   - `.cursor/rules/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (Cursor)
-   - `.windsurf/rules/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (Windsurf)
-   - `.agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py` (project-level)
+1. Find the scripts directory. Use `fs_read` in Line mode to check if the file exists. Check these paths in order (stop at first match):
+   ```
+   ~/.kiro/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   ~/.claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   ~/.codex/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   ~/.agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   .claude/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   .cursor/rules/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   .windsurf/rules/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   .agents/skills/aws-waf-rules-reviewer/scripts/waf-preprocess.py
+   ```
    
-   Use `fs_read` (directory mode) or a simple `ls` check on each path. If none match, use `glob` with pattern `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py` as a last resort. The parent directory of the found file is `scripts_dir`. If still not found, fall back to the v1 workflow (skip all script steps, do everything manually as described in the "Fallback: Manual Workflow" section at the end).
+   **IMPORTANT**: Use `fs_read` (Line mode, start_line=1, end_line=1) to probe each path. `fs_read` supports `~` for home directory. Do NOT use `glob` for absolute paths — `glob` only searches relative to the current working directory. If none of the above paths exist, use `glob` with pattern `**/aws-waf-rules-reviewer/scripts/waf-preprocess.py` as a last resort (this only finds project-level installs). The parent directory of the found file is `scripts_dir`.
 
 2. Resolve `input_file`: the user provides a file or directory path. Resolve it to an absolute path.
 
