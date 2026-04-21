@@ -1,0 +1,253 @@
+{
+  "scripted_count": 18,
+  "scripted_issues": [
+    {
+      "number": 1,
+      "severity": "Critical",
+      "title": "probe_service_pass_2 / probe_service_pass 基于可伪造条件实现全局 Allow 绕过",
+      "rules": [
+        "probe_service_pass_2",
+        "probe_service_pass"
+      ],
+      "checklist_sections": [
+        1
+      ]
+    },
+    {
+      "number": 2,
+      "severity": "Critical",
+      "title": "HostingProviderIPList 被覆盖为 Allow，云端攻击流量可绕过所有后续规则",
+      "rules": [
+        "AWS-AWSManagedRulesAnonymousIpList"
+      ],
+      "checklist_sections": [
+        7
+      ]
+    },
+    {
+      "number": 3,
+      "severity": "Critical",
+      "title": "APP-BYPASS_2 / APP-BYPASS 基于可伪造条件实现全局 Allow 绕过",
+      "rules": [
+        "APP-BYPASS_2",
+        "APP-BYPASS"
+      ],
+      "checklist_sections": [
+        1
+      ]
+    },
+    {
+      "number": 4,
+      "severity": "Medium",
+      "title": "ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间软缓解失效",
+      "rules": [
+        "AWS-AWSManagedRulesAntiDDoSRuleSet"
+      ],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 5,
+      "severity": "Medium",
+      "title": "AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过",
+      "rules": [
+        "AWS-AWSManagedRulesAntiDDoSRuleSet"
+      ],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 6,
+      "severity": "Medium",
+      "title": "规则优先级顺序存在问题——发现 3 处顺序问题",
+      "rules": [
+        "AWS-AWSManagedRulesAntiDDoSRuleSet",
+        "spec_43_JA4_DDoS",
+        "challenge-all-reasonable-specific_path_2",
+        "chat_platform_deny_options_method_2",
+        "probe_service_pass_2",
+        "AWS-AWSManagedRulesAmazonIpReputationList",
+        "AWS-AWSManagedRulesAnonymousIpList",
+        "example-com_ratelimit_challenge_2",
+        "APP-BYPASS_2",
+        "ban_chat_ipv6_2"
+      ],
+      "checklist_sections": [
+        18
+      ]
+    },
+    {
+      "number": 7,
+      "severity": "Medium",
+      "title": "Challenge 规则作用于 API/POST 路径，实际效果等同于 Block",
+      "rules": [
+        "challenge-all-reasonable-specific_path_2",
+        "platform_create_payment_bot_control",
+        "challenge-all-reasonable-specific_path",
+        "platform_create_payment_bot_control_2"
+      ],
+      "checklist_sections": [
+        4
+      ]
+    },
+    {
+      "number": 8,
+      "severity": "Medium",
+      "title": "IP 信誉和匿名 IP 规则组的 scope-down 过窄，仅检查首页",
+      "rules": [
+        "AWS-AWSManagedRulesAmazonIpReputationList",
+        "AWS-AWSManagedRulesAnonymousIpList"
+      ],
+      "checklist_sections": [
+        2
+      ]
+    },
+    {
+      "number": 9,
+      "severity": "Medium",
+      "title": "缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge",
+      "rules": [],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 10,
+      "severity": "Medium",
+      "title": "缺少 CRS and KnownBadInputs 基线防护规则组",
+      "rules": [],
+      "checklist_sections": [
+        9
+      ]
+    },
+    {
+      "number": 11,
+      "severity": "Medium",
+      "title": "缺少 Always-on Challenge，DDoS 防护依赖响应式检测的延迟窗口",
+      "rules": [],
+      "checklist_sections": [
+        16
+      ]
+    },
+    {
+      "number": 12,
+      "severity": "Low",
+      "title": "Bot Control 的 CategorySearchEngine 和 CategorySeo 被覆盖为 Allow",
+      "rules": [
+        "AWS-AWSManagedRulesBotControlRuleSet"
+      ],
+      "checklist_sections": [
+        5
+      ]
+    },
+    {
+      "number": 13,
+      "severity": "Low",
+      "title": "Bot Control 版本过旧（Version_4.0），建议升级至 5.0",
+      "rules": [
+        "AWS-AWSManagedRulesBotControlRuleSet"
+      ],
+      "checklist_sections": [
+        12
+      ]
+    },
+    {
+      "number": 14,
+      "severity": "Low",
+      "title": "allow_all 规则与默认 Allow 动作重复",
+      "rules": [
+        "allow_all"
+      ],
+      "checklist_sections": [
+        15
+      ]
+    },
+    {
+      "number": 15,
+      "severity": "Low",
+      "title": "Token Domain 配置包含冗余子域名",
+      "rules": [],
+      "checklist_sections": [
+        11
+      ]
+    },
+    {
+      "number": 16,
+      "severity": "Awareness",
+      "title": "spec_43_JA4_DDoS / spec_43_JA4_DDoS_2 规则为 Count 但未添加标签，仅产生指标",
+      "rules": [
+        "spec_43_JA4_DDoS",
+        "spec_43_JA4_DDoS_2"
+      ],
+      "checklist_sections": [
+        17
+      ]
+    },
+    {
+      "number": 17,
+      "severity": "Awareness",
+      "title": "速率限制规则存在重复，每对规则逻辑完全相同",
+      "rules": [
+        "example-com_ratelimit_challenge_2",
+        "example-com_ratelimit_challenge",
+        "platform-all-ratelimit_2",
+        "platform-all-ratelimit",
+        "chat-all-ratelimit_2",
+        "chat-all-ratelimit"
+      ],
+      "checklist_sections": [
+        6
+      ]
+    },
+    {
+      "number": 18,
+      "severity": "Awareness",
+      "title": "未检测到 WAF 日志配置",
+      "rules": [],
+      "checklist_sections": [
+        13
+      ]
+    }
+  ],
+  "issue_rule_mapping": {
+    "probe_service_pass_2": "⚠️ Issue #1, #6",
+    "probe_service_pass": "⚠️ Issue #1",
+    "AWS-AWSManagedRulesAnonymousIpList": "⚠️ Issue #2, #6, #8",
+    "APP-BYPASS_2": "⚠️ Issue #3, #6",
+    "APP-BYPASS": "⚠️ Issue #3",
+    "AWS-AWSManagedRulesAntiDDoSRuleSet": "⚠️ Issue #4, #5, #6",
+    "spec_43_JA4_DDoS": "⚠️ Issue #6, #16",
+    "challenge-all-reasonable-specific_path_2": "⚠️ Issue #6, #7",
+    "chat_platform_deny_options_method_2": "⚠️ Issue #6",
+    "AWS-AWSManagedRulesAmazonIpReputationList": "⚠️ Issue #6, #8",
+    "example-com_ratelimit_challenge_2": "⚠️ Issue #6, #17",
+    "ban_chat_ipv6_2": "⚠️ Issue #6",
+    "platform_create_payment_bot_control": "⚠️ Issue #7",
+    "challenge-all-reasonable-specific_path": "⚠️ Issue #7",
+    "platform_create_payment_bot_control_2": "⚠️ Issue #7",
+    "AWS-AWSManagedRulesBotControlRuleSet": "⚠️ Issue #12, #13",
+    "allow_all": "⚠️ Issue #14",
+    "spec_43_JA4_DDoS_2": "⚠️ Issue #16",
+    "example-com_ratelimit_challenge": "⚠️ Issue #17",
+    "platform-all-ratelimit_2": "⚠️ Issue #17",
+    "platform-all-ratelimit": "⚠️ Issue #17",
+    "chat-all-ratelimit_2": "⚠️ Issue #17",
+    "chat-all-ratelimit": "⚠️ Issue #17"
+  },
+  "llm_sections": [
+    5,
+    8,
+    17
+  ],
+  "llm_context": {
+    "ua_allow_found": true,
+    "has_antiddos_amr": true,
+    "has_bot_control": true,
+    "has_always_on_challenge": false,
+    "has_crawler_labeling_rule": false
+  },
+  "next_issue_number": 19,
+  "lang": "zh"
+}

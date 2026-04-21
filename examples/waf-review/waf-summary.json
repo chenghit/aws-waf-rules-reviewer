@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "input_file": "/Users/chencch/tmp/waf-review-report/web-acl-example.json",
+  "input_file": "/Users/chencch/Documents/github/aws-waf-rules-reviewer/examples/web-acl-example.json",
   "input_format": "snake_case_custom",
   "web_acl": {
     "name": "example-prod",
