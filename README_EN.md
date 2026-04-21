@@ -124,10 +124,10 @@ v0.4 moves ~80% of findings from LLM analysis to deterministic script generation
 
 | Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
 |-----------|---------------------------|-------------|-------------------|
-| 27 rules (measured) | ~2 min | < 1 min | ~5 min |
-| 100+ rules (estimated) | ~5 min | < 1 min | ~8 min |
+| 27 rules (measured) | ~4 min | < 1 min | ~10 min |
+| 100+ rules (estimated) | ~8 min | < 1 min | ~15 min |
 
-> Thinking time varies significantly across model versions. As models improve long-context reasoning efficiency, these times are expected to decrease.
+> Compared to v0.3, total time has not decreased significantly, but user experience is noticeably better: only Step 4 (LLM analysis) has a thinking wait period — all other steps produce continuous output. Additionally, scripted findings support bilingual output (en/zh) and provide richer report details.
 
 ## Examples
 
