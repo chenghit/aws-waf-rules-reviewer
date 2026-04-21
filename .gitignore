@@ -4,3 +4,4 @@ __pycache__/
 docs/
 install.sh
 install.bat
+aws-waf-rules-reviewer.json

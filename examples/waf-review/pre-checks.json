@@ -47,9 +47,47 @@
         }
       ]
     },
-    "wcu_reminder": {
-      "status": "INFO",
-      "finding": "Current WCU: 435/5000. Verify capacity before adding new rules."
+    "challenge_on_post_api": {
+      "status": "FAIL",
+      "finding": "Challenge/CAPTCHA on non-browser paths (effectively Block): challenge-all-reasonable-specific_path_2 (P2): targets API path; platform_create_payment_bot_control (P13): targets POST/PUT requests, targets API path; challenge-all-reasonable-specific_path (P15): targets API path; platform_create_payment_bot_control_2 (P24): targets POST/PUT requests, targets API path",
+      "rules": [
+        {
+          "name": "challenge-all-reasonable-specific_path_2",
+          "priority": 2,
+          "reasons": [
+            "targets API path"
+          ]
+        },
+        {
+          "name": "platform_create_payment_bot_control",
+          "priority": 13,
+          "reasons": [
+            "targets POST/PUT requests",
+            "targets API path"
+          ]
+        },
+        {
+          "name": "challenge-all-reasonable-specific_path",
+          "priority": 15,
+          "reasons": [
+            "targets API path"
+          ]
+        },
+        {
+          "name": "platform_create_payment_bot_control_2",
+          "priority": 24,
+          "reasons": [
+            "targets POST/PUT requests",
+            "targets API path"
+          ]
+        }
+      ]
+    },
+    "hosting_provider_allow": {
+      "status": "FAIL",
+      "finding": "HostingProviderIPList overridden to Allow in AWS-AWSManagedRulesAnonymousIpList (priority 6). Cloud-hosted attack traffic bypasses all subsequent rules. Override to Count instead.",
+      "rule": "AWS-AWSManagedRulesAnonymousIpList",
+      "priority": 6
     }
   },
   "flags": {

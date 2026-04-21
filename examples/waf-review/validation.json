@@ -1,8 +1,8 @@
 {
   "summary_issue_count": {
     "status": "PASS",
-    "summary_rows": 18,
-    "issue_sections": 18
+    "summary_rows": 21,
+    "issue_sections": 21
   },
   "summary_detail_match": {
     "status": "PASS",
@@ -17,5 +17,9 @@
     "missing_rules": [],
     "rule_count": 27,
     "node_count": 24
+  },
+  "prechecks_coverage": {
+    "status": "PASS",
+    "missing": []
   }
 }
