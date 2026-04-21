@@ -13,17 +13,9 @@ import re
 import sys
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).parent
-
 # ── Forgeability mapping ──────────────────────────────────────────────────
-
-def _load_forgeability() -> dict:
-    p = SCRIPTS_DIR / "managed-labels.json"
-    if not p.exists():
-        return {"forgeable_field_types": [], "unforgeable_statement_types": [],
-                "unforgeable_field_types": []}
-    data = json.loads(p.read_text(encoding="utf-8"))
-    return data.get("forgeability", {})
+# Source of truth: managed-labels.json (forgeability section).
+# Hardcoded here to avoid file I/O at import time. Keep in sync.
 
 FORGEABLE_FIELDS = {
     "single_header", "single_query_argument", "cookie", "cookies",
