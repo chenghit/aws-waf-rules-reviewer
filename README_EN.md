@@ -12,10 +12,12 @@ flowchart LR
     B --> C["Mermaid Gen"]
     B --> D["Pre-checks"]
     D --> D2["Appendix Gen"]
+    D2 --> D3["Findings Gen"]
     C --> E["LLM Analysis"]
-    D2 --> E
+    D3 --> E
     E --> E2["Report Header"]
-    E2 --> F["Mermaid Annotate"]
+    E2 --> E3["Issue Map"]
+    E3 --> F["Mermaid Annotate"]
     F --> G["Report Validate"]
     G --> H["LLM Self-review"]
     H --> I["Review Report"]
@@ -24,7 +26,9 @@ flowchart LR
     style C fill:#e1f5fe
     style D fill:#e1f5fe
     style D2 fill:#e1f5fe
+    style D3 fill:#e1f5fe
     style E2 fill:#e1f5fe
+    style E3 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
     style E fill:#fff3e0
@@ -33,7 +37,7 @@ flowchart LR
 
 Blue = Python scripts (deterministic), Orange = LLM reasoning
 
-Scripts handle structured extraction, diagram generation, and mechanical validation. LLM focuses on security analysis and report writing.
+Scripts handle structured extraction, diagram generation, mechanical validation, and deterministic finding generation. LLM focuses only on judgment-heavy security analysis (Bot Control strategy, cookie logic, cross-rule dependencies).
 
 ## What It Does
 
@@ -41,10 +45,11 @@ Given an AWS WAF Web ACL JSON export, this skill:
 
 1. **Preprocesses** — extracts structured rule summaries, compresses input (56KB → 16KB)
 2. **Pre-checks** — automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (6 checks total)
-3. **LLM analysis** — reviews against an 18-item checklist covering Allow rule audits, scope-down validation, AntiDDoS AMR configuration, Bot Control settings, SEO impact, rate limiting, cross-rule dependencies, and more
-4. **Report generation** — severity-rated findings (Critical / Medium / Low / Awareness)
-5. **Mermaid flow diagram** — auto-generated rule execution flow with issue annotations
-6. **Self-review** — mechanical validation + adversarial checks for report accuracy
+3. **Deterministic findings** — 19 generators auto-produce ~80% of findings (forgeable Allow, narrow scope-down, ChallengeAllDuringEvent disabled, unanchored regex, missing baseline, priority order, etc.) with bilingual support (en/zh)
+4. **LLM analysis** — only analyzes judgment-heavy checklist items (Bot Control strategy, cookie logic, cross-rule dependencies) from the sections not covered by scripts
+5. **Report generation** — severity-rated findings (Critical / Medium / Low / Awareness)
+6. **Mermaid flow diagram** — auto-generated rule execution flow with issue annotations
+7. **Self-review** — mechanical validation + adversarial checks (LLM-generated findings only) for report accuracy
 
 ## Installation
 
@@ -75,7 +80,9 @@ Installed structure:
     ├── waf-generate-mermaid.py
     ├── waf-pre-checks.py
     ├── waf-generate-appendix.py
+    ├── waf-generate-findings.py
     ├── waf-generate-report-header.py
+    ├── waf-build-issue-map.py
     ├── waf-annotate-mermaid.py
     └── waf-validate-report.py
 ```
@@ -113,12 +120,12 @@ A Markdown report (`waf-review/waf-review-report.md`) containing:
 
 ## Performance Expectations
 
-The LLM analysis step's duration is primarily driven by reference context size (checklist + knowledge base, ~40KB combined), not rule count. Measured with Claude Sonnet 4.6 (1M):
+v0.4 moves ~80% of findings from LLM analysis to deterministic script generation, significantly reducing LLM output volume and reference context reads.
 
 | Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
 |-----------|---------------------------|-------------|-------------------|
-| 27 rules (measured) | ~5 min | < 1 min | ~10 min |
-| 100+ rules (estimated) | ~10 min | < 1 min | ~15 min |
+| 27 rules (measured) | ~2 min | < 1 min | ~5 min |
+| 100+ rules (estimated) | ~5 min | < 1 min | ~8 min |
 
 > Thinking time varies significantly across model versions. As models improve long-context reasoning efficiency, these times are expected to decrease.
 
@@ -208,7 +215,7 @@ Any model meeting the 64K output requirement should work. The following models h
 | Gemini 2.5 Flash | Google | 1M | 64K | Controllable thinking budget |
 | Gemini 3.1 Pro Preview | Google | 1M | 64K | Multimodal flagship |
 
-> These models are not tested with this tool. Compatibility depends on how well your agent framework maps the skill orchestration logic to the model's API.
+> These models are not tested with this tool. Compatibility depends on how well your agent framework maps the skill orchestration logic to the model's API. Model specs and availability may change at any time — refer to each provider's official documentation. (Last verified: 2026-03)
 
 ## Disclaimer
 

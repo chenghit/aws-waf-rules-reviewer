@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.4 (2026-04-21)
+
+### Scripts (9 total, +2 new)
+- `waf-generate-findings.py` **(NEW)**: 19 deterministic finding generators with bilingual templates (en/zh), three-way return logic (finding / NOT_APPLICABLE / AMBIGUOUS), section coverage computation. Produces ~80% of findings without LLM.
+- `waf-build-issue-map.py` **(NEW)**: merges scripted rule mappings with LLM `**Rule**:` line parsing, validates against waf-summary.json. Replaces LLM-written issue-rule-mapping.json.
+- `waf-pre-checks.py`: removed dead `_load_forgeability` code
+
+### Finding generators (19 total)
+Forgeable Allow (with opaque value detection), HostingProviderIPList Allow, scope-down too narrow, Challenge on POST/API, missing CRS/KnownBadInputs, token domain redundancy, no logging, default action redundancy, Count without labels, ChallengeAllDuringEvent disabled, unanchored exempt regex, missing crawler labeling, Bot Control CategorySearchEngine Allow, duplicate rules, managed versions, missing always-on Challenge, priority order, opaque search_string, managed Allow overrides.
+
+### Knowledge files
+- `antiddos-amr.md`: added tiered deployment patterns (front/back separation > dual AMR instance > single instance anti-pattern), baseline clarification, text/html labeling approach
+- `crawler-seo.md`: reframed always-on Challenge as gap-window coverage for all reactive protections
+
+### Workflow
+- Step 3c: `waf-generate-findings.py` generates scripted findings with `--lang en|zh`
+- Step 4: LLM only analyzes `llm_sections` (typically sections 5, 8, 17) — reads 3 reference files (~20KB) instead of 8 (~33KB)
+- Step 4c: `waf-build-issue-map.py` replaces LLM-written issue-rule-mapping.json
+- Step 7: adversarial re-derivation only on LLM-generated findings
+
+### Performance
+- LLM-written findings: ~21 → ~4 (for 27-rule example)
+- Reference context read by LLM: ~33KB → ~20KB
+- Estimated total time: ~10 min → ~5 min (27 rules)
+
 ## v0.3 (2026-03-31)
 
 ### Scripts (7 total)

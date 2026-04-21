@@ -12,10 +12,12 @@ flowchart LR
     B --> C["Mermaid 图生成"]
     B --> D["机械预检"]
     D --> D2["附录生成"]
+    D2 --> D3["确定性发现生成"]
     C --> E["LLM 分析"]
-    D2 --> E
+    D3 --> E
     E --> E2["报告头生成"]
-    E2 --> F["Mermaid 标注"]
+    E2 --> E3["Issue Map 生成"]
+    E3 --> F["Mermaid 标注"]
     F --> G["报告验证"]
     G --> H["LLM 自审"]
     H --> I["评审报告"]
@@ -24,7 +26,9 @@ flowchart LR
     style C fill:#e1f5fe
     style D fill:#e1f5fe
     style D2 fill:#e1f5fe
+    style D3 fill:#e1f5fe
     style E2 fill:#e1f5fe
+    style E3 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
     style E fill:#fff3e0
@@ -33,7 +37,7 @@ flowchart LR
 
 蓝色 = Python 脚本（确定性），橙色 = LLM 推理
 
-脚本处理结构化提取、图表生成和机械验证，LLM 聚焦于安全分析和报告撰写。
+脚本处理结构化提取、图表生成、机械验证和确定性发现生成，LLM 仅聚焦于需要判断力的安全分析（Bot Control 策略、Cookie 逻辑、跨规则依赖）。
 
 ## 功能
 
@@ -41,10 +45,11 @@ flowchart LR
 
 1. **预处理** — 提取结构化规则摘要，压缩输入（56KB → 16KB）
 2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 6 项确定性问题
-3. **LLM 分析** — 按 18 项检查清单逐项审查，覆盖 Allow 规则审计、scope-down 验证、AntiDDoS AMR 配置、Bot Control 设置、SEO 影响、速率限制、跨规则依赖等
-4. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
-5. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
-6. **自审** — 机械验证 + 对抗性检查，确保报告准确性
+3. **确定性发现生成** — 19 个生成器自动产出约 80% 的发现（可伪造 Allow、scope-down 过窄、ChallengeAllDuringEvent 禁用、正则未锚定、缺失基线防护、优先级顺序等），支持中英双语
+4. **LLM 分析** — 仅分析需要判断力的检查项（Bot Control 策略、Cookie 逻辑、跨规则依赖），按 18 项检查清单中脚本未覆盖的部分逐项审查
+5. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
+6. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
+7. **自审** — 机械验证 + 对抗性检查（仅针对 LLM 生成的发现），确保报告准确性
 
 ## 安装
 
@@ -75,7 +80,9 @@ cp -r aws-waf-rules-reviewer ~/.kiro/skills/
     ├── waf-generate-mermaid.py
     ├── waf-pre-checks.py
     ├── waf-generate-appendix.py
+    ├── waf-generate-findings.py
     ├── waf-generate-report-header.py
+    ├── waf-build-issue-map.py
     ├── waf-annotate-mermaid.py
     └── waf-validate-report.py
 ```
@@ -113,12 +120,12 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 
 ## 性能预期
 
-LLM 分析步骤的耗时主要取决于参考文档的 context 大小（checklist + 领域知识库共 ~40KB），而非规则数量。以下为使用 Claude Sonnet 4.6 (1M) 的实测数据：
+v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅减少 LLM 的输出量和参考文档读取量。
 
 | 规则数量 | LLM 分析 thinking 时间 | 脚本步骤耗时 | 总耗时（估算） |
 |---------|----------------------|------------|-------------|
-| 27 条（实测） | ~5 分钟 | < 1 分钟 | ~10 分钟 |
-| 100+ 条（预估） | ~10 分钟 | < 1 分钟 | ~15 分钟 |
+| 27 条（实测） | ~2 分钟 | < 1 分钟 | ~5 分钟 |
+| 100+ 条（预估） | ~5 分钟 | < 1 分钟 | ~8 分钟 |
 
 > Thinking 时间受模型版本影响较大。随着模型对长 context 推理效率的提升，耗时预计会自然下降。
 
@@ -208,7 +215,7 @@ Kiro CLI 仅支持 Amazon Bedrock 上的 Claude 模型。在 Kiro 中使用 `/mo
 | Gemini 2.5 Flash | Google | 1M | 64K | 可控思考预算 |
 | Gemini 3.1 Pro Preview | Google | 1M | 64K | 多模态旗舰 |
 
-> 以上模型未经本工具实际测试。兼容性取决于你的 agent 框架如何将 skill 编排逻辑映射到模型 API。
+> 以上模型未经本工具实际测试。兼容性取决于你的 agent 框架如何将 skill 编排逻辑映射到模型 API。模型规格和可用性可能随时变化，请以各厂商官方文档为准。（最后核实：2026-03）
 
 ## 免责声明
 
