@@ -91,7 +91,7 @@ Generates deterministic findings for checklist sections that can be fully evalua
 - `scripted-findings.md` — complete Issue section Markdown
 - `findings-metadata.json` — structured metadata including `llm_sections`, `next_issue_number`, and `issue_rule_mapping`
 
-Parse `---RESULT---`. Note `LLM_SECTIONS` and `NEXT_ISSUE_NUMBER` from the result.
+Parse `---RESULT---`. Proceed on OK.
 
 ### Step 4: LLM analysis
 
