@@ -50,7 +50,7 @@ If the architecture supports it (e.g., separate CloudFront distributions or ALBs
 
 This eliminates the "which paths can Challenge" problem entirely. Security teams don't need to maintain exempt URI regex or custom rules. Zero custom configuration needed.
 
-**Good: dual AMR instance in same Web ACL**
+**Good: dual AMR instance in same Web ACL (frontend and API share the same domain)**
 
 When front/back separation isn't possible (same-origin architecture), deploy two AMR instances in the same Web ACL with different scope-downs:
 
