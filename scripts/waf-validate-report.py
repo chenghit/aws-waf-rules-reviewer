@@ -12,23 +12,16 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 
 def _load_json(path: str) -> dict:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
-        _fatal(f"Failed to read {path}: {e}")
+        fatal(f"Failed to read {path}: {e}")
 
 
 def _count_summary_rows(report: str) -> int:
@@ -37,17 +30,14 @@ def _count_summary_rows(report: str) -> int:
     count = 0
     for line in report.split("\n"):
         stripped = line.strip()
-        if not in_summary and stripped.startswith("| ") and ("严重" in stripped or "Severity" in stripped
-                                           or "问题" in stripped):
+        if not in_summary and stripped.startswith("| ") and ("严重" in stripped or "Severity" in stripped):
             in_summary = True
             continue
         if in_summary and stripped.startswith("|"):
             if stripped.startswith("|--") or stripped.startswith("| --"):
                 continue  # separator row
-            if stripped.startswith("| 🔴") or stripped.startswith("| 🟡") or \
-               stripped.startswith("| 🟢") or stripped.startswith("| 🔵"):
-                count += 1
-            elif re.match(r'\|\s*#\d+', stripped):
+            # Count any data row (starts with | and contains at least 2 more |)
+            if stripped.count("|") >= 3:
                 count += 1
         elif in_summary and not stripped.startswith("|"):
             break  # end of table
@@ -199,7 +189,7 @@ def _check_prechecks_coverage(report: str, prechecks: dict) -> dict:
 
 def main():
     if len(sys.argv) < 3:
-        _fatal("Usage: waf-validate-report.py <output_dir> <input_file>")
+        fatal("Usage: waf-validate-report.py <output_dir> <input_file>")
 
     output_dir = sys.argv[1]
     report_path = os.path.join(output_dir, "waf-review-report.md")
@@ -208,7 +198,7 @@ def main():
 
     for p in (report_path, summary_path, meta_path):
         if not os.path.isfile(p):
-            _fatal(f"Required file not found: {p}")
+            fatal(f"Required file not found: {p}")
 
     report = Path(report_path).read_text(encoding="utf-8")
     summary = _load_json(summary_path)

@@ -13,6 +13,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 GROUPED_MODE_THRESHOLD = 25
 SCRIPTS_DIR = Path(__file__).parent
@@ -347,33 +348,25 @@ def _node_id_for_rule(rule: dict, fold_groups: list) -> str:
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 def main():
     if len(sys.argv) < 2:
-        _fatal("Usage: waf-generate-mermaid.py <output_dir>")
+        fatal("Usage: waf-generate-mermaid.py <output_dir>")
 
     output_dir = sys.argv[1]
     summary_file = os.path.join(output_dir, "waf-summary.json")
 
     if not os.path.isfile(summary_file):
-        _fatal(f"waf-summary.json not found in {output_dir}")
+        fatal(f"waf-summary.json not found in {output_dir}")
 
     try:
         summary = json.loads(Path(summary_file).read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
-        _fatal(f"Failed to read {summary_file}: {e}")
+        fatal(f"Failed to read {summary_file}: {e}")
 
     rules = summary.get("rules", [])
     if not rules:
-        _fatal("No rules found in waf-summary.json")
+        fatal("No rules found in waf-summary.json")
 
     default_action = summary.get("web_acl", {}).get("default_action", "allow")
     managed_labels = _load_managed_labels()

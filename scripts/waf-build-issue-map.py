@@ -11,16 +11,9 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 
-def _fatal(msg: str):
-    print(f"Error: {msg}", file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 
 def _extract_llm_rule_refs(report: str, min_issue: int, valid_rules: set) -> dict:
@@ -39,7 +32,7 @@ def _extract_llm_rule_refs(report: str, min_issue: int, valid_rules: set) -> dic
             continue
         # Extract rule names from **Rule**: or **Rules**: lines
         # Patterns: "name (priority N)", "name (PN)"
-        for rm in re.finditer(r'([\w-]+)\s*\((?:priority\s*|P)(\d+)\)', line):
+        for rm in re.finditer(r'([\w.\-:]+)\s*\((?:priority\s*|P)(\d+)\)', line):
             rule_name = rm.group(1)
             if rule_name not in valid_rules:
                 continue
@@ -52,7 +45,7 @@ def _extract_llm_rule_refs(report: str, min_issue: int, valid_rules: set) -> dic
 
 def main():
     if len(sys.argv) < 2:
-        _fatal("Usage: waf-build-issue-map.py <output_dir>")
+        fatal("Usage: waf-build-issue-map.py <output_dir>")
 
     output_dir = sys.argv[1]
     meta_path = os.path.join(output_dir, "findings-metadata.json")
@@ -61,7 +54,7 @@ def main():
 
     for p in (meta_path, report_path, summary_path):
         if not os.path.isfile(p):
-            _fatal(f"{os.path.basename(p)} not found in {output_dir}")
+            fatal(f"{os.path.basename(p)} not found in {output_dir}")
 
     metadata = json.loads(Path(meta_path).read_text(encoding="utf-8"))
     report = Path(report_path).read_text(encoding="utf-8")

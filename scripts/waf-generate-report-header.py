@@ -15,16 +15,9 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
+from waf_utils import fatal
 
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 
 SEVERITY_ORDER = {
@@ -79,16 +72,16 @@ def _extract_impact(report: str, issue_number: int) -> str:
 
 def main():
     if len(sys.argv) < 2:
-        _fatal("Usage: waf-generate-report-header.py <output_dir>")
+        fatal("Usage: waf-generate-report-header.py <output_dir>")
 
     output_dir = sys.argv[1]
     report_path = os.path.join(output_dir, "waf-review-report.md")
     summary_path = os.path.join(output_dir, "waf-summary.json")
 
     if not os.path.isfile(report_path):
-        _fatal(f"waf-review-report.md not found in {output_dir}")
+        fatal(f"waf-review-report.md not found in {output_dir}")
     if not os.path.isfile(summary_path):
-        _fatal(f"waf-summary.json not found in {output_dir}")
+        fatal(f"waf-summary.json not found in {output_dir}")
 
     report = Path(report_path).read_text(encoding="utf-8")
     summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
@@ -99,7 +92,7 @@ def main():
 
     issues = _extract_issues(report)
     if not issues:
-        _fatal("No Issue sections found in report")
+        fatal("No Issue sections found in report")
 
     # Sort by severity for Summary table display (issues keep original order in report)
     sorted_issues = sorted(issues, key=lambda i: SEVERITY_ORDER.get(i["severity_key"], 9))
