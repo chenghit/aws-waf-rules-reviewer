@@ -12,6 +12,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 # Keys to skip during processing (internal/display-only fields)
 SKIP_KEYS = frozenset({
@@ -66,7 +67,7 @@ def _find_input_file(input_path: str) -> str:
         return str(p.resolve())
     if p.is_dir():
         candidates = []
-        for f in p.glob("*.json"):
+        for f in p.rglob("*.json"):
             try:
                 data = json.loads(f.read_text(encoding="utf-8", errors="replace"))
                 if _detect_format(data) is not None:
@@ -74,12 +75,12 @@ def _find_input_file(input_path: str) -> str:
             except (json.JSONDecodeError, OSError):
                 continue
         if len(candidates) == 0:
-            _fatal(f"No WAF JSON found in {p}")
+            fatal(f"No WAF JSON found in {p}")
         if len(candidates) > 1:
             names = ", ".join(c.name for c in candidates)
-            _fatal(f"Multiple WAF JSON files found: {names}. Please specify the exact file path.")
+            fatal(f"Multiple WAF JSON files found: {names}. Please specify the exact file path.")
         return str(candidates[0].resolve())
-    _fatal(f"Path not found: {input_path}")
+    fatal(f"Path not found: {input_path}")
 
 def _detect_format(data: dict) -> str | None:
     if "WebACL" in data and isinstance(data["WebACL"], dict):
@@ -100,7 +101,7 @@ def _extract_web_acl(data: dict) -> tuple[dict, str]:
         return data["web_acl"], fmt
     if fmt == "console_export":
         return data, fmt
-    _fatal("Unrecognized WAF JSON format")
+    fatal("Unrecognized WAF JSON format")
 
 # ── Line number tracking ──────────────────────────────────────────────────
 
@@ -138,8 +139,9 @@ def _build_line_index(text: str, rules_key: str) -> dict[int, tuple[int, int]]:
             if escaped:
                 escaped = False
                 continue
-            if ch == '\\' and in_string:
-                escaped = True
+            if ch == '\\':
+                if in_string:
+                    escaped = True
                 continue
             if ch == '"':
                 in_string = not in_string
@@ -562,18 +564,9 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
-
 def main():
     if len(sys.argv) < 3:
-        _fatal("Usage: waf-preprocess.py <input_path> <output_dir>")
+        fatal("Usage: waf-preprocess.py <input_path> <output_dir>")
 
     input_path = sys.argv[1]
     output_dir = sys.argv[2]
@@ -587,12 +580,12 @@ def main():
         raw_text = Path(input_file).read_text(encoding="utf-8", errors="replace")
         raw_data = json.loads(raw_text)
     except (json.JSONDecodeError, OSError) as e:
-        _fatal(f"Failed to parse {input_file}: {e}")
+        fatal(f"Failed to parse {input_file}: {e}")
 
     # Detect format and extract web_acl
     fmt = _detect_format(raw_data)
     if fmt is None:
-        _fatal(f"Unrecognized WAF JSON format in {input_file}")
+        fatal(f"Unrecognized WAF JSON format in {input_file}")
 
     web_acl_raw, fmt = _extract_web_acl(raw_data)
 
@@ -676,7 +669,7 @@ def main():
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)
     except OSError as e:
-        _fatal(f"Failed to write {output_file}: {e}")
+        fatal(f"Failed to write {output_file}: {e}")
 
     print(f"Processed {len(rules)} rules", file=sys.stderr)
     print("---RESULT---")

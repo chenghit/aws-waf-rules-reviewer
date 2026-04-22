@@ -12,6 +12,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 # ── Forgeability mapping ──────────────────────────────────────────────────
 # Source of truth: managed-labels.json (forgeability section).
@@ -32,7 +33,12 @@ UNFORGEABLE_FIELDS = {
 ALL_KNOWN_FIELDS = FORGEABLE_FIELDS | UNFORGEABLE_FIELDS | UNFORGEABLE_STMT_TYPES | {"label_match"}
 
 def _classify_condition(summary: str) -> tuple[list, list]:
-    """Parse statement summary and classify conditions as forgeable/unforgeable."""
+    """Parse statement summary and classify conditions as forgeable/unforgeable.
+
+    IMPORTANT: This regex is tightly coupled to the summary format produced by
+    _summarize_statement() in waf-preprocess.py. If that format changes, update
+    the patterns here accordingly.
+    """
     forgeable = []
     unforgeable = []
 
@@ -77,30 +83,44 @@ def _check_token_domain(web_acl: dict) -> dict:
     if not domains:
         return {"status": "PASS", "finding": None}
 
-    # Find apex domains and their subdomains
+    # Find apex domains and their subdomains.
+    # Heuristic: the shortest domain for each TLD suffix is the apex.
+    # This handles multi-part TLDs like .co.uk, .com.cn, .co.jp.
     issues = []
+
+    # Group domains by their last-2 parts (potential simple TLD)
+    # Then identify apex as the shortest domain in each suffix group
     apex_domains = set()
-    for d in domains:
-        parts = d.split(".")
-        if len(parts) == 2:  # apex domain like example.com
+    # Sort by part count ascending — shortest first
+    sorted_domains = sorted(domains, key=lambda d: len(d.split(".")))
+    for d in sorted_domains:
+        # A domain is an apex if no existing apex is a suffix of it
+        is_sub = any(d.endswith("." + apex) for apex in apex_domains)
+        if not is_sub:
             apex_domains.add(d)
 
     redundant = []
     for d in domains:
-        parts = d.split(".")
-        if len(parts) == 2:
+        if d in apex_domains:
             continue  # apex itself
-        # Check if parent apex covers this subdomain (suffix match, any depth)
-        apex = ".".join(parts[-2:])
-        if apex in apex_domains:
+        # Check if any apex covers this subdomain (suffix match)
+        covering_apex = next((a for a in apex_domains if d.endswith("." + a)), None)
+        if covering_apex:
             redundant.append(d)
 
-    # Check for missing apex
-    all_apexes = set()
+    # Check for missing apex: domains whose apex (shortest covering suffix)
+    # is not in the token_domains list
+    missing_apex = set()
     for d in domains:
-        parts = d.split(".")
-        all_apexes.add(".".join(parts[-2:]))
-    missing_apex = all_apexes - apex_domains
+        if d in apex_domains:
+            continue
+        has_covering = any(d.endswith("." + a) for a in apex_domains)
+        if not has_covering:
+            # This domain has no covering apex in the list — it IS an apex
+            # (already handled above), or its apex is missing.
+            # Since we already identified all apexes, this shouldn't happen,
+            # but guard against it.
+            missing_apex.add(d)
 
     if redundant:
         issues.append(f"Redundant subdomains (covered by apex): {', '.join(redundant)}")
@@ -311,30 +331,22 @@ def _flag_exempt_regex(rules: list) -> list:
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 def main():
     if len(sys.argv) < 3:
-        _fatal("Usage: waf-pre-checks.py <output_dir> <input_file>")
+        fatal("Usage: waf-pre-checks.py <output_dir> <input_file>")
 
     output_dir = sys.argv[1]
     input_file = sys.argv[2]
     summary_file = os.path.join(output_dir, "waf-summary.json")
 
     if not os.path.isfile(summary_file):
-        _fatal(f"waf-summary.json not found in {output_dir}")
+        fatal(f"waf-summary.json not found in {output_dir}")
 
     try:
         summary = json.loads(Path(summary_file).read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
-        _fatal(f"Failed to read {summary_file}: {e}")
+        fatal(f"Failed to read {summary_file}: {e}")
 
     web_acl = summary.get("web_acl", {})
     rules = summary.get("rules", [])
@@ -364,7 +376,7 @@ def main():
         Path(output_file).write_text(
             json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
-        _fatal(f"Failed to write {output_file}: {e}")
+        fatal(f"Failed to write {output_file}: {e}")
 
     checks_run = len(pre_checks)
     checks_failed = sum(1 for v in pre_checks.values() if v["status"] == "FAIL")

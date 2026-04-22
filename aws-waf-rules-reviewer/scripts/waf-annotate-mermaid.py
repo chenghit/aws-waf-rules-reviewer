@@ -17,23 +17,16 @@ import os
 import re
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 
-def _fatal(msg: str):
-    print(msg, file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 
 def _load_json(path: str) -> dict:
     try:
         return json.loads(Path(path).read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as e:
-        _fatal(f"Failed to read {path}: {e}")
+        fatal(f"Failed to read {path}: {e}")
 
 
 def _build_rule_to_node(metadata: dict) -> dict[str, str]:
@@ -107,10 +100,25 @@ def _expand_fold_group(mermaid_lines: list, fold_group: dict,
                 nxt = f"rule_{fold_group['priorities'][i + 1]}"
                 new_lines.append(f"    {curr} --> {nxt}")
             continue
-        # Arrow lines referencing the group id — replace with first rule id
+        # Arrow lines referencing the group id — replace with appropriate rule id
         if gid in stripped:
             first_id = f"rule_{fold_group['priorities'][0]}"
-            line = line.replace(gid, first_id)
+            last_id = f"rule_{fold_group['priorities'][-1]}"
+            # Determine direction: if gid is the source (before -->), use last rule;
+            # if gid is the target (after -->), use first rule
+            if "-->" in stripped or "-.->" in stripped:
+                arrow_pos = stripped.find("-->")
+                if arrow_pos < 0:
+                    arrow_pos = stripped.find("-.->")
+                gid_pos = stripped.find(gid)
+                if gid_pos < arrow_pos:
+                    # gid is source — outgoing arrow should come from last rule
+                    line = line.replace(gid, last_id)
+                else:
+                    # gid is target — incoming arrow should go to first rule
+                    line = line.replace(gid, first_id)
+            else:
+                line = line.replace(gid, first_id)
         new_lines.append(line)
 
     return new_lines
@@ -134,7 +142,7 @@ def _annotate_node(line: str, node_id: str, annotation: str) -> str:
 
 def main():
     if len(sys.argv) < 2:
-        _fatal("Usage: waf-annotate-mermaid.py <output_dir>")
+        fatal("Usage: waf-annotate-mermaid.py <output_dir>")
 
     output_dir = sys.argv[1]
 
@@ -146,7 +154,7 @@ def main():
 
     for p in (base_path, meta_path, mapping_path, report_path):
         if not os.path.isfile(p):
-            _fatal(f"Required file not found: {p}")
+            fatal(f"Required file not found: {p}")
 
     base_text = Path(base_path).read_text(encoding="utf-8")
     metadata = _load_json(meta_path)

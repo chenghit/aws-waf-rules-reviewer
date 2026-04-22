@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from waf_utils import fatal
 
 APPENDIX_SECTIONS = r"""
 ---
@@ -175,19 +176,11 @@ When adding or reviewing managed rule groups, consider these common overrides:
 """
 
 
-def _fatal(msg: str):
-    print(f"ERROR: {msg}", file=sys.stderr)
-    print("---RESULT---")
-    print("SPEC: 1")
-    print("STATUS: FATAL")
-    print(f"ACTION: FIX")
-    print(f"CONTEXT: {msg}")
-    sys.exit(2)
 
 
 def main():
     if len(sys.argv) < 2:
-        _fatal("Usage: waf-generate-appendix.py <output_dir>")
+        fatal("Usage: waf-generate-appendix.py <output_dir>")
 
     output_dir = sys.argv[1]
     summary_path = os.path.join(output_dir, "waf-summary.json")
@@ -203,13 +196,13 @@ def main():
         except (json.JSONDecodeError, OSError):
             pass  # Fall back to unknown
 
-    content = APPENDIX_SECTIONS.format(wcu_text=wcu_text)
+    content = APPENDIX_SECTIONS.replace("{wcu_text}", wcu_text)
 
     output_file = os.path.join(output_dir, "appendix.md")
     try:
         Path(output_file).write_text(content, encoding="utf-8")
     except OSError as e:
-        _fatal(f"Failed to write {output_file}: {e}")
+        fatal(f"Failed to write {output_file}: {e}")
 
     print("Generated appendix with 6 sections", file=sys.stderr)
     print("---RESULT---")
