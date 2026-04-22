@@ -1,5 +1,7 @@
 # AWS WAF 规则评审工具
 
+<!-- NOTE: Keep README.md and README_EN.md in sync when making changes. -->
+
 [English](README_EN.md)
 
 一个用于评审 AWS WAF Web ACL 配置的 [Agent Skill](https://agentskills.io)，帮助发现安全问题、配置错误和优化机会。
@@ -215,7 +217,7 @@ Kiro CLI 仅支持 Amazon Bedrock 上的 Claude 模型。在 Kiro 中使用 `/mo
 | Gemini 2.5 Flash | Google | 1M | 64K | 可控思考预算 |
 | Gemini 3.1 Pro Preview | Google | 1M | 64K | 多模态旗舰 |
 
-> 以上模型未经本工具实际测试。兼容性取决于你的 agent 框架如何将 skill 编排逻辑映射到模型 API。模型规格和可用性可能随时变化，请以各厂商官方文档为准。（最后核实：2026-03）
+> 以上模型未经本工具实际测试。兼容性取决于你的 agent 框架如何将 skill 编排逻辑映射到模型 API。模型规格和可用性可能随时变化，请以各厂商官方文档为准。
 
 ## 免责声明
 

@@ -1,5 +1,7 @@
 # AWS WAF Rules Reviewer
 
+<!-- NOTE: Keep README.md and README_EN.md in sync when making changes. -->
+
 [中文版](README.md)
 
 An [Agent Skill](https://agentskills.io) that reviews AWS WAF Web ACL configurations for security issues, misconfigurations, and optimization opportunities.
@@ -215,7 +217,7 @@ Any model meeting the 64K output requirement should work. The following models h
 | Gemini 2.5 Flash | Google | 1M | 64K | Controllable thinking budget |
 | Gemini 3.1 Pro Preview | Google | 1M | 64K | Multimodal flagship |
 
-> These models are not tested with this tool. Compatibility depends on how well your agent framework maps the skill orchestration logic to the model's API. Model specs and availability may change at any time — refer to each provider's official documentation. (Last verified: 2026-03)
+> These models are not tested with this tool. Compatibility depends on how well your agent framework maps the skill orchestration logic to the model's API. Model specs and availability may change at any time — refer to each provider's official documentation.
 
 ## Disclaimer
 
