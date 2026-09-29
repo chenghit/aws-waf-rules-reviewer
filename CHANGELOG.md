@@ -1,5 +1,39 @@
 # Changelog
 
+## v0.6 (2026-09-29)
+
+Findings from reviewing 16 production Web ACLs exported with `get-web-acl`.
+
+### Fixed
+- `waf-preprocess.py` now base64-decodes ByteMatch `SearchString` values. Real exports store them base64-encoded, so every path-based check was comparing encoded strings, and the opaque-value check reported ordinary paths such as `/risk-center` as possible secrets.
+- Key normalization turned `UriPath` into `uripath` (the `i_p` → `ip` fix matched inside words), so no check recognized URI path conditions in PascalCase exports. Fixes now apply to whole segments only.
+- Managed version check skipped rule groups with no `VersionToUse`. It now reports unpinned groups, and Bot Control on the default Version_1.0 or below 5.0 as Medium. The "SQLi below 2.0" rule is gone: SQLi has two version lineages, so a lower number isn't an older detection.
+- Count-without-labels check now covers rate-based rules.
+- Appendix no longer contains literal `{{ }}`.
+- `waf-annotate-mermaid.py` replaces a marked appendix block instead of appending, so re-running it is safe, and it appends the appendix even when there are no annotations.
+- Exempt-regex finding no longer suggests `^` on end-anchored branches (it produced `^\.(css|js)$`).
+- Duplicate-rule findings use `(priority N)` rule references, which the validator reads; removed a double space in the title.
+- Missing-baseline finding dropped a template sentence that described every Web ACL as "focused on DDoS and Bot protection".
+
+### Changed
+- The rule priority finding no longer compares rules against a generic order table. It reports only orderings with real consequences: labels consumed before they're produced, IP block lists after Allow rules, content inspection after Allow rules in default-Block Web ACLs, and Bot Control before blocking rules (cost only, Low).
+- New "recommended protections" finding for default-Allow Web ACLs: missing Anti-DDoS AMR and IP reputation list (Medium), anonymous IP list and Bot Control (Low), each with where to place it. Default-Block allow-list Web ACLs don't get these recommendations.
+- Missing-baseline finding is Low in default-Block Web ACLs and says CRS/KnownBadInputs must run before the Allow rules.
+- Pre-checks read structured `leaves` (field, match type, value, text transformations, fallback, negation) recorded by the preprocessor, instead of parsing the summary string.
+
+### New checks (12 pre-checks, 26 generators)
+- UriFragment with `FallbackBehavior: MATCH` (always true; Critical in Allow rules)
+- Allow rules with only forgeable, path-scoped conditions (Critical in default-Block Web ACLs, Medium otherwise)
+- Path Block rules without `URL_DECODE` (encoding bypass)
+- Literal `*` in byte matches, and query-string patterns on `UriPath` (never match)
+- Managed rule groups in Count, and content rules overridden to Count (`SizeRestrictions_BODY` excluded on purpose)
+- TGT_* overrides while Bot Control runs at COMMON level
+- Checklist sections 19 (custom rule matching correctness), 20 (protections left in Count), and 21 (PCI DSS, LLM-reviewed for payment customers)
+
+### Knowledge and workflow
+- References: Bot Control version differences and COMMON-level blind spots, rate-based rule limits, body inspection limits, why 4xx auto-blocking doesn't help against burst scanning, Anti-DDoS AMR is not a scanning control, SQLi version lineages, PCI ASV scan interference and Requirement 6.4.2.
+- AGENTS.md: English heading prefix and field labels are required so the scripts can parse translated reports; content rules for customer-facing findings; defined rule-reference format, the ⏳ marker, the self-review summary, and re-running Steps 4b to 6 after Step 7 changes; per-file output folders when a directory holds several Web ACLs.
+
 ## v0.5 (2026-09-29)
 
 ### Breaking

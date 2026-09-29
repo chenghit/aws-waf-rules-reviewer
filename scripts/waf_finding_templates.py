@@ -67,14 +67,13 @@ TEMPLATES_EN = {
 {dup_rec}
 ---
 """,
-"missing_baseline": """## Issue {n} (Medium): Missing {missing_names} baseline protection rule groups
+"missing_baseline": """## Issue {n} ({severity}): Missing {missing_names} baseline protection rule groups
 
 **Rule**: N/A (missing rule)
 **Current state**: Web ACL does not contain {missing_names}
 
 **Problem**:
 - {missing_detail}
-- The current Web ACL focuses on DDoS and Bot protection but lacks application-layer attack protection
 
 **Recommendation**:
 {missing_rec}
@@ -235,20 +234,6 @@ TEMPLATES_EN = {
 
 ---
 """,
-"managed_versions": """## Issue {n} (Low): {detail}
-
-**Rule**: {rule_name} (priority {priority})
-**Current state**: Using {current_version}
-
-**Problem**:
-- {version_problem}
-
-**Recommendation**:
-- {version_rec}
-- Test in a staging environment before upgrading to confirm no increase in false positives
-
----
-""",
 "missing_always_on_challenge": """## Issue {n} (Medium): Missing Always-on Challenge — DDoS protection relies on reactive detection delay
 
 **Rule**: N/A (missing rule)
@@ -264,27 +249,6 @@ TEMPLATES_EN = {
   1. Count+Label rule: match landing page URIs (`/`, `/login`, `/signup`, etc.), add label `custom:landing-page`
   2. Challenge rule: match `custom:landing-page` label, apply Challenge action; exclude `crawler:verified` label (requires crawler labeling rule from Appendix A)
 - Set Challenge rule token immunity time to at least 4 hours (14400 seconds) to minimize impact on real users
-
----
-""",
-"priority_order": """## Issue {n} (Medium): Rule priority order issues — {summary}
-
-**Rule**: Multiple rules
-**Current state**: {current_state}
-
-**Problem**:
-{problems}
-
-**Recommendation**:
-- After cleaning up duplicate rules, reorganize priority order
-- Recommended order (see Appendix D):
-  1. Crawler labeling rule
-  2. AntiDDoS AMR
-  3. IP reputation + Anonymous IP
-  4. Rate-based rules
-  5. Custom Block/Challenge rules
-  6. Landing Page Always-on Challenge
-  7. Bot Control (last — per-request pricing, placing last minimizes cost)
 
 ---
 """,
@@ -316,6 +280,151 @@ TEMPLATES_EN = {
 **Recommendation**:
 - Review whether Allow is truly needed; in most cases, Count (preserves labels, request continues) is the safer choice
 - If Allow is intentional, document the business justification
+
+---
+""",
+"order_issues": """## Issue {n} ({severity}): Rule order issues: {summary}
+
+**Rules**: {rule_line}
+**Current state**: Existing rules are evaluated in an order that changes what gets inspected or blocked
+
+**Problem**:
+{problems}
+
+**Recommendation**:
+{recs}
+- When adding new rule types, see Appendix D for where they belong
+
+---
+""",
+"recommended_protections": """## Issue {n} ({severity}): Recommended protections not deployed: {names}
+
+**Rule**: N/A (missing rule)
+**Current state**: This Web ACL allows traffic by default and serves internet traffic without these protections
+
+**Problem**:
+{problems}
+
+**Recommendation**:
+{recs}
+- Add each one in Count first, review what it matches, then switch to its default actions
+
+---
+""",
+"bot_control_version": """## Issue {n} (Medium): Bot Control runs an old version with much weaker detection
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: {current_version}
+
+**Problem**:
+- {detail}
+- Versions 2.0/3.0 added most TARGETED rules (`TGT_TokenAbsent`, the `TGT_TokenReuse*` rules by IP, ASN, and country, `TGT_VolumetricSessionMaximum`, `TGT_SignalBrowserAutomationExtension`). Version 5.0 added 400+ bot signatures and new categories at COMMON level. Later versions keep adding signatures
+- On the old version, far fewer bots are recognized, so COMMON-level categories match much less traffic
+
+**Recommendation**:
+- Pin the latest static version (see the AWS Managed Rules changelog). Run it in Count first and compare labels with current traffic: 5.0 changed rule match precedence and added categories, so the same request can get different labels after the upgrade
+- Subscribe to the rule group's SNS topic and add a CloudWatch alarm on `DaysToExpiry` for the pinned version
+
+---
+""",
+"managed_unpinned": """## Issue {n} (Low): Managed rule groups not pinned to a version
+
+**Rules**: {rule_line}
+**Current state**: No `VersionToUse` on {groups}
+
+**Problem**:
+- These rule groups follow the AWS default version. AWS announces default-version changes only through each rule group's SNS topic, not in the changelog, so detection can change without any change to this Web ACL
+{sqli_note}
+**Recommendation**:
+- Pin each rule group to a static version. Test a new version in Count before switching
+- Subscribe to each rule group's SNS topic and alarm on `DaysToExpiry` for pinned versions
+
+---
+""",
+"uri_fragment_fallback": """## Issue {n} ({severity}): UriFragment condition always matches, so the path restriction is void
+
+**Rules**: {rule_line}
+**Current state**: {rule_names} match `UriFragment` with `FallbackBehavior: MATCH`
+
+**Problem**:
+- `UriFragment` is the part of a URL after `#`. Browsers and HTTP clients don't send it to the server, so the condition falls back to MATCH on every request
+{allow_note}
+
+**Recommendation**:
+- Match `UriPath` instead. Confirm the sender's real path before changing, then verify its requests still pass
+
+---
+""",
+"uri_path_pitfalls": """## Issue {n} (Medium): URI path conditions that can never match as written
+
+**Rules**: {rule_line}
+**Current state**: Conditions on `UriPath` whose pattern can't match a real path
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+- Keep the rule in Count after fixing it, check what it matches, then switch to its intended action
+
+---
+""",
+"path_block_decoding": """## Issue {n} (Medium): Path Block rules don't URL-decode, so encoded paths slip through
+
+**Rules**: {rule_line}
+**Current state**: Block rules match `UriPath` without `URL_DECODE`
+
+**Problem**:
+- WAF inspects the raw URI path as the client sent it. Without a decoding transformation, `/%69nternal/` doesn't match `/internal/`. If the origin decodes the path, the request reaches the path the rule meant to block
+- `URL_DECODE` decodes once, so double encoding such as `%2569` needs it twice
+{details}
+
+**Recommendation**:
+- Use this transformation chain on path Block rules, in order: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `NORMALIZE_PATH`, `LOWERCASE`
+- Test whether the origin decodes paths. If it doesn't, the practical risk is lower
+
+---
+""",
+"path_only_allow": """## Issue {n} ({severity}): Allow rules match only on request content, with no IP or other unforgeable condition
+
+**Rules**: {rule_line}
+**Current state**: {rule_names} allow requests by path (and other request content) alone
+
+**Problem**:
+- Anyone who knows or guesses the path gets the request straight to the origin. Allow ends evaluation, so no later rule inspects it
+{acl_note}
+**Recommendation**:
+- Add the sender's IP set where the sender publishes egress IPs
+- Otherwise the application must verify request signatures, and content inspection (CRS, KnownBadInputs) scoped to these paths should run before the Allow rules
+- Use `EXACTLY`, or a `STARTS_WITH` value as specific as possible
+
+---
+""",
+"managed_count": """## Issue {n} (Medium): Managed protections left in Count
+
+**Rules**: {rule_line}
+**Current state**: Managed rule groups, or rules inside them, set to Count
+
+**Problem**:
+{details}
+- Count only records metrics and labels, it doesn't block. `SizeRestrictions_BODY` in Count is a common deliberate choice and isn't listed here
+
+**Recommendation**:
+- Review Count-period matches rule by rule, then switch rules to their default action
+- For rules with confirmed false positives on specific paths, keep them in Count and add a custom rule after the group that blocks their label everywhere except those paths
+
+---
+""",
+"bot_control_tgt_common": """## Issue {n} (Low): TGT_* overrides have no effect at COMMON inspection level
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: `InspectionLevel: COMMON` with {count} TGT_* overrides: {tgt_list}
+
+**Problem**:
+- TGT_* rules only run at TARGETED level, so these overrides do nothing
+
+**Recommendation**:
+- Remove them, or move to TARGETED deliberately. TARGETED relies on tokens from Challenge or the JS/mobile SDK and doesn't suit machine-to-machine APIs
 
 ---
 """,
@@ -388,14 +497,13 @@ TEMPLATES_ZH = {
 {dup_rec}
 ---
 """,
-"missing_baseline": """## Issue {n} (Medium): 缺少 {missing_names} 基线防护规则组
+"missing_baseline": """## Issue {n} ({severity}): 缺少 {missing_names} 基线防护规则组
 
 **Rule**: N/A（缺失规则）
 **Current state**: Web ACL 中没有 {missing_names}
 
 **Problem**:
 - {missing_detail}
-- 当前 Web ACL 专注于 DDoS 和 Bot 防护，但缺乏应用层攻击防护
 
 **Recommendation**:
 {missing_rec}
@@ -556,20 +664,6 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"managed_versions": """## Issue {n} (Low): {detail}
-
-**Rule**: {rule_name} (priority {priority})
-**Current state**: 使用 {current_version}
-
-**Problem**:
-- {version_problem}
-
-**Recommendation**:
-- {version_rec}
-- 升级前在测试环境验证，确认无误报增加
-
----
-""",
 "missing_always_on_challenge": """## Issue {n} (Medium): 缺少 Always-on Challenge，DDoS 防护依赖响应式检测的延迟窗口
 
 **Rule**: N/A（缺失规则）
@@ -585,27 +679,6 @@ TEMPLATES_ZH = {
   1. Count+Label 规则：匹配 landing page URI（`/`、`/login`、`/signup` 等），添加标签 `custom:landing-page`
   2. Challenge 规则：匹配 `custom:landing-page` 标签，应用 Challenge action；在条件中排除 `crawler:verified` 标签（需先实现爬虫标记规则）
 - 将 Challenge 规则的 token immunity time 设置为至少 4 小时（14400 秒），避免真实用户频繁被 Challenge
-
----
-""",
-"priority_order": """## Issue {n} (Medium): 规则优先级顺序存在问题——{summary}
-
-**Rule**: 多条规则
-**Current state**: {current_state}
-
-**Problem**:
-{problems}
-
-**Recommendation**:
-- 清理重复规则后，重新整理优先级顺序
-- 建议顺序（参考附录 D）：
-  1. 爬虫标记规则
-  2. AntiDDoS AMR
-  3. IP 信誉 + 匿名 IP
-  4. 速率限制规则
-  5. 自定义 Block/Challenge 规则
-  6. Landing Page Always-on Challenge
-  7. Bot Control（最后，按请求计费，放最后最省成本）
 
 ---
 """,
@@ -637,6 +710,151 @@ TEMPLATES_ZH = {
 **Recommendation**:
 - 评估是否真正需要 Allow；大多数情况下，Count（保留标签，请求继续评估）是更安全的选择
 - 如果 Allow 是有意为之，请记录业务理由
+
+---
+""",
+"order_issues": """## Issue {n} ({severity}): 规则顺序问题，{summary}
+
+**Rules**: {rule_line}
+**Current state**: 现有规则的评估顺序，影响到了哪些请求会被检查或拦截
+
+**Problem**:
+{problems}
+
+**Recommendation**:
+{recs}
+- 新增规则类型时放在哪个位置，参考附录 D
+
+---
+""",
+"recommended_protections": """## Issue {n} ({severity}): 建议补充的防护：{names}
+
+**Rule**: N/A（缺失规则）
+**Current state**: 这个 ACL 默认放行，面向公网流量，但没有部署这些防护
+
+**Problem**:
+{problems}
+
+**Recommendation**:
+{recs}
+- 每一项都先用 Count 加进去，看清楚命中的是什么流量，再切回默认动作
+
+---
+""",
+"bot_control_version": """## Issue {n} (Medium): Bot Control 跑的是旧版本，识别能力弱很多
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: {current_version}
+
+**Problem**:
+- {detail}
+- 2.0/3.0 版本加入了大部分 TARGETED 规则（`TGT_TokenAbsent`、按 IP、ASN、国家区分的 `TGT_TokenReuse*`、`TGT_VolumetricSessionMaximum`、`TGT_SignalBrowserAutomationExtension`）。5.0 版本在 COMMON 级别新增了 400 多种 bot 特征和新的类别。之后的版本还在继续增加特征
+- 旧版本能认出的 bot 少得多，COMMON 级别各个类别能命中的流量也少得多
+
+**Recommendation**:
+- 固定到最新的静态版本（见 AWS Managed Rules changelog）。先用 Count 跑一段时间，对比升级前后的标签：5.0 调整了规则的匹配顺序并新增了类别，同一个请求升级后可能命中不同的标签
+- 订阅规则组的 SNS 主题，并给固定的版本设置 `DaysToExpiry` 的 CloudWatch 告警
+
+---
+""",
+"managed_unpinned": """## Issue {n} (Low): 托管规则组没有固定版本
+
+**Rules**: {rule_line}
+**Current state**: {groups} 没有设置 `VersionToUse`
+
+**Problem**:
+- 这些规则组跟着 AWS 的默认版本走。AWS 调整默认版本时不写进 changelog，只通过各规则组的 SNS 主题通知，所以 ACL 配置没变，检测行为也可能变了
+{sqli_note}
+**Recommendation**:
+- 给每个规则组固定一个静态版本。切换新版本前先用 Count 观察
+- 订阅各规则组的 SNS 主题，给固定的版本设置 `DaysToExpiry` 告警
+
+---
+""",
+"uri_fragment_fallback": """## Issue {n} ({severity}): UriFragment 条件恒为真，路径限制失效
+
+**Rules**: {rule_line}
+**Current state**: {rule_names} 用 `UriFragment` 做匹配，且 `FallbackBehavior: MATCH`
+
+**Problem**:
+- `UriFragment` 是 URL 里 `#` 后面的部分。浏览器和 HTTP 客户端都不会把它发给服务器，所以每个请求都会走 fallback，被当成匹配
+{allow_note}
+
+**Recommendation**:
+- 改成匹配 `UriPath`。修改前先确认发送方的真实路径，改完后确认它的请求仍能正常通过
+
+---
+""",
+"uri_path_pitfalls": """## Issue {n} (Medium): 有些 URI 路径条件按现在的写法永远不会命中
+
+**Rules**: {rule_line}
+**Current state**: `UriPath` 上的匹配模式和真实路径对不上
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+- 修正后先保持 Count，看清楚命中情况，再切到原本想要的动作
+
+---
+""",
+"path_block_decoding": """## Issue {n} (Medium): 路径拦截规则没做 URL 解码，编码后的路径可以绕过
+
+**Rules**: {rule_line}
+**Current state**: Block 规则匹配 `UriPath` 时没有 `URL_DECODE`
+
+**Problem**:
+- WAF 检查的是客户端发来的原始路径。没有解码转换时，`/%69nternal/` 匹配不上 `/internal/`。如果源站会解码，请求就会到达规则本来要拦的路径
+- `URL_DECODE` 只解码一次，`%2569` 这种双重编码要写两次
+{details}
+
+**Recommendation**:
+- 路径拦截规则按这个顺序加文本转换：`URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`NORMALIZE_PATH`、`LOWERCASE`
+- 测试一下源站会不会对路径做解码。如果不解码，实际风险会低一些
+
+---
+""",
+"path_only_allow": """## Issue {n} ({severity}): Allow 规则只按请求内容放行，没有 IP 等不可伪造的条件
+
+**Rules**: {rule_line}
+**Current state**: {rule_names} 只凭路径等请求内容就放行
+
+**Problem**:
+- 任何人只要知道或猜到路径，请求就能直达源站。Allow 会终止规则评估，后面的规则都不会再检查它
+{acl_note}
+**Recommendation**:
+- 发送方公布了出口 IP 的，补上对应的 IP set 条件
+- 拿不到出口 IP 的，应用层必须校验请求签名，并在 Allow 规则前面加上限定在这些路径的内容检测（CRS、KnownBadInputs）
+- 路径尽量用 `EXACTLY`，或者把 `STARTS_WITH` 的值写得更具体
+
+---
+""",
+"managed_count": """## Issue {n} (Medium): 托管规则的防护处于 Count
+
+**Rules**: {rule_line}
+**Current state**: 托管规则组整组，或组里的部分规则，被设成了 Count
+
+**Problem**:
+{details}
+- Count 只记录指标和标签，不拦截。`SizeRestrictions_BODY` 保持 Count 是常见的合理做法，这里没有列出
+
+**Recommendation**:
+- 逐条查看 Count 期间的命中情况，再把规则切回默认动作
+- 已确认在特定路径上有误报的规则，保持 Count，在规则组后面加一条自定义规则：匹配它的标签，并排除这些路径，动作设为 Block
+
+---
+""",
+"bot_control_tgt_common": """## Issue {n} (Low): COMMON 级别下的 TGT_* override 不起作用
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: `InspectionLevel: COMMON`，配了 {count} 条 TGT_* override：{tgt_list}
+
+**Problem**:
+- TGT_* 规则只在 TARGETED 级别运行，这些 override 不会有任何效果
+
+**Recommendation**:
+- 删掉这些 override，或者明确决定改用 TARGETED。TARGETED 依赖 Challenge 或 JS/移动端 SDK 拿到的 token，不适合机器调用的 API
 
 ---
 """,

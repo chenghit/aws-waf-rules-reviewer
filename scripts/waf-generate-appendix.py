@@ -196,7 +196,9 @@ def main():
         except (json.JSONDecodeError, OSError):
             pass  # Fall back to unknown
 
-    content = APPENDIX_SECTIONS.replace("{wcu_text}", wcu_text)
+    # Template braces are escaped as {{ }} for readability; undo after substitution
+    content = (APPENDIX_SECTIONS.replace("{wcu_text}", wcu_text)
+               .replace("{{", "{").replace("}}", "}"))
 
     output_file = os.path.join(output_dir, "appendix.md")
     try:

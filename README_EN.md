@@ -47,8 +47,8 @@ Given a Web ACL, either as a JSON file or fetched from your account, the agent:
 
 1. **Fetches** (optional): pulls the Web ACL and its logging config with read-only AWS CLI calls
 2. **Preprocesses**: extracts structured rule summaries, compresses input (56KB → 16KB)
-3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (6 checks total)
-4. **Deterministic findings**: 19 generators auto-produce ~80% of findings (forgeable Allow, narrow scope-down, ChallengeAllDuringEvent disabled, unanchored regex, missing baseline, priority order, etc.) with bilingual support (en/zh)
+3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (12 checks total)
+4. **Deterministic findings**: 26 generators auto-produce most findings (forgeable Allow, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
 5. **LLM analysis**: only analyzes judgment-heavy checklist items (Bot Control strategy, cookie logic, cross-rule dependencies) from the sections not covered by scripts
 6. **Report generation**: severity-rated findings (Critical / Medium / Low / Awareness)
 7. **Mermaid flow diagram**: auto-generated rule execution flow with issue annotations
@@ -120,7 +120,7 @@ Generated using Claude Sonnet 4.6.
 
 ## Checklist Coverage
 
-The review covers 18 categories in two phases:
+The review covers 21 categories:
 
 **Phase 1: Independent Checks**
 
@@ -135,7 +135,7 @@ The review covers 18 categories in two phases:
 9. Missing baseline protections (CRS, KnownBadInputs)
 10. WCU capacity awareness
 11. Token domain configuration
-12. Managed rule group versions
+12. Managed rule group versions (unpinned groups, old Bot Control versions, SQLi version lineages)
 13. Logging and monitoring
 14. Hashed/opaque search_string in byte_match_statement
 15. Default action (redundant trailing Allow-all detection)
@@ -144,7 +144,13 @@ The review covers 18 categories in two phases:
 **Phase 2: Global Cross-checks**
 
 17. Cross-rule and label dependency analysis (label source verification + fix impact analysis)
-18. Rule priority ordering (label producers before consumers)
+18. Rule priority ordering (only orderings with real consequences: labels consumed before they're produced, block lists after Allow rules, inspection after Allow rules in allow-list ACLs)
+
+**Additional Checks**
+
+19. Custom rule matching correctness (URL decoding on path rules, literal wildcards, query patterns on UriPath, UriFragment fallback)
+20. Protections left in Count (whole managed groups, content rules overridden to Count)
+21. PCI DSS considerations for payment customers (ASV scan interference, Requirement 6.4.2)
 
 ## Version History
 

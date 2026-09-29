@@ -6,6 +6,11 @@
 - Compares current traffic snapshots to baseline, assigns suspicion scores (low/medium/high)
 - Distinguishes DDoS from flash crowds (legitimate traffic spikes)
 
+### Not a scanning control
+- Acts only while a DDoS event is detected for the resource. Vulnerability scanning is low-volume and spread across paths and IPs, so it doesn't trigger an event, and the rule group neither challenges nor blocks it
+- Don't recommend Anti-DDoS AMR as the answer to scanning; recommend it as HTTP flood protection for internet-facing Web ACLs
+- The Challenge exemption (`ExemptUriRegularExpressions`) matches URI paths only, not hosts. In a Web ACL that mixes browser and API hosts, exempting API traffic by path gets awkward: consider Block-only mitigation or splitting the Web ACL
+
 ### Performance
 - Detection and mitigation: "single digit seconds" for standard DDoS attacks per official documentation
 - Highly distributed low-rate attacks (many IPs, each sending minimal traffic) are harder to detect because per-IP anomaly may not be significant enough

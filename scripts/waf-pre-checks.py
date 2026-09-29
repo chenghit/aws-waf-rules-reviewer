@@ -15,65 +15,64 @@ from pathlib import Path
 from waf_utils import fatal
 
 # ── Forgeability mapping ──────────────────────────────────────────────────
-# Source of truth: managed-labels.json (forgeability section).
-# Hardcoded here to avoid file I/O at import time. Keep in sync.
+# Keep in sync with managed-labels.json (forgeability section).
 
-FORGEABLE_FIELDS = {
-    "single_header", "single_query_argument", "cookie", "cookies",
-    "body", "json_body", "uri_path", "query_string", "method",
-    "header_order", "headers",
+UNFORGEABLE_LEAF_TYPES = {"ip_set", "asn_match", "geo_match", "label_match"}
+UNFORGEABLE_FIELDS = {"ja3_fingerprint", "ja4_fingerprint"}
+
+# Managed groups that inspect request content (signatures), as opposed to
+# IP reputation, bot, fraud, and DDoS groups.
+CONTENT_GROUPS = {
+    "AWSManagedRulesCommonRuleSet", "AWSManagedRulesKnownBadInputsRuleSet",
+    "AWSManagedRulesSQLiRuleSet", "AWSManagedRulesLinuxRuleSet",
+    "AWSManagedRulesUnixRuleSet", "AWSManagedRulesWindowsRuleSet",
+    "AWSManagedRulesPHPRuleSet", "AWSManagedRulesWordPressRuleSet",
+    "AWSManagedRulesAdminProtectionRuleSet",
 }
-UNFORGEABLE_STMT_TYPES = {
-    "ip_set", "asn_match", "geo_match", "rate_based",
-}
-UNFORGEABLE_FIELDS = {
-    "ja3_fingerprint", "ja4_fingerprint",
-}
+# Rule overrides to Count that are common, deliberate practice
+ACCEPTED_COUNT_OVERRIDES = {"SizeRestrictions_BODY"}
+# AWS does not version the IP reputation groups
+UNVERSIONED_GROUPS = {"AWSManagedRulesAmazonIpReputationList", "AWSManagedRulesAnonymousIpList"}
+DECODE_TRANSFORMS = {"URL_DECODE", "URL_DECODE_UNI"}
+CASE_TRANSFORMS = {"LOWERCASE", "UPPERCASE"}
 
-ALL_KNOWN_FIELDS = FORGEABLE_FIELDS | UNFORGEABLE_FIELDS | UNFORGEABLE_STMT_TYPES | {"label_match"}
+LABELS = json.loads((Path(__file__).parent / "managed-labels.json").read_text(encoding="utf-8"))
 
-def _classify_condition(summary: str) -> tuple[list, list]:
-    """Parse statement summary and classify conditions as forgeable/unforgeable.
 
-    IMPORTANT: This regex is tightly coupled to the summary format produced by
-    _summarize_statement() in waf-preprocess.py. If that format changes, update
-    the patterns here accordingly.
-    """
-    forgeable = []
-    unforgeable = []
+def _leaves(rule: dict, include_scope_down: bool = False) -> list:
+    leaves = list(rule.get("statement", {}).get("leaves", []))
+    if include_scope_down and rule.get("scope_down"):
+        leaves += rule["scope_down"].get("leaves", [])
+    return leaves
 
-    # Extract known field types from summary (ignore quoted values)
-    # Match patterns like: "single_header:user-agent EXACTLY", "ip_set '...'", "asn_match [..."
-    for match in re.finditer(r'([\w]+(?::[\w:.-]+)?)\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS|\'|\[)', summary):
-        field = match.group(1)
-        base_field = field.split(":")[0]
 
-        if base_field not in ALL_KNOWN_FIELDS:
-            continue  # skip non-field tokens (e.g., search_string values)
-
-        if base_field in UNFORGEABLE_FIELDS or base_field in UNFORGEABLE_STMT_TYPES:
-            unforgeable.append(field)
-        elif base_field == "label_match":
-            unforgeable.append(field)
+def _classify_leaves(leaves: list) -> tuple[list, list]:
+    """Split a rule's match conditions into forgeable and unforgeable ones."""
+    forgeable, unforgeable = [], []
+    for l in leaves:
+        if l["type"] in UNFORGEABLE_LEAF_TYPES:
+            name = l["type"]
+        elif l["field"] in UNFORGEABLE_FIELDS:
+            name = l["field"]
         else:
-            forgeable.append(field)
-
-    # Check for statement-level patterns not caught by field regex
-    for stmt_type in UNFORGEABLE_STMT_TYPES:
-        if stmt_type in summary and stmt_type not in [u.split(":")[0] for u in unforgeable]:
-            unforgeable.append(stmt_type)
-
+            if l["field"] not in forgeable:
+                forgeable.append(l["field"])
+            continue
+        if name not in unforgeable:
+            unforgeable.append(name)
     return forgeable, unforgeable
 
-def _has_uri_constraint(summary: str) -> bool:
-    """Check if statement contains a meaningful URI path constraint.
-    uri_path STARTS_WITH '/' matches all traffic — not a real constraint."""
-    if not re.search(r'uri_path\s+(?:EXACTLY|STARTS_WITH|ENDS_WITH|CONTAINS)', summary):
-        return False
-    # STARTS_WITH '/' matches everything — treat as no constraint
-    if re.search(r"uri_path\s+STARTS_WITH\s+'/'", summary):
-        return False
-    return True
+
+def _has_uri_constraint(leaves: list) -> bool:
+    """True if a non-negated URI path condition limits the rule to some paths.
+    uri_path STARTS_WITH '/' matches all traffic, so it doesn't count."""
+    return any(l["field"] == "uri_path" and not l["negated"]
+               and not (l["match"] == "STARTS_WITH" and l["value"] == "/")
+               for l in leaves)
+
+
+def _ref(r: dict) -> dict:
+    return {"name": r["name"], "priority": r["priority"]}
 
 # ── Pre-checks ────────────────────────────────────────────────────────────
 
@@ -134,28 +133,29 @@ def _check_token_domain(web_acl: dict) -> dict:
     return {"status": "PASS", "finding": None}
 
 def _check_managed_versions(rules: list) -> dict:
-    """Check #12: managed rule group versions."""
-    issues = []
+    """Check #12: managed rule groups not pinned to a static version, or pinned
+    to an old Bot Control version."""
+    unpinned, outdated = [], []
     for r in rules:
         mg = r.get("managed")
-        if not mg:
+        if not mg or mg.get("vendor", "AWS") != "AWS":
             continue
         gn = mg.get("group_name", "")
+        if gn in UNVERSIONED_GROUPS:
+            continue
         ver = mg.get("version", "")
-
-        if "SQLiRuleSet" in gn or "sqli" in gn.lower():
-            # Check if version < 2.0
-            m = re.search(r'(\d+)\.(\d+)', ver)
-            if m and int(m.group(1)) < 2:
-                issues.append(f"{r['name']}: SQLiRuleSet version {ver} < 2.0 (recommend upgrading)")
-
-        if "BotControlRuleSet" in gn or "bot_control" in gn.lower():
-            m = re.search(r'(\d+)\.(\d+)', ver)
-            if m and int(m.group(1)) < 5:
-                issues.append(f"{r['name']}: BotControlRuleSet version {ver} < 5.0 (recommend upgrading)")
-
-    if issues:
-        return {"status": "FAIL", "finding": "; ".join(issues), "details": issues}
+        if not ver:
+            unpinned.append(dict(_ref(r), group=gn))
+            continue
+        m = re.search(r'(\d+)\.(\d+)', ver)
+        if m and "BotControl" in gn and int(m.group(1)) < 5:
+            outdated.append(dict(_ref(r), group=gn, version=ver))
+    if unpinned or outdated:
+        parts = [f"{u['name']}: {u['group']} not pinned (follows AWS default version)" for u in unpinned]
+        parts += [f"{o['name']}: {o['group']} pinned to {o['version']}" for o in outdated]
+        return {"status": "FAIL", "finding": "; ".join(parts),
+                "unpinned": unpinned, "outdated": outdated,
+                "rules": unpinned + outdated}
     return {"status": "PASS", "finding": None}
 
 def _check_default_action_redundancy(web_acl: dict, rules: list) -> dict:
@@ -181,14 +181,14 @@ def _check_count_without_labels(rules: list) -> dict:
     """Check #17a: custom Count rules without RuleLabels."""
     flagged = []
     for r in rules:
-        if (r["action"] == "count" and r["type"] == "custom"
+        if (r["action"] == "count" and r["type"] in ("custom", "rate_based")
                 and not r.get("rule_labels")):
             flagged.append({"name": r["name"], "priority": r["priority"]})
 
     if flagged:
         names = ", ".join(f["name"] for f in flagged)
         return {"status": "FAIL",
-                "finding": f"Custom Count rules without labels (metric-only): {names}",
+                "finding": f"Count rules without labels (metric-only): {names}",
                 "rules": flagged}
     return {"status": "PASS", "finding": None}
 
@@ -229,6 +229,201 @@ def _check_hosting_provider_allow(rules: list) -> dict:
                         "rule": r["name"], "priority": r["priority"]}
     return {"status": "PASS", "finding": None}
 
+def _check_uri_fragment_fallback(rules: list) -> dict:
+    """UriFragment with FallbackBehavior MATCH: requests never carry a fragment,
+    so the condition is always true and any path restriction is void."""
+    flagged = []
+    for r in rules:
+        for l in _leaves(r, include_scope_down=True):
+            if l["field"] == "uri_fragment" and l.get("fallback") == "MATCH" and not l["negated"]:
+                flagged.append(dict(_ref(r), action=r["action"], match=l["match"], value=l["value"]))
+                break
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "UriFragment conditions that always match: " +
+                           ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_uri_path_pitfalls(rules: list) -> dict:
+    """URI path conditions that can never match as written: a literal '*' in a
+    byte match (no wildcard support), or a query-string pattern on UriPath
+    (UriPath excludes the query string)."""
+    flagged = []
+    for r in rules:
+        problems = []
+        for l in _leaves(r, include_scope_down=True):
+            if l["field"] != "uri_path" or l["value"] is None:
+                continue
+            v = str(l["value"])
+            if l["type"] == "byte_match":
+                if "*" in v:
+                    problems.append({"kind": "literal_wildcard", "value": v})
+                if "?" in v:
+                    problems.append({"kind": "query_in_path", "value": v})
+            elif l["type"] == "regex_match" and re.search(r'\\\?|\[[^\]]*\?[^\]]*\]', v):
+                problems.append({"kind": "query_in_path", "value": v})
+        if problems:
+            flagged.append(dict(_ref(r), action=r["action"], problems=problems))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "URI path conditions that cannot match: " +
+                           ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_path_block_decoding(rules: list) -> dict:
+    """Custom Block rules matching URI paths without URL decoding. WAF inspects
+    the raw path, so percent-encoded variants of a blocked path slip through."""
+    flagged = []
+    for r in rules:
+        if r["type"] != "custom" or r["action"] != "block":
+            continue
+        path = [l for l in _leaves(r) if l["field"] == "uri_path" and not l["negated"]
+                and l["type"] in ("byte_match", "regex_match", "regex_pattern_set")]
+        no_decode = [l for l in path if not DECODE_TRANSFORMS & set(l["transforms"])]
+        if not no_decode:
+            continue
+        transforms = sorted({"+".join(l["transforms"]) or "NONE" for l in no_decode})
+        case_sensitive = any(not CASE_TRANSFORMS & set(l["transforms"]) for l in no_decode)
+        flagged.append(dict(_ref(r), transforms=transforms, case_sensitive=case_sensitive))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Path Block rules without URL_DECODE: " +
+                           ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_managed_count(rules: list) -> dict:
+    """Managed rule groups set to Count as a whole, and content rules inside
+    them overridden to Count."""
+    groups, overrides = [], []
+    for r in rules:
+        mg = r.get("managed")
+        if not mg:
+            continue
+        gn = mg.get("group_name", "")
+        if r["action"] == "count":
+            groups.append(dict(_ref(r), group=gn))
+            continue
+        if gn not in CONTENT_GROUPS:
+            continue
+        counted = [o["rule_name"] for o in mg.get("overrides", [])
+                   if o.get("action") == "count" and o["rule_name"] not in ACCEPTED_COUNT_OVERRIDES]
+        counted += [e for e in mg.get("excluded_rules", []) if e not in ACCEPTED_COUNT_OVERRIDES]
+        if counted:
+            overrides.append(dict(_ref(r), group=gn, overridden=counted))
+    if groups or overrides:
+        return {"status": "FAIL", "groups": groups, "overrides": overrides,
+                "rules": groups + overrides,
+                "finding": "Managed protections in Count: " +
+                           ", ".join(x["name"] for x in groups + overrides)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_bot_control_config(rules: list) -> dict:
+    """TGT_* overrides configured while Bot Control runs at COMMON level: those
+    rules only exist at TARGETED, so the overrides do nothing."""
+    for r in rules:
+        mg = r.get("managed")
+        if not mg or "BotControl" not in mg.get("group_name", ""):
+            continue
+        level = (mg.get("config") or {}).get("inspection_level", "COMMON")
+        tgt = [o["rule_name"] for o in mg.get("overrides", []) if o["rule_name"].startswith("TGT_")]
+        if level == "COMMON" and tgt:
+            return {"status": "FAIL", "rule": r["name"], "priority": r["priority"],
+                    "tgt_overrides": tgt,
+                    "finding": f"{len(tgt)} TGT_* overrides with InspectionLevel COMMON"}
+    return {"status": "PASS", "finding": None}
+
+
+def _label_producers(rules: list) -> list:
+    """(label or namespace prefix, rule) pairs for everything that adds labels."""
+    prefixes = LABELS["managed_label_prefixes"]
+    token_groups = set(LABELS["token_label_producers"])
+    producers = []
+    for r in rules:
+        for lbl in r.get("rule_labels", []):
+            producers.append((lbl, r))
+        mg = r.get("managed")
+        if mg:
+            gn = mg.get("group_name", "")
+            producers += [(pfx, r) for pfx, g in prefixes.items() if g == gn]
+            if gn in token_groups:
+                producers.append(("awswaf:managed:token:", r))
+        if r["action"] in ("challenge", "captcha"):
+            producers.append(("awswaf:managed:token:", r))
+    return producers
+
+
+def _produces(label: str, key: str, scope: str) -> bool:
+    if scope == "NAMESPACE":
+        return label.startswith(key) or key.startswith(label)
+    if label.endswith(":"):  # managed namespace prefix
+        return key.startswith(label)
+    return key == label or key.endswith(":" + label)
+
+
+def _check_order_issues(web_acl: dict, rules: list) -> dict:
+    """Check #18: ordering problems with real consequences among existing rules."""
+    ordered = sorted(rules, key=lambda r: r["priority"])
+    producers = _label_producers(ordered)
+    issues = []
+
+    # Label consumed before any rule that produces it
+    for r in ordered:
+        for l in _leaves(r, include_scope_down=True):
+            if l["type"] != "label_match":
+                continue
+            makers = [p for lbl, p in producers
+                      if p is not r and _produces(lbl, l["value"], l["match"])]
+            if makers and all(p["priority"] > r["priority"] for p in makers):
+                issues.append({"kind": "label_before_producer", "rule": _ref(r),
+                               "label": l["value"], "producers": [_ref(p) for p in makers]})
+
+    # IP block list evaluated after Allow rules
+    allows = [r for r in ordered if r["action"] == "allow"]
+    for r in ordered:
+        leaves = _leaves(r)
+        if (r["action"] == "block" and leaves
+                and all(l["type"] == "ip_set" and not l["negated"] for l in leaves)):
+            before = [a for a in allows if a["priority"] < r["priority"]]
+            if before:
+                issues.append({"kind": "blocklist_after_allow", "rule": _ref(r),
+                               "allows": [_ref(a) for a in before]})
+
+    # Default-Block ACL: content inspection after Allow rules never sees allowed traffic
+    if web_acl.get("default_action") == "block":
+        for r in ordered:
+            mg = r.get("managed")
+            if not mg or mg.get("group_name") not in CONTENT_GROUPS or r["action"] == "count":
+                continue
+            before = [a for a in allows if a["priority"] < r["priority"]]
+            if before:
+                issues.append({"kind": "inspection_after_allow", "rule": _ref(r),
+                               "group": mg["group_name"], "allows": [_ref(a) for a in before]})
+
+    # Bot Control charges per inspected request; later blocking rules waste that
+    bot = next((r for r in ordered if "BotControl" in (r.get("managed") or {}).get("group_name", "")), None)
+    if bot:
+        later = [r for r in ordered if r["priority"] > bot["priority"]
+                 and r["action"] in ("block", "challenge", "captcha")
+                 and not any(l["type"] == "label_match" and "bot-control" in str(l["value"])
+                             for l in _leaves(r, include_scope_down=True))]
+        if later:
+            issues.append({"kind": "bot_control_not_last", "rule": _ref(bot),
+                           "later": [_ref(x) for x in later]})
+
+    if issues:
+        involved = []
+        for i in issues:
+            if i["rule"] not in involved:
+                involved.append(i["rule"])
+        return {"status": "FAIL", "issues": issues, "rules": involved,
+                "finding": f"{len(issues)} ordering issues: " +
+                           ", ".join(sorted({i['kind'] for i in issues}))}
+    return {"status": "PASS", "finding": None}
+
 # ── Flags ─────────────────────────────────────────────────────────────────
 
 def _flag_allow_rules(rules: list) -> list:
@@ -238,9 +433,10 @@ def _flag_allow_rules(rules: list) -> list:
         if r["action"] != "allow":
             continue
         summary = r.get("statement", {}).get("summary", "")
-        forgeable, unforgeable = _classify_condition(summary)
+        leaves = _leaves(r)
+        forgeable, unforgeable = _classify_leaves(leaves)
         all_forgeable = len(unforgeable) == 0 and len(forgeable) > 0
-        blast_radius = "path_scoped" if _has_uri_constraint(summary) else "global"
+        blast_radius = "path_scoped" if _has_uri_constraint(leaves) else "global"
 
         flags.append({
             "name": r["name"],
@@ -359,6 +555,12 @@ def main():
         "count_without_labels": _check_count_without_labels(rules),
         "challenge_on_post_api": _check_challenge_on_post_api(rules),
         "hosting_provider_allow": _check_hosting_provider_allow(rules),
+        "uri_fragment_fallback": _check_uri_fragment_fallback(rules),
+        "uri_path_pitfalls": _check_uri_path_pitfalls(rules),
+        "path_block_decoding": _check_path_block_decoding(rules),
+        "managed_count": _check_managed_count(rules),
+        "bot_control_config": _check_bot_control_config(rules),
+        "order_issues": _check_order_issues(web_acl, rules),
     }
 
     # Build flags

@@ -24,18 +24,6 @@ APPENDIX_ONLY_SECTIONS = {10}
 
 SEVERITY_ORDER = {"Critical": 0, "Medium": 1, "Low": 2, "Awareness": 3}
 
-RECOMMENDED_ORDER = [
-    ("ip_allow", "IP whitelist/blacklist"),
-    ("crawler_labeling", "Crawler labeling rule"),
-    ("antiddos_amr", "AntiDDoS AMR"),
-    ("ip_reputation", "IP reputation / Anonymous IP"),
-    ("rate_based", "Rate-based rules"),
-    ("custom_block_challenge", "Custom Block/Challenge rules"),
-    ("always_on_challenge", "Always-on Challenge"),
-    ("app_layer", "Application-layer rule groups (CRS, KnownBadInputs)"),
-    ("bot_control", "Bot Control / ATP / ACFP"),
-]
-
 MANAGED_BASELINE_GROUPS = {
     "AWSManagedRulesCommonRuleSet": "CRS",
     "AWSManagedRulesKnownBadInputsRuleSet": "KnownBadInputs",
@@ -48,48 +36,99 @@ IP_REPUTATION_GROUPS = {
 
 CRAWLER_LABEL_PATTERNS = ("crawler:", "custom:crawler")
 
+AMR_GROUP = "AWSManagedRulesAntiDDoSRuleSet"
+BOT_GROUP = "AWSManagedRulesBotControlRuleSet"
+
+LINES = {
+    "en": {
+        "label_before_producer": "- {rules} matches label `{label}`, but every rule that adds it runs later: {others}. The condition never matches",
+        "blocklist_after_allow": "- IP block list(s) {rules} run after Allow rules {others}. Requests those rules allow are never checked against the block list, so a listed IP that also matches them gets through",
+        "inspection_after_allow": "- {group} rule group {rules} runs after Allow rules {others}. The default action is Block, so it only inspects traffic that would be blocked anyway. Traffic those Allow rules let through is never inspected",
+        "bot_control_not_last": "- Bot Control {rules} runs before blocking rules {others}. Bot Control is charged per inspected request, so requests those rules block are paid for first. Cost only, no security impact",
+        "rec_label_before_producer": "- Move the rule that adds the label ahead of the rule that matches it",
+        "rec_blocklist_after_allow": "- Move IP block lists ahead of all Allow rules",
+        "rec_inspection_after_allow": "- Move content inspection rule groups ahead of the Allow rules so allowed traffic is inspected first. Start in Count: partner payloads may trigger false positives",
+        "rec_bot_control_not_last": "- Place Bot Control after rules that block requests on their own",
+        "order_title": "{count} issue(s)",
+        "rec_literal_wildcard": "- For wildcard intent, use a regex, or drop the `*` and keep `STARTS_WITH`",
+        "rec_query_in_path": "- To match query parameters, use `QueryString` or `SingleQueryArgument` as the field to match",
+        "wildcard": "- `{rule}` (priority {p}): `{value}` contains `*`. Byte match has no wildcards, so `*` is a literal character and this condition only matches paths that literally contain it",
+        "query_in_path": "- `{rule}` (priority {p}): `{value}` expects a query string, but UriPath never includes the query string, so this condition never matches",
+        "no_decode": "- `{rule}` (priority {p}): text transformation {transforms}{case}",
+        "case_note": ". No LOWERCASE either, so a case change like `/Internal/` also gets through",
+        "group_count": "- `{rule}` (priority {p}, {group}): the whole rule group is set to Count, none of its rules block",
+        "rule_count": "- `{rule}` (priority {p}, {group}): {names} overridden to Count",
+        "fragment_allow": "- For Allow rules this removes the path restriction: the rule allows every path for the requests its other conditions match",
+        "default_block_note": "- This Web ACL blocks by default and relies on allow lists, so these rules are open entries into it\n",
+        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` has two version lineages with different detection trade-offs. The 2.0 line added JSON parsing to `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5 form a separate line. Choose a lineage deliberately\n",
+        "default_version": "AWS default (Version_1.0)",
+        "unpinned_bot": "Bot Control is not pinned to a static version, so it runs the AWS default version, Version_1.0",
+        "outdated_bot": "Bot Control is pinned to {version}",
+        "missing_amr": "- No Anti-DDoS rule group: this Web ACL allows traffic by default and has no automatic HTTP flood mitigation (Medium)",
+        "missing_iprep": "- No Amazon IP reputation list: IPs on AWS threat intelligence lists, including ones doing reconnaissance and scanning, are not blocked (Medium)",
+        "missing_anon": "- No anonymous IP list: traffic from VPNs, Tor, proxies, and non-AWS cloud hosts is not flagged. Many scanners run on cloud hosts (Low)",
+        "missing_bot": "- No Bot Control: if this Web ACL serves browser pages, self-identifying bots and non-browser clients are not classified (Low)",
+        "rec_amr": "- Anti-DDoS: add `AWSManagedRulesAntiDDoSRuleSet` at the top of the Web ACL, after IP allow lists. Don't scope it down. Exempt API and machine-to-machine paths from Challenge with the exempt URI regex",
+        "rec_iprep": "- IP reputation: add `AWSManagedRulesAmazonIpReputationList` after Anti-DDoS, before rate-based and custom rules",
+        "rec_anon": "- Anonymous IP: add `AWSManagedRulesAnonymousIpList` next to the IP reputation list, starting in Count. Scope it down to hosts or paths whose callers are end users: `HostingProviderIPList` blocks non-AWS cloud IPs and can block partners hosted there",
+        "rec_bot": "- Bot Control: add it last in the Web ACL, pinned to the latest static version, scoped down to browser-facing hosts or paths",
+        "placement_block": "- This Web ACL blocks by default: put the rule groups ahead of the Allow rules, or they never inspect the traffic those rules let through. Scope them down to paths that need inspection and start in Count",
+        "placement_allow": "- Place them after IP reputation and rate-based rules",
+    },
+    "zh": {
+        "label_before_producer": "- {rules}匹配标签 `{label}`，但产生这个标签的规则都排在它后面：{others}。这个条件永远不会成立",
+        "blocklist_after_allow": "- IP 黑名单 {rules}排在 Allow 规则 {others} 后面。被这些规则放行的请求不会再经过黑名单，已经拉黑的 IP 只要同时命中这些 Allow 规则，就会被放行",
+        "inspection_after_allow": "- {group} 规则组 {rules}排在 Allow 规则 {others} 后面。默认动作是 Block，它只检查到本来就会被拦的流量，被这些 Allow 规则放行的流量完全没有经过内容检测",
+        "bot_control_not_last": "- Bot Control {rules}排在会拦截请求的规则 {others} 前面。Bot Control 按检查的请求数收费，这些规则拦下的请求已经先计过费了。这一条只影响费用，不影响安全",
+        "rec_label_before_producer": "- 把产生标签的规则调到匹配该标签的规则前面",
+        "rec_blocklist_after_allow": "- 把 IP 黑名单调到所有 Allow 规则前面",
+        "rec_inspection_after_allow": "- 把内容检测规则组调到 Allow 规则前面，放行之前先检查。先用 Count 观察，合作方的回调 payload 可能会误报",
+        "rec_bot_control_not_last": "- 把 Bot Control 放到这些拦截规则后面",
+        "order_title": "发现 {count} 处",
+        "rec_literal_wildcard": "- 想做通配匹配，改用正则，或者去掉 `*` 保留 `STARTS_WITH`",
+        "rec_query_in_path": "- 想匹配查询参数，把匹配字段改成 `QueryString` 或 `SingleQueryArgument`",
+        "wildcard": "- `{rule}`（priority {p}）：`{value}` 里有 `*`。字节匹配不支持通配符，`*` 就是一个普通字符，这个条件只会匹配路径里真的带 `*` 的请求",
+        "query_in_path": "- `{rule}`（priority {p}）：`{value}` 要匹配的是查询串，但 UriPath 不包含查询串，这个条件永远不会命中",
+        "no_decode": "- `{rule}`（priority {p}）：文本转换为 {transforms}{case}",
+        "case_note": "。也没有做 LOWERCASE，改一下大小写（如 `/Internal/`）也能绕过",
+        "group_count": "- `{rule}`（priority {p}，{group}）：整个规则组设成了 Count，组里的规则都不拦截",
+        "rule_count": "- `{rule}`（priority {p}，{group}）：{names} 被改成了 Count",
+        "fragment_allow": "- 对 Allow 规则来说，路径限制因此失效：只要其他条件满足，任何路径都会被放行",
+        "default_block_note": "- 这个 ACL 默认 Block，靠白名单放行，这些规则等于在白名单上开了口子\n",
+        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` 分成两条版本线，检测逻辑不同。2.0 那条线给 `SQLi_BODY` 加了 JSON 解析；1.3、2.3、2.4、2.5 是另一条线。选版本时要明确选哪条线\n",
+        "default_version": "AWS 默认版本（Version_1.0）",
+        "unpinned_bot": "Bot Control 没有固定版本，跑的是 AWS 默认版本 Version_1.0",
+        "outdated_bot": "Bot Control 固定在 {version}",
+        "missing_amr": "- 没有部署 Anti-DDoS 规则组：这个 ACL 默认放行，遇到 HTTP flood 时没有自动缓解（Medium）",
+        "missing_iprep": "- 没有部署 Amazon IP 信誉列表：AWS 威胁情报名单上的 IP，包括正在做侦察和扫描的 IP，都不会被拦（Medium）",
+        "missing_anon": "- 没有部署匿名 IP 列表：来自 VPN、Tor、代理和非 AWS 云主机的流量不会被标记。很多扫描器跑在云主机上（Low）",
+        "missing_bot": "- 没有部署 Bot Control：如果这个 ACL 承载浏览器页面，自报身份的 bot 和非浏览器客户端都不会被分类（Low）",
+        "rec_amr": "- Anti-DDoS：在 ACL 最前面（IP 白名单之后）加 `AWSManagedRulesAntiDDoSRuleSet`，不要加 scope-down。API 和机器调用的路径用豁免正则排除在 Challenge 之外",
+        "rec_iprep": "- IP 信誉：`AWSManagedRulesAmazonIpReputationList` 放在 Anti-DDoS 之后、限速和自定义规则之前",
+        "rec_anon": "- 匿名 IP：`AWSManagedRulesAnonymousIpList` 放在 IP 信誉列表旁边，先用 Count。用 scope-down 限定在调用方是最终用户的 host 或路径上：`HostingProviderIPList` 会拦非 AWS 的云主机 IP，可能误伤部署在其他云上的合作方",
+        "rec_bot": "- Bot Control：放在 ACL 最后，固定到最新的静态版本，用 scope-down 限定在浏览器访问的 host 或路径上",
+        "placement_block": "- 这个 ACL 默认 Block：规则组要放在 Allow 规则前面，否则检查不到被放行的流量。用 scope-down 限定在需要检查的路径上，先用 Count 观察",
+        "placement_allow": "- 放在 IP 信誉和限速规则之后",
+    },
+}
+
+SEVERITY_RANK = {"Critical": 0, "Medium": 1, "Low": 2, "Awareness": 3}
+
+
+def _refs(items: list) -> str:
+    return ", ".join(f"{i['name']} (priority {i['priority']})" for i in items)
+
+
+def _ticks(items: list) -> str:
+    return ", ".join(f"`{i['name']}`" for i in items)
+
+
 NOT_APPLICABLE = "NOT_APPLICABLE"
 AMBIGUOUS = "AMBIGUOUS"
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-
-
-def _classify_rule_type(rule: dict) -> str:
-    """Classify a rule into a recommended-order category."""
-    mg = rule.get("managed")
-    if mg:
-        gn = mg.get("group_name", "")
-        if "AntiDDoS" in gn:
-            return "antiddos_amr"
-        if "IpReputation" in gn or "AnonymousIp" in gn:
-            return "ip_reputation"
-        if "BotControl" in gn:
-            return "bot_control"
-        if "ATP" in gn or "ACFP" in gn:
-            return "bot_control"
-        if gn in MANAGED_BASELINE_GROUPS:
-            return "app_layer"
-        return "app_layer"
-    if rule.get("type") == "rate_based":
-        return "rate_based"
-    # Custom rules
-    if rule.get("action") == "allow":
-        # IP-set-based Allow = ip_allow
-        leaf_types = rule.get("statement", {}).get("leaf_types", [])
-        if "ip_set" in leaf_types:
-            return "ip_allow"
-    if rule.get("action") in ("challenge", "captcha"):
-        stmt = rule.get("statement", {}).get("summary", "")
-        # Check if it's an always-on challenge (label-based challenge)
-        if "label_match" in stmt:
-            return "always_on_challenge"
-    # Crawler labeling: Count + ASN + produces label
-    if (rule.get("action") == "count" and
-            "asn_match" in rule.get("statement", {}).get("leaf_types", [])):
-        return "crawler_labeling"
-    return "custom_block_challenge"
 
 
 def _has_opaque_value(value: str) -> str:
@@ -143,8 +182,10 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
                   if a.get("all_forgeable") and a.get("blast_radius") == "global"
                   and a["name"] != redundant_rule]
     if not candidates:
-        # If all Allow rules have unforgeable conditions, section is safe
-        remaining = [a for a in allow_flags if a["name"] != redundant_rule]
+        # If all Allow rules have unforgeable conditions, section is safe.
+        # Path-scoped forgeable rules are reported by _gen_path_only_allow.
+        remaining = [a for a in allow_flags if a["name"] != redundant_rule
+                     and not (a.get("all_forgeable") and a.get("blast_radius") == "path_scoped")]
         if not remaining:
             return NOT_APPLICABLE
         if all(not a.get("all_forgeable") for a in remaining):
@@ -265,7 +306,7 @@ def _gen_missing_baseline(summary, pre_checks, flags, T, lang):
     missing = {"CRS", "KnownBadInputs"} - present
     if not missing:
         return NOT_APPLICABLE
-    missing_names = " and ".join(sorted(missing))
+    missing_names = (" 和 " if lang == "zh" else " and ").join(sorted(missing))
     details = []
     recs = []
     if "CRS" in missing:
@@ -282,16 +323,20 @@ def _gen_missing_baseline(summary, pre_checks, flags, T, lang):
         else:
             details.append("KnownBadInputsRuleSet protects against Log4Shell (CVE-2021-44228), Java deserialization exploits, and other known malicious input patterns — low WCU cost, low false positive rate")
             recs.append("- Add AWSManagedRulesKnownBadInputsRuleSet (low WCU cost, recommended as priority)")
+    default_block = summary.get("web_acl", {}).get("default_action") == "block"
+    recs.append(LINES[lang]["placement_block" if default_block else "placement_allow"])
     cap = summary.get("web_acl", {}).get("capacity")
     if cap is not None:
         if lang == "zh":
             recs.append(f"- 添加前请在 AWS 控制台确认剩余 WCU 容量（当前已使用 {cap} WCU，上限 5000）")
         else:
             recs.append(f"- Verify remaining WCU capacity in AWS Console before adding (current: {cap} / 5000)")
+    # In an allow-list ACL, content inspection is defense in depth only
+    severity = "Low" if default_block else "Medium"
     md = T["missing_baseline"].format(
-        n="{n}", missing_names=missing_names,
+        n="{n}", severity=severity, missing_names=missing_names,
         missing_detail="\n- ".join(details), missing_rec="\n".join(recs))
-    return [(md, {"severity": "Medium", "title_key": "missing_baseline",
+    return [(md, {"severity": severity, "title_key": "missing_baseline",
                   "rules": [], "sections": [9]})]
 
 
@@ -408,7 +453,8 @@ def _gen_unanchored_exempt_regex(summary, pre_checks, flags, T, lang):
         examples = ", ".join(f"`/admin{b['pattern'].replace(chr(92), '')}/export`"
                              for b in unanchored[:2])
         anchored = "`" + "|".join(
-            f"^{b['pattern']}" if not b.get("anchored_start") else b["pattern"]
+            f"^{b['pattern']}" if not (b.get("anchored_start") or b.get("anchored_end"))
+            else b["pattern"]
             for b in rf["branches"]) + "`"
         md = T["unanchored_exempt_regex"].format(
             n="{n}", rule_name=rf["rule"], priority=rf["priority"],
@@ -480,7 +526,7 @@ def _gen_duplicate_rules(summary, pre_checks, flags, T, lang):
             continue
         sorted_g = sorted(group, key=lambda x: x["priority"])
         for i in range(0, len(sorted_g) - 1, 2):
-            all_pair_lines.append(f"{sorted_g[i]['name']} (P{sorted_g[i]['priority']}) / {sorted_g[i+1]['name']} (P{sorted_g[i+1]['priority']})")
+            all_pair_lines.append(f"{sorted_g[i]['name']} (priority {sorted_g[i]['priority']}) / {sorted_g[i+1]['name']} (priority {sorted_g[i+1]['priority']})")
         all_dup_names.extend(r["name"] for r in group)
 
     if not all_pair_lines:
@@ -495,7 +541,7 @@ def _gen_duplicate_rules(summary, pre_checks, flags, T, lang):
     else:
         dup_problem = "For rate-based rules with overlapping scope-downs, only the lowest-threshold rule triggers for overlapping traffic — higher-threshold duplicates have no additional effect"
         match_desc = "scope-down, limit, and window"
-        rule_type = "rate-limit "
+        rule_type = "rate-limit"
     md = T["duplicate_rules"].format(
         n="{n}", rule_type=rule_type, rule_line=rule_line,
         pair_count=pair_count, match_desc=match_desc,
@@ -509,46 +555,26 @@ def _gen_managed_versions(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("managed_versions", {})
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
+    L = LINES[lang]
     results = []
-    for detail_str in check.get("details", []):
-        # Parse "rule_name: GroupName version X < Y (recommend upgrading)"
-        parts = detail_str.split(":", 1)
-        rule_name = parts[0].strip() if parts else "unknown"
-        # Find rule
-        priority = 0
-        current_version = "unknown"
-        for r in summary.get("rules", []):
-            if r["name"] == rule_name:
-                priority = r["priority"]
-                current_version = r.get("managed", {}).get("version", "unknown")
-                break
-        if "BotControl" in detail_str:
-            version_problem = "BotControlRuleSet Version_5.0 Common level can identify close to 700 bot types (based on UA and IP), far more than earlier versions"
-            version_rec = "Upgrade BotControlRuleSet to Version_5.0"
-            detail_en = f"Bot Control version outdated ({current_version}), recommend upgrading to 5.0"
-            version_problem_zh = "BotControlRuleSet Version_5.0 的 Common level 可识别近 700 种 Bot 类型（基于 UA 和 IP），远超早期版本"
-            version_rec_zh = "将 BotControlRuleSet 升级至 Version_5.0"
-            detail_zh = f"Bot Control 版本过旧（{current_version}），建议升级至 5.0"
-        elif "SQLi" in detail_str:
-            version_problem = "SQLiRuleSet version 2.0 has significantly higher SQLi detection coverage than 1.0"
-            version_rec = "Upgrade SQLiRuleSet to version 2.0"
-            detail_en = f"SQLiRuleSet version outdated ({current_version}), recommend upgrading to 2.0"
-            version_problem_zh = "SQLiRuleSet 2.0 版本的 SQLi 检测覆盖率显著高于 1.0"
-            version_rec_zh = "将 SQLiRuleSet 升级至 2.0 版本"
-            detail_zh = f"SQLiRuleSet 版本过旧（{current_version}），建议升级至 2.0"
-        else:
-            continue
-        # Select language-appropriate strings
-        if lang == "zh":
-            detail, vp, vr = detail_zh, version_problem_zh, version_rec_zh
-        else:
-            detail, vp, vr = detail_en, version_problem, version_rec
-        md = T["managed_versions"].format(
-            n="{n}", detail=detail, rule_name=rule_name, priority=priority,
-            current_version=current_version, version_problem=vp,
-            version_rec=vr)
-        results.append((md, {"severity": "Low", "title_key": "managed_versions",
-                             "rules": [rule_name], "sections": [12]}))
+    bots = [u for u in check.get("unpinned", []) if u["group"] == BOT_GROUP]
+    bots += [o for o in check.get("outdated", []) if o["group"] == BOT_GROUP]
+    for b in bots:
+        version = b.get("version") or L["default_version"]
+        detail = L["outdated_bot"].format(version=b["version"]) if b.get("version") else L["unpinned_bot"]
+        md = T["bot_control_version"].format(
+            n="{n}", rule_name=b["name"], priority=b["priority"],
+            current_version=version, detail=detail)
+        results.append((md, {"severity": "Medium", "title_key": "bot_control_version",
+                             "rules": [b["name"]], "sections": [12]}))
+    others = [u for u in check.get("unpinned", []) if u["group"] != BOT_GROUP]
+    if others:
+        sqli_note = L["sqli_lineage"] if any("SQLi" in u["group"] for u in others) else ""
+        md = T["managed_unpinned"].format(
+            n="{n}", rule_line=_refs(others),
+            groups=", ".join(f"`{u['group']}`" for u in others), sqli_note=sqli_note)
+        results.append((md, {"severity": "Low", "title_key": "managed_unpinned",
+                             "rules": [u["name"] for u in others], "sections": [12]}))
     return results if results else NOT_APPLICABLE
 
 
@@ -585,54 +611,157 @@ def _gen_missing_always_on_challenge(summary, pre_checks, flags, T, lang):
                   "rules": [], "sections": [16]})]
 
 
-def _gen_priority_order(summary, pre_checks, flags, T, lang):
-    rules = summary.get("rules", [])
-    if len(rules) < 2:
+def _gen_order_issues(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("order_issues", {})
+    if check.get("status") != "FAIL":
         return NOT_APPLICABLE
-    # Classify each rule
-    classified = [(r, _classify_rule_type(r)) for r in rules]
-    order_index = {cat: i for i, (cat, _) in enumerate(RECOMMENDED_ORDER)}
+    L = LINES[lang]
+    # Merge issues of the same kind that share the same counterpart rules
+    merged = {}
+    for i in check["issues"]:
+        others = i.get("producers") or i.get("allows") or i.get("later") or []
+        key = (i["kind"], i.get("label", ""), i.get("group", ""), tuple(o["name"] for o in others))
+        merged.setdefault(key, {"issue": i, "others": others, "subjects": []})["subjects"].append(i["rule"])
+    fmt = "`{}`（priority {}）" if lang == "zh" else "`{}` (priority {})"
+    sep = "、" if lang == "zh" else ", "
+    problems, kinds = [], []
+    for (kind, label, group, _), m in merged.items():
+        problems.append(L[kind].format(
+            rules=sep.join(fmt.format(r["name"], r["priority"]) for r in m["subjects"]),
+            label=label, group=group, others=_ticks(m["others"])))
+        if kind not in kinds:
+            kinds.append(kind)
+    recs = "\n".join(L["rec_" + k] for k in kinds)
+    # Cost-only findings are Low; anything that changes what gets inspected is Medium
+    severity = "Low" if kinds == ["bot_control_not_last"] else "Medium"
+    md = T["order_issues"].format(
+        n="{n}", severity=severity, summary=L["order_title"].format(count=len(problems)),
+        rule_line=_refs(check["rules"]), problems="\n".join(problems), recs=recs)
+    return [(md, {"severity": severity, "title_key": "order_issues",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [18]})]
 
-    violations = []
-    seen_cat_pairs = {}  # (cat1, cat2) -> (r1_name, r2_name) representative
-    for i, (r1, cat1) in enumerate(classified):
-        if cat1 not in order_index:
-            continue
-        for j in range(i + 1, len(classified)):
-            r2, cat2 = classified[j]
-            if cat2 not in order_index:
-                continue
-            if order_index[cat1] > order_index[cat2]:
-                pair = (cat1, cat2)
-                if pair not in seen_cat_pairs:
-                    seen_cat_pairs[pair] = (r1, r2)
 
-    for (cat1, cat2), (r1, r2) in seen_cat_pairs.items():
-        desc1 = dict(RECOMMENDED_ORDER).get(cat1, cat1)
-        desc2 = dict(RECOMMENDED_ORDER).get(cat2, cat2)
-        violations.append(
-            f"- {r1['name']} (P{r1['priority']}, {desc1}) is before "
-            f"{r2['name']} (P{r2['priority']}, {desc2}), but recommended order is reversed")
-
-    if not violations:
+def _gen_recommended_protections(summary, pre_checks, flags, T, lang):
+    """Best-practice protections missing from an internet-facing (default Allow)
+    Web ACL. Allow-list ACLs already block unknown traffic, so these don't apply."""
+    if summary.get("web_acl", {}).get("default_action") != "allow":
         return NOT_APPLICABLE
-    if len(violations) > 8:
-        violations = violations[:8]
-        violations.append("- ... and more ordering issues")
-
-    problems = "\n".join(violations)
+    groups = {(r.get("managed") or {}).get("group_name", "") for r in summary.get("rules", [])}
+    L = LINES[lang]
+    items = []  # (key, severity)
+    if AMR_GROUP not in groups:
+        items.append(("amr", "Medium"))
+    if "AWSManagedRulesAmazonIpReputationList" not in groups:
+        items.append(("iprep", "Medium"))
+    if "AWSManagedRulesAnonymousIpList" not in groups:
+        items.append(("anon", "Low"))
+    if BOT_GROUP not in groups:
+        items.append(("bot", "Low"))
+    if not items:
+        return NOT_APPLICABLE
+    names = {"amr": "Anti-DDoS AMR", "iprep": "Amazon IP reputation list",
+             "anon": "Anonymous IP list", "bot": "Bot Control"}
     if lang == "zh":
-        summary_text = f"发现 {len(violations)} 处顺序问题"
-    else:
-        summary_text = f"{len(violations)} ordering violations found"
-    current_state = ", ".join(f"{r['name']} (P{r['priority']})" for r in rules[:5])
-    if len(rules) > 5:
-        current_state += f" ... ({len(rules)} rules total)"
-    md = T["priority_order"].format(
-        n="{n}", summary=summary_text, current_state=current_state, problems=problems)
-    all_rules = [r["name"] for r in rules]
-    return [(md, {"severity": "Medium", "title_key": "priority_order",
-                  "rules": all_rules[:10], "sections": [18]})]
+        names.update(iprep="Amazon IP 信誉列表", anon="匿名 IP 列表")
+    severity = min((sev for _, sev in items), key=SEVERITY_RANK.get)
+    md = T["recommended_protections"].format(
+        n="{n}", severity=severity, names=("、" if lang == "zh" else ", ").join(names[k] for k, _ in items),
+        problems="\n".join(L["missing_" + k] for k, _ in items),
+        recs="\n".join(L["rec_" + k] for k, _ in items))
+    return [(md, {"severity": severity, "title_key": "recommended_protections",
+                  "rules": [], "sections": [3, 5, 7]})]
+
+
+def _gen_uri_fragment_fallback(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("uri_fragment_fallback", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    rules = check["rules"]
+    has_allow = any(r["action"] == "allow" for r in rules)
+    severity = "Critical" if has_allow else "Medium"
+    md = T["uri_fragment_fallback"].format(
+        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules),
+        allow_note=LINES[lang]["fragment_allow"] if has_allow else "")
+    return [(md, {"severity": severity, "title_key": "uri_fragment_fallback",
+                  "rules": [r["name"] for r in rules], "sections": [1, 19]})]
+
+
+def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("uri_path_pitfalls", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    details = []
+    for r in check["rules"]:
+        for pb in r["problems"]:
+            key = "wildcard" if pb["kind"] == "literal_wildcard" else "query_in_path"
+            details.append(L[key].format(rule=r["name"], p=r["priority"], value=pb["value"]))
+    kinds = {pb["kind"] for r in check["rules"] for pb in r["problems"]}
+    recs = [L["rec_" + k] for k in ("literal_wildcard", "query_in_path") if k in kinds]
+    md = T["uri_path_pitfalls"].format(
+        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details),
+        recs="\n".join(recs))
+    return [(md, {"severity": "Medium", "title_key": "uri_path_pitfalls",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
+
+
+def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("path_block_decoding", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    details = [L["no_decode"].format(
+        rule=r["name"], p=r["priority"],
+        transforms=" / ".join(f"`{t}`" for t in r["transforms"]),
+        case=L["case_note"] if r["case_sensitive"] else "") for r in check["rules"]]
+    md = T["path_block_decoding"].format(
+        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Medium", "title_key": "path_block_decoding",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
+
+
+def _gen_path_only_allow(summary, pre_checks, flags, T, lang):
+    """Path-scoped Allow rules whose conditions are all forgeable (no IP set,
+    label, or other unforgeable condition). Global ones are forgeable_allow."""
+    rules = [a for a in flags.get("allow_rules", [])
+             if a.get("all_forgeable") and a.get("blast_radius") == "path_scoped"]
+    if not rules:
+        return NOT_APPLICABLE
+    default_block = summary.get("web_acl", {}).get("default_action") == "block"
+    severity = "Critical" if default_block else "Medium"
+    md = T["path_only_allow"].format(
+        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules),
+        acl_note=LINES[lang]["default_block_note"] if default_block else "")
+    return [(md, {"severity": severity, "title_key": "path_only_allow",
+                  "rules": [r["name"] for r in rules], "sections": [1]})]
+
+
+def _gen_managed_count(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("managed_count", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    details = [L["group_count"].format(rule=g["name"], p=g["priority"], group=g["group"])
+               for g in check.get("groups", [])]
+    details += [L["rule_count"].format(rule=o["name"], p=o["priority"], group=o["group"],
+                                       names=", ".join(f"`{x}`" for x in o["overridden"]))
+                for o in check.get("overrides", [])]
+    md = T["managed_count"].format(
+        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Medium", "title_key": "managed_count",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [20]})]
+
+
+def _gen_bot_control_config(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("bot_control_config", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    tgt = check["tgt_overrides"]
+    md = T["bot_control_tgt_common"].format(
+        n="{n}", rule_name=check["rule"], priority=check["priority"],
+        count=len(tgt), tgt_list=", ".join(f"`{t}`" for t in tgt))
+    return [(md, {"severity": "Low", "title_key": "bot_control_tgt_common",
+                  "rules": [check["rule"]], "sections": [5]})]
 
 
 def _gen_opaque_search_string(summary, pre_checks, flags, T, lang):
@@ -717,7 +846,14 @@ ALL_GENERATORS = [
     (_gen_default_action_redundancy, [15], True),
     (_gen_missing_always_on_challenge, [16], True),
     (_gen_count_without_labels, [17], True),  # Covers 17a only; 17 is always-LLM
-    (_gen_priority_order, [18], True),
+    (_gen_order_issues, [18], True),
+    (_gen_recommended_protections, [3, 5, 7], False),
+    (_gen_uri_fragment_fallback, [1, 19], True),
+    (_gen_path_only_allow, [1], True),
+    (_gen_uri_path_pitfalls, [19], True),
+    (_gen_path_block_decoding, [19], True),
+    (_gen_managed_count, [20], True),
+    (_gen_bot_control_config, [5], False),
 ]
 
 
@@ -807,7 +943,7 @@ def main():
 
     # Compute llm_sections
     llm_sections = sorted(ALWAYS_LLM_SECTIONS)
-    for s in range(1, 19):
+    for s in range(1, 22):
         if s in ALWAYS_LLM_SECTIONS or s in APPENDIX_ONLY_SECTIONS:
             continue
         outcomes = section_outcomes.get(s, [])

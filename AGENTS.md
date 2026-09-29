@@ -8,7 +8,7 @@ This repository is a tool for AI agents. After reading this file you can review 
 
 ## Language
 
-Reply in the language of the user's message, unless they ask for a specific language. The report format below is a placeholder structure. Translate headings, labels, and content into the output language.
+Reply in the language of the user's message, unless they ask for a specific language. Write the report content in that language too, with one exception: keep the `## Issue N (Severity):` heading prefix, the severity words (Critical, Medium, Low, Awareness), and the `**Rule**:`, `**Rules**:`, `**Current state**:`, `**Problem**:`, and `**Recommendation**:` labels in English. The scripts parse them. The scripted Chinese findings follow the same convention.
 
 ## Tools you need
 
@@ -36,7 +36,7 @@ All script and reference paths below are relative to `tool_dir`. Resolve every p
 **Case A: the user gives a file or directory.**
 
 - `input_file` is that path, resolved to an absolute path. If it's a directory, Step 1 finds the WAF JSON inside it.
-- `output_dir` is `{parent directory of input_file}/waf-review`.
+- `output_dir` is `{parent directory of input_file}/waf-review`. If the directory holds several Web ACL files, review them one at a time and use `{parent directory}/waf-review/{file name without .json}` for each, so the outputs don't overwrite each other.
 - If the user also gives the output of `get-logging-configuration`, pass it to Step 1 as `--logging <file>`. Otherwise leave `--logging` out. Logging status then stays unknown.
 
 **Case B: the user has no file.** Fetch the config with the AWS CLI.
@@ -125,7 +125,7 @@ Read:
 
 **4.0 Adopt scripted findings.** If `--lang` matches the user's language, write `scripted-findings.md` verbatim to `{output_dir}/waf-review-report.md`. If not, translate it into the user's language and write that instead.
 
-Sanity check: compare the scripted issues in `findings-metadata.json` against `waf-summary.json`. If a scripted finding contradicts the summary (e.g., "missing CRS" while CRS is in the rules), remove or rewrite it.
+Sanity check: read each scripted finding in full in `scripted-findings.md`, not just its title, and check it against `waf-summary.json`. Scripted findings are deterministic, but they don't know the business context. If one contradicts the summary (e.g., "missing CRS" while CRS is in the rules), or doesn't fit what this Web ACL protects (e.g., recommending Anti-DDoS AMR on an ALB that only accepts CloudFront traffic), remove or rewrite it.
 
 **4.1+ Analyze the remaining sections.** Analyze only the sections listed in `llm_sections`. Number your findings starting at `next_issue_number`.
 
@@ -136,15 +136,25 @@ For each section in `llm_sections`, read the matching reference file under `{too
 - **Section 5** (Bot Control): read `bot-control.md`. Evaluate the Bot Control strategy overall, including Common vs Targeted level and what native apps mean for it. The CategorySearchEngine/CategorySeo Allow finding is already scripted, so don't repeat it. If `llm_context.ua_allow_found` is true, analyze what happens to native app traffic at Bot Control once that UA Allow is fixed. Point to Appendix F for common override recommendations.
 - **Section 8** (Landing page / cookie logic): read `crawler-seo.md`. Evaluate security decisions based on cookies and whether a WAF token would be a better fit.
 - **Section 17** (Cross-rule dependencies and fix impact): read `common-patterns.md`. 17a (Count rules without labels) is already scripted, so skip it. For 17b, take every fix the report recommends, scripted or yours, and trace the affected traffic through the whole rule chain. Does fix A break rule B or remove a label something relies on? Write down the fix order and which changes must ship together.
+- **Section 21** (PCI DSS): only for payment or financial customers; skip it otherwise. Check whether dynamic protections (rate limits, auto-block IP sets, behavior-based bot rules, Challenge) would interfere with ASV scans, and whether long-term Count rules and unknown logging meet Requirement 6.4.2. Recommend confirming with the customer's QSA rather than stating non-compliance.
 
 Append your findings to `waf-review-report.md`.
 
 Report format rules:
 - Don't write a report header or Summary table. Step 4b generates them.
 - Each finding uses `## Issue N (severity): {title}` (see "Report format" below).
-- Rule reference lines must be `**Rule**: {name} (priority {N})`, `**Rules**: ...`, or `**Rule**: N/A (missing rule)`.
-- Refer to scripted findings by issue number. Refer to later issues by description.
+- Rule reference lines take one of three forms: `**Rule**: {name} (priority {N})`, `**Rules**: {name} (priority {N}), {name} (priority {N})`, or `**Rule**: N/A (missing rule)`. Always write `(priority N)` in full; the validator doesn't read other forms.
+- If a finding's severity depends on business context the user has to confirm, append ` ⏳` to its title.
+- Refer to scripted findings by issue number. Don't cite the number of a finding you haven't written yet; describe it instead.
 - End the last Issue section with `---`. No conclusion paragraph.
+
+Content rules, learned from reviews with customers:
+- Say what the configuration does, not what the reader doesn't know. Don't write things like "many customers don't realize".
+- Base claims on the configuration and public AWS documentation. Don't cite internal sources.
+- `SizeRestrictions_BODY` in Count is a normal choice: legitimate bodies often exceed 8 KB, and scanners rarely need to. Don't recommend switching it to Block. If the user can list the endpoints that need large bodies, recommend keeping it in Count and adding a custom rule after CRS that blocks its label on all other paths. Never add a scope-down to CRS for this.
+- Don't recommend log-driven 4xx auto-blocking for burst scanning. It takes minutes to act and costs a lot to run.
+- When discussing Bot Control, state the inspection level the Web ACL actually uses before explaining what it can and can't detect.
+- For payment or financial customers, consider PCI DSS: rate limits, auto-block lists, and bot or Challenge rules can interfere with ASV scans (ASV Program Guide section 5.6), and Requirement 6.4.2 expects the WAF to block, or alert with immediate investigation, and to keep audit logs. See `references/checklist.md` section 21.
 
 ### Step 4b: Generate report header and Summary table
 
@@ -178,15 +188,17 @@ Read `{output_dir}/validation.json`.
 
 **Mechanical checks.** If any check is `FAIL`, fix the report and run Step 6 again. Retry at most twice. If it still fails after 3 attempts in total, report the remaining errors to the user and stop. If everything is `PASS`, go on.
 
-**Adversarial check.** This applies only to your own findings, numbered `next_issue_number` and up. Scripted findings are deterministic and don't need it.
-- Take the 2 highest-severity findings you wrote. Go back to `waf-summary.json`, and to the original JSON via `source.lines` if needed, and derive each one again from scratch. If the new result disagrees with the report, fix the report.
+**Adversarial check.** This applies only to your own findings, numbered `next_issue_number` and up. Scripted findings were covered by the sanity check in Step 4.0.
+- Take the 2 highest-severity findings you wrote; on a tie, take the lowest issue numbers. Go back to `waf-summary.json`, and to the original JSON via `source.lines` if needed, and derive each one again from scratch. If the new result disagrees with the report, fix the report.
 - For each finding that recommends a fix, trace the fix through the rule execution flow. If it breaks another rule or a label dependency, add a note to the finding.
 
 **Cross-reference check.** This covers all findings.
 - For each label mentioned in any finding, confirm the producer rule exists and has a lower priority number than the consumer.
 - Check whether any rule in `waf-summary.json` got no finding and no pre-check coverage. If an ignored rule deserves a finding, add it.
 
-Then tell the user: "Self-review completed. Mechanical: {results from validation.json}. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} found." Give the report path `{output_dir}/waf-review-report.md` and the count of findings per severity. List the findings marked ⏳ that need the user's business context.
+If you add or change findings here, put them before the `<!-- waf-appendix:start -->` marker, then run Steps 4b to 6 again. Step 5 replaces the marked appendix block, so running it again doesn't duplicate anything.
+
+Then tell the user: "Self-review completed. Mechanical: {passed}/{total} PASS. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} label or coverage problems found." Give the report path `{output_dir}/waf-review-report.md` and the count of findings per severity. List the findings marked ⏳ that need the user's business context.
 
 ## Key principles
 
@@ -225,5 +237,7 @@ You write only Issue sections. `waf-generate-report-header.py` generates the hea
 
 - This file is the only workflow definition. There is no SKILL.md or install script. Change the workflow here.
 - Scripts use the Python standard library only and follow the `---RESULT---` contract (`SPEC`, `STATUS`, and on failure `ACTION` and `CONTEXT`). `scripts/waf_utils.py` has the shared `fatal()`.
-- Finding text lives in `scripts/waf_finding_templates.py`. Every key needs both an English and a Chinese template.
+- Finding text lives in `scripts/waf_finding_templates.py`, and short per-item lines live in `LINES` in `scripts/waf-generate-findings.py`. Every key needs both an English and a Chinese version.
+- Pre-checks read the structured `leaves` that `waf-preprocess.py` records for each statement (field, match type, value, text transformations, fallback, negation), not the summary string. `SearchString` values are base64-decoded there.
+- Test changes on real `get-web-acl` output as well as `examples/`: the example file is plain text in snake_case, while real exports are PascalCase with base64 `SearchString` values.
 - Keep `README.md` (Chinese) and `README_EN.md` in sync.

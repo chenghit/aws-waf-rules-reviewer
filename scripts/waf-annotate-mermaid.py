@@ -168,10 +168,9 @@ def main():
         summary_rules = _load_json(summary_path).get("rules", [])
 
     if not annotations:
-        # No annotations — just copy base to final and append
         Path(os.path.join(output_dir, "mermaid-final.md")).write_text(
             base_text, encoding="utf-8")
-        _append_to_report(report_path, base_text)
+        _write_appendix(report_path, base_text, output_dir)
         print("No annotations to apply", file=sys.stderr)
         _print_result(0)
         return
@@ -214,27 +213,32 @@ def main():
     final_path = os.path.join(output_dir, "mermaid-final.md")
     Path(final_path).write_text(final_mermaid, encoding="utf-8")
 
-    # Append to report
-    _append_to_report(report_path, final_mermaid)
-
-    # Append appendix if exists
-    appendix_path = os.path.join(output_dir, "appendix.md")
-    if os.path.isfile(appendix_path):
-        appendix_text = Path(appendix_path).read_text(encoding="utf-8")
-        with open(report_path, "a", encoding="utf-8") as f:
-            f.write(appendix_text)
-        print("Appended appendix.md to report", file=sys.stderr)
+    _write_appendix(report_path, final_mermaid, output_dir)
 
     print(f"Applied {applied} annotations, expanded {len(expanded_groups)} fold groups",
           file=sys.stderr)
     _print_result(applied)
 
 
-def _append_to_report(report_path: str, mermaid_text: str):
-    """Append Mermaid diagram as appendix to the report."""
-    appendix = f"\n---\n\n## Appendix: Rule Execution Flow\n\n{mermaid_text}"
-    with open(report_path, "a", encoding="utf-8") as f:
-        f.write(appendix)
+APPENDIX_START = "<!-- waf-appendix:start -->"
+APPENDIX_END = "<!-- waf-appendix:end -->"
+
+
+def _write_appendix(report_path: str, mermaid_text: str, output_dir: str):
+    """Replace the marked appendix block (Mermaid diagram + appendix.md) at the end
+    of the report, so re-running this step never duplicates it."""
+    report = Path(report_path).read_text(encoding="utf-8")
+    start = report.find(APPENDIX_START)
+    if start != -1:
+        end = report.find(APPENDIX_END, start)
+        tail = report[end + len(APPENDIX_END):] if end != -1 else ""
+        report = report[:start].rstrip() + "\n" + tail.lstrip("\n")
+    block = f"\n---\n\n## Appendix: Rule Execution Flow\n\n{mermaid_text}"
+    appendix_path = os.path.join(output_dir, "appendix.md")
+    if os.path.isfile(appendix_path):
+        block += Path(appendix_path).read_text(encoding="utf-8")
+    report = report.rstrip() + f"\n\n{APPENDIX_START}{block}\n{APPENDIX_END}\n"
+    Path(report_path).write_text(report, encoding="utf-8")
 
 
 def _print_result(applied: int):

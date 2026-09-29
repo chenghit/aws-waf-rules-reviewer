@@ -9,6 +9,8 @@ Usage: python3 waf-preprocess.py <input_path> <output_dir> [--logging <file>|non
 
 Supports: AWS CLI (PascalCase), Console export, snake_case custom formats.
 """
+import base64
+import binascii
 import json
 import os
 import re
@@ -49,7 +51,8 @@ _ACRONYM_FIXES = {
 def _to_snake(name: str) -> str:
     result = _PASCAL_RE.sub('_', name).lower()
     for wrong, right in _ACRONYM_FIXES.items():
-        result = result.replace(wrong, right)
+        # Whole segments only: a plain replace turns "uri_path" into "uripath"
+        result = re.sub(rf"(?:(?<=_)|^){re.escape(wrong)}(?=_|$)", right, result)
     return result
 
 def _normalize_keys(obj):
@@ -189,6 +192,29 @@ def _build_line_index(text: str, rules_key: str) -> dict[int, tuple[int, int]]:
 
 # ── Statement summarization ───────────────────────────────────────────────
 
+def _decode_search_string(ss):
+    """GetWebACL returns ByteMatch SearchString base64-encoded; decode it when it
+    is strict base64 of printable UTF-8, otherwise keep the value as given."""
+    if not isinstance(ss, str) or len(ss) < 4 or len(ss) % 4:
+        return ss
+    try:
+        text = base64.b64decode(ss, validate=True).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError):
+        return ss
+    return text if text and text.isprintable() else ss
+
+def _leaf(ltype: str, node: dict, ftm: str, match=None, value=None) -> dict:
+    ftm_raw = node.get("field_to_match", {})
+    fallback = None
+    if isinstance(ftm_raw, dict):
+        for v in ftm_raw.values():
+            if isinstance(v, dict) and "fallback_behavior" in v:
+                fallback = v["fallback_behavior"]
+    tts = sorted(node.get("text_transformations", []), key=lambda t: t.get("priority", 0))
+    return {"type": ltype, "field": ftm, "match": match, "value": value,
+            "transforms": [t.get("type", "NONE") for t in tts],
+            "fallback": fallback, "negated": False}
+
 def _field_to_match_str(ftm: dict) -> str:
     if not ftm or not isinstance(ftm, dict):
         return "unknown_field"
@@ -206,6 +232,8 @@ def _field_to_match_str(ftm: dict) -> str:
             return "json_body"
         if key == "method":
             return "method"
+        if key == "uri_fragment":
+            return "uri_fragment"
         if key == "single_query_argument":
             name = val.get("name", "?") if isinstance(val, dict) else "?"
             return f"single_query_argument:{name}"
@@ -223,30 +251,34 @@ def _field_to_match_str(ftm: dict) -> str:
 def _summarize_statement(stmt: dict) -> dict:
     """Return {summary: str, leaf_count: int, leaf_types: set, samples: dict|None}."""
     if not stmt or not isinstance(stmt, dict):
-        return {"summary": "EMPTY", "leaf_count": 0, "leaf_types": set(), "samples": None}
+        return {"summary": "EMPTY", "leaf_count": 0, "leaf_types": set(), "samples": None,
+                "leaves": []}
 
     # Leaf: byte_match_statement
     if "byte_match_statement" in stmt:
         bm = stmt["byte_match_statement"]
         ftm = _field_to_match_str(bm.get("field_to_match", {}))
-        ss = bm.get("search_string", "?")
+        ss = _decode_search_string(bm.get("search_string", "?"))
         pc = bm.get("positional_constraint", "?")
         return {"summary": f"{ftm} {pc} '{ss}'", "leaf_count": 1,
-                "leaf_types": {"byte_match"}, "samples": None}
+                "leaf_types": {"byte_match"}, "samples": None,
+                "leaves": [_leaf("byte_match", bm, ftm, pc, ss)]}
 
     # Leaf: sqli_match_statement
     if "sqli_match_statement" in stmt:
         sm = stmt["sqli_match_statement"]
         ftm = _field_to_match_str(sm.get("field_to_match", {}))
         return {"summary": f"sqli_match({ftm})", "leaf_count": 1,
-                "leaf_types": {"sqli_match"}, "samples": None}
+                "leaf_types": {"sqli_match"}, "samples": None,
+                "leaves": [_leaf("sqli_match", sm, ftm)]}
 
     # Leaf: xss_match_statement
     if "xss_match_statement" in stmt:
         xm = stmt["xss_match_statement"]
         ftm = _field_to_match_str(xm.get("field_to_match", {}))
         return {"summary": f"xss_match({ftm})", "leaf_count": 1,
-                "leaf_types": {"xss_match"}, "samples": None}
+                "leaf_types": {"xss_match"}, "samples": None,
+                "leaves": [_leaf("xss_match", xm, ftm)]}
 
     # Leaf: size_constraint_statement
     if "size_constraint_statement" in stmt:
@@ -255,21 +287,24 @@ def _summarize_statement(stmt: dict) -> dict:
         op = sc.get("comparison_operator", "?")
         sz = sc.get("size", "?")
         return {"summary": f"size({ftm}) {op} {sz}", "leaf_count": 1,
-                "leaf_types": {"size_constraint"}, "samples": None}
+                "leaf_types": {"size_constraint"}, "samples": None,
+                "leaves": [_leaf("size_constraint", sc, ftm, op, sz)]}
 
     # Leaf: geo_match_statement
     if "geo_match_statement" in stmt:
         gm = stmt["geo_match_statement"]
         codes = gm.get("country_codes", [])
         return {"summary": f"geo_match {codes}", "leaf_count": 1,
-                "leaf_types": {"geo_match"}, "samples": None}
+                "leaf_types": {"geo_match"}, "samples": None,
+                "leaves": [_leaf("geo_match", gm, "source_ip", value=codes)]}
 
     # Leaf: ip_set_reference_statement
     if "ip_set_reference_statement" in stmt:
         ips = stmt["ip_set_reference_statement"]
         arn = ips.get("ip_set_arn", ips.get("arn", "?"))
         return {"summary": f"ip_set '{arn}'", "leaf_count": 1,
-                "leaf_types": {"ip_set"}, "samples": None}
+                "leaf_types": {"ip_set"}, "samples": None,
+                "leaves": [_leaf("ip_set", ips, "source_ip", value=arn)]}
 
     # Leaf: regex_match_statement
     if "regex_match_statement" in stmt:
@@ -277,7 +312,8 @@ def _summarize_statement(stmt: dict) -> dict:
         ftm = _field_to_match_str(rm.get("field_to_match", {}))
         regex = rm.get("regex_string", "?")
         return {"summary": f"regex_match({ftm}, '{regex}')", "leaf_count": 1,
-                "leaf_types": {"regex_match"}, "samples": None}
+                "leaf_types": {"regex_match"}, "samples": None,
+                "leaves": [_leaf("regex_match", rm, ftm, "REGEX", regex)]}
 
     # Leaf: regex_pattern_set_reference_statement
     if "regex_pattern_set_reference_statement" in stmt:
@@ -285,7 +321,8 @@ def _summarize_statement(stmt: dict) -> dict:
         ftm = _field_to_match_str(rp.get("field_to_match", {}))
         arn = rp.get("regex_pattern_set_arn", rp.get("arn", "?"))
         return {"summary": f"regex_set({ftm}, '{arn}')", "leaf_count": 1,
-                "leaf_types": {"regex_pattern_set"}, "samples": None}
+                "leaf_types": {"regex_pattern_set"}, "samples": None,
+                "leaves": [_leaf("regex_pattern_set", rp, ftm, "REGEX_SET", arn)]}
 
     # Leaf: label_match_statement
     if "label_match_statement" in stmt:
@@ -293,14 +330,16 @@ def _summarize_statement(stmt: dict) -> dict:
         key = lm.get("key", "?")
         scope = lm.get("scope", "LABEL")
         return {"summary": f"label_match '{key}' (scope={scope})", "leaf_count": 1,
-                "leaf_types": {"label_match"}, "samples": None}
+                "leaf_types": {"label_match"}, "samples": None,
+                "leaves": [_leaf("label_match", lm, "label", scope, key)]}
 
     # Leaf: asn_match_statement
     if "asn_match_statement" in stmt:
         am = stmt["asn_match_statement"]
         asns = am.get("asn_list", [])
         return {"summary": f"asn_match {asns}", "leaf_count": 1,
-                "leaf_types": {"asn_match"}, "samples": None}
+                "leaf_types": {"asn_match"}, "samples": None,
+                "leaves": [_leaf("asn_match", am, "source_ip", value=asns)]}
 
     # Logic: and_statement
     if "and_statement" in stmt:
@@ -319,13 +358,14 @@ def _summarize_statement(stmt: dict) -> dict:
         return {"summary": f"NOT({child['summary']})",
                 "leaf_count": child["leaf_count"],
                 "leaf_types": child["leaf_types"],
-                "samples": child["samples"]}
+                "samples": child["samples"],
+                "leaves": [dict(l, negated=not l["negated"]) for l in child["leaves"]]}
 
     # Rate-based (top-level only, scope_down handled separately)
     if "rate_based_statement" in stmt:
         rb = stmt["rate_based_statement"]
         return {"summary": f"rate_based(limit={rb.get('limit', '?')}, window={rb.get('time_window', rb.get('evaluation_window_sec', '?'))}s)",
-                "leaf_count": 0, "leaf_types": set(), "samples": None}
+                "leaf_count": 0, "leaf_types": set(), "samples": None, "leaves": []}
 
     # Managed rule group
     for mkey in ("managed_rule_group_statement", "managed_rule_set_statement"):
@@ -341,19 +381,19 @@ def _summarize_statement(stmt: dict) -> dict:
             version = mg.get("managed_rule_set_version", mg.get("version", ""))
             # name may still be empty; caller will fill via _extract_managed_group_name
             return {"summary": f"managed: {vendor}/{name} {version}".strip(),
-                    "leaf_count": 0, "leaf_types": set(), "samples": None}
+                    "leaf_count": 0, "leaf_types": set(), "samples": None, "leaves": []}
 
     # Rule group reference
     if "rule_group_reference_statement" in stmt:
         rg = stmt["rule_group_reference_statement"]
         arn = rg.get("rule_group_arn", rg.get("arn", "?"))
         return {"summary": f"rule_group '{arn}'", "leaf_count": 0,
-                "leaf_types": set(), "samples": None}
+                "leaf_types": set(), "samples": None, "leaves": []}
 
     # Unknown
     keys = list(stmt.keys())
     return {"summary": f"UNKNOWN: {keys}", "leaf_count": 0,
-            "leaf_types": set(), "samples": None}
+            "leaf_types": set(), "samples": None, "leaves": []}
 
 def _summarize_logic(op: str, children: list) -> dict:
     child_results = [_summarize_statement(c) for c in children]
@@ -389,7 +429,8 @@ def _summarize_logic(op: str, children: list) -> dict:
                 break
 
     return {"summary": summary, "leaf_count": total_leaves,
-            "leaf_types": all_types, "samples": samples}
+            "leaf_types": all_types, "samples": samples,
+            "leaves": [l for r in child_results for l in r["leaves"]]}
 
 # ── Rule extraction ───────────────────────────────────────────────────────
 
@@ -470,7 +511,8 @@ def _extract_scope_down(container: dict) -> dict | None:
     if not sd:
         return None
     s = _summarize_statement(sd)
-    return {"summary": s["summary"], "source_lines": None}  # source_lines filled later
+    return {"summary": s["summary"], "leaves": s["leaves"],
+            "source_lines": None}  # source_lines filled later
 
 def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) -> dict:
     name = rule.get("name", f"rule_{idx}")
@@ -568,6 +610,7 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
             "leaf_count": stmt_result["leaf_count"],
             "leaf_types": sorted(stmt_result["leaf_types"]),
             "samples": stmt_result["samples"],
+            "leaves": stmt_result["leaves"],
         },
         "source": source,
         "scope_down": scope_down,

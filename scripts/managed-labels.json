@@ -34,7 +34,14 @@
     "awswaf:managed:aws:atp:": "AWSManagedRulesATPRuleSet",
     "awswaf:managed:aws:acfp:": "AWSManagedRulesACFPRuleSet",
     "awswaf:managed:aws:core-rule-set:": "AWSManagedRulesCommonRuleSet",
-    "awswaf:managed:aws:known-bad-inputs:": "AWSManagedRulesKnownBadInputsRuleSet"
+    "awswaf:managed:aws:known-bad-inputs:": "AWSManagedRulesKnownBadInputsRuleSet",
+    "awswaf:managed:aws:sql-database:": "AWSManagedRulesSQLiRuleSet",
+    "awswaf:managed:aws:linux-os:": "AWSManagedRulesLinuxRuleSet",
+    "awswaf:managed:aws:posix-os:": "AWSManagedRulesUnixRuleSet",
+    "awswaf:managed:aws:windows-os:": "AWSManagedRulesWindowsRuleSet",
+    "awswaf:managed:aws:php-app:": "AWSManagedRulesPHPRuleSet",
+    "awswaf:managed:aws:wordpress-app:": "AWSManagedRulesWordPressRuleSet",
+    "awswaf:managed:aws:admin-protection:": "AWSManagedRulesAdminProtectionRuleSet"
   },
   "shared_token_labels": [
     "awswaf:managed:token:absent",
@@ -49,15 +56,27 @@
   ],
   "forgeability": {
     "forgeable_field_types": [
-      "single_header", "single_query_argument", "cookie", "cookies",
-      "body", "json_body", "uri_path", "query_string", "method",
-      "header_order", "headers"
+      "single_header",
+      "single_query_argument",
+      "cookie",
+      "cookies",
+      "body",
+      "json_body",
+      "uri_path",
+      "query_string",
+      "method",
+      "header_order",
+      "headers"
     ],
     "unforgeable_statement_types": [
-      "ip_set", "asn_match", "geo_match", "rate_based"
+      "ip_set",
+      "asn_match",
+      "geo_match",
+      "rate_based"
     ],
     "unforgeable_field_types": [
-      "ja3_fingerprint", "ja4_fingerprint"
+      "ja3_fingerprint",
+      "ja4_fingerprint"
     ]
   }
 }
