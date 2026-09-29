@@ -47,7 +47,7 @@ Given a Web ACL, either as a JSON file or fetched from your account, the agent:
 
 1. **Fetches** (optional): pulls the Web ACL and its logging config with read-only AWS CLI calls
 2. **Preprocesses**: extracts structured rule summaries, compresses input (56KB → 16KB)
-3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (12 checks total)
+3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (13 checks total)
 4. **Deterministic findings**: 26 generators auto-produce most findings (forgeable Allow, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
 5. **LLM analysis**: only analyzes judgment-heavy checklist items (Bot Control strategy, cookie logic, cross-rule dependencies) from the sections not covered by scripts
 6. **Report generation**: severity-rated findings (Critical / Medium / Low / Awareness)

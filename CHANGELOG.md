@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.6.1 (2026-09-29)
+
+Fixes found by regenerating the example report with v0.6.
+
+### Fixed
+- Anti-DDoS AMR settings in real `get-web-acl` exports were never read. The preprocessor only understood a flat config format, so on real exports the exempt-regex check and the challenge sensitivity were silently skipped. It now also reads `ClientSideActionConfig.Challenge`, and the exempt-regex check covers every regex object, not only the first.
+- The Summary table could show the next issue's text as a finding's Impact when the finding's Problem section didn't start with a bullet. Impact is now taken from the issue's own section only.
+- The IP block list ordering check missed block lists written as `AND(ip_set, host)`. It now accepts host conditions alongside the IP set, but not `OR` or negated conditions.
+- `HostingProviderIPList` overridden to Allow is Medium, not Critical, when the rule group's scope-down limits it to certain paths. The finding says which requests the Allow applies to and warns to change the override before widening the scope-down.
+- The `ChallengeAllDuringEvent` finding said low-suspicion traffic got no soft mitigation, even when `ChallengeDDoSRequests` was still challenging it. It now reads both challenge rules and the block and challenge sensitivities, and names the suspicion levels that get neither Challenge nor Block. It's Medium only when such a level exists, Low otherwise.
+- The Bot Control version finding listed 2.0/3.0 changes to a Web ACL pinned at 4.0, and credited 2.0/3.0 with rules they didn't add. It now lists only the versions after the current one, using the AWS Managed Rules changelog.
+- `--lang zh` output no longer contains English fragments (forgeable Allow examples, opaque-value notes, Allow override details, AMR sensitivity text). The appendix and the Mermaid appendix heading are in Chinese too.
+- `references/bot-control.md` and the checklist said never to override `TGT_TokenAbsent` to Count. Its default is Count, so that override changes nothing. The text now says to keep a Challenge override if the Web ACL has one.
+- The exempt-regex bypass example no longer shows a double slash (`/admin/api//export`).
+
+### Changed
+- Duplicate detection covers every rule type, not only rate-based rules, and groups of more than two. It compares the whole rule except name and priority, and the finding is Low. The forgeable Allow and Count-without-labels findings no longer guess that their rules might be duplicates.
+- Checklist section 21 (PCI DSS) applies to any business that takes card payments. `findings-metadata.json` has a new `llm_context.payment_indicators` list of hosts and paths that look like payment endpoints. If the list isn't empty and the user hasn't said whether the systems are in PCI scope, the agent asks.
+- `waf-generate-appendix.py` takes `--lang`. AGENTS.md picks the language before Step 3b.
+- AGENTS.md requires `**Problem**:` and `**Recommendation**:` to be followed by `- ` bullets.
+
 ## v0.6 (2026-09-29)
 
 Findings from reviewing 16 production Web ACLs exported with `get-web-acl`.

@@ -56,7 +56,7 @@ For every Challenge or CAPTCHA rule:
 If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - Short-term: scope-down Bot Control with unforgeable label (bypasses entire rule group)
 - Medium-term: integrate WAF Mobile SDK (read bot-control.md for details)
-- **NEVER override TGT_TokenAbsent to Count**
+- If `TGT_TokenAbsent` is overridden to Challenge, keep that override: it enforces tokens per request. Its default is Count, so a Count override is a no-op
 
 ### 6. Rate-based Rules
 
@@ -103,7 +103,7 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules.
 ### 12. Managed Rule Group Versions
 
 Scripted. Unpinned groups follow the AWS default version, and default changes are announced only through each group's SNS topic.
-- [ ] Bot Control unpinned (default Version_1.0) or pinned below 5.0 → Medium. 2.0/3.0 added most TARGETED rules; 5.0 added 400+ bots at COMMON
+- [ ] Bot Control unpinned (default Version_1.0) or pinned below 5.0 → Medium. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures
 - [ ] Other unpinned groups → Low. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
 - IP reputation and anonymous IP lists are unversioned
 
@@ -176,9 +176,12 @@ Scripted.
 - [ ] Whole managed rule groups in Count
 - [ ] Content rules inside CRS, KnownBadInputs, SQLi, OS, PHP, WordPress, or AdminProtection overridden to Count (except `SizeRestrictions_BODY`)
 
-### 21. PCI DSS (payment and financial customers only)
+### 21. PCI DSS
 
-LLM. Skip for other customers.
+LLM. PCI DSS covers anyone who stores, processes, or transmits card data, including merchants that take card payments, not only financial companies. Decide scope first:
+- The user says the customer takes card payments or is a payment or financial business → in scope
+- Otherwise, `llm_context.payment_indicators` lists hosts or paths that look like payment endpoints → ask the user whether these systems are in PCI scope. Until they answer, write the findings with ` ⏳`
+- Neither → skip this section
 - [ ] ASV scans (Requirement 11.3.2, quarterly by an ASV; 11.3.2.1 after significant change) must not be interfered with by protections that change behavior based on traffic: rate limits, auto-block IP sets, behavior-based bot rules, Challenge (ASV Program Guide v4.0 r2 section 5.6). Consistent signature and path blocking typically doesn't count. An unresolved interference makes the scan inconclusive and then failed (section 7.6)
 - [ ] Recommend exceptions for the ASV's IPs on the dynamic mechanisms only, not an Allow rule at the top of the ACL
 - [ ] Requirement 6.4.2: the WAF must block attacks, or alert with immediate investigation, and keep audit logs. Long-term Count rules without alerting, and unknown logging, are worth confirming with the QSA

@@ -35,6 +35,8 @@ IP_REPUTATION_GROUPS = {
 }
 
 CRAWLER_LABEL_PATTERNS = ("crawler:", "custom:crawler")
+# Host or path values that suggest a payment flow (checklist section 21)
+PAYMENT_HINT = re.compile(r"pay|checkout|card|billing|3ds|wallet|merchant|psp", re.I)
 
 AMR_GROUP = "AWSManagedRulesAntiDDoSRuleSet"
 BOT_GROUP = "AWSManagedRulesBotControlRuleSet"
@@ -64,6 +66,14 @@ LINES = {
         "default_version": "AWS default (Version_1.0)",
         "unpinned_bot": "Bot Control is not pinned to a static version, so it runs the AWS default version, Version_1.0",
         "outdated_bot": "Bot Control is pinned to {version}",
+        # What each static version added, from the AWS Managed Rules changelog
+        "bot_versions": [
+            ((2, 0), "- 2.0/3.0: the TARGETED `TGT_TokenReuse*` rules by IP, ASN, and country, and many new bot names across COMMON categories"),
+            ((4, 0), "- 4.0: Web Bot Authentication, which verifies signed AI bots and agents (CloudFront only until 6.0)"),
+            ((5, 0), "- 5.0: 400+ more bots, the `CategoryPagePreview` and `CategoryWebhooks` categories, and a precedence change so specific bot rules match before generic signals"),
+            ((6, 0), "- 6.0: Web Bot Authentication on regional resources, and bots verified that way count as verified in every category"),
+            ((6, 1), "- 6.1: more signatures across categories, including Security, SEO, and scraping frameworks"),
+        ],
         "missing_amr": "- No Anti-DDoS rule group: this Web ACL allows traffic by default and has no automatic HTTP flood mitigation (Medium)",
         "missing_iprep": "- No Amazon IP reputation list: IPs on AWS threat intelligence lists, including ones doing reconnaissance and scanning, are not blocked (Medium)",
         "missing_anon": "- No anonymous IP list: traffic from VPNs, Tor, proxies, and non-AWS cloud hosts is not flagged. Many scanners run on cloud hosts (Low)",
@@ -74,6 +84,24 @@ LINES = {
         "rec_bot": "- Bot Control: add it last in the Web ACL, pinned to the latest static version, scoped down to browser-facing hosts or paths",
         "placement_block": "- This Web ACL blocks by default: put the rule groups ahead of the Allow rules, or they never inspect the traffic those rules let through. Scope them down to paths that need inspection and start in Count",
         "placement_allow": "- Place them after IP reputation and rate-based rules",
+        "example_ua": "the matching User-Agent header",
+        "example_header": "the matching custom header",
+        "example_other": "the matching condition",
+        "hosting_scope_state": ", rule group scope-down `{scope}`",
+        "hosting_scope": "- The rule group's scope-down is `{scope}`. Only requests that match it enter the rule group, so the bypass covers cloud-hosted requests that match the scope-down\n",
+        "hosting_scope_widen": "- Before removing or widening that scope-down, change this override. Otherwise the bypass widens with it\n",
+        "opaque_risk_allow": "Since this rule's action is Allow, a leaked value means full WAF bypass for anyone who knows it",
+        "opaque_rec_allow": "If this is a shared secret for probe/monitoring access, switch to an unforgeable condition (IP Set or WAF Token)",
+        "opaque_risk_other": "This value may be a shared secret or redacted content",
+        "opaque_rec_other": "Verify whether this value is a secret that should be protected from exposure",
+        "allow_override": "`{rule}` overridden to Allow",
+        "levels": lambda lv: {1: "{}", 2: "{} and {}"}.get(len(lv), "{}, {}, and {}").format(*lv),
+        "cade_block": "- `DDoSRequests` blocks {levels} suspicion requests (`sensitivity_to_block: {sens}`)",
+        "cade_challenge": "- `ChallengeDDoSRequests` still challenges {levels} suspicion requests (challenge sensitivity `{sens}`). What's lost is the blanket challenge: during an event, challengeable requests the rule group hasn't marked as suspicious are no longer challenged",
+        "cade_no_challenge": "- `ChallengeDDoSRequests` is off too ({why}), so nothing is challenged during an event",
+        "why_cdr_count": "overridden to Count",
+        "why_usage_disabled": "`usage_of_challenge_action: DISABLED`",
+        "cade_gap": "- Requests with {levels} suspicion are neither challenged nor blocked",
     },
     "zh": {
         "label_before_producer": "- {rules}匹配标签 `{label}`，但产生这个标签的规则都排在它后面：{others}。这个条件永远不会成立",
@@ -99,6 +127,13 @@ LINES = {
         "default_version": "AWS 默认版本（Version_1.0）",
         "unpinned_bot": "Bot Control 没有固定版本，跑的是 AWS 默认版本 Version_1.0",
         "outdated_bot": "Bot Control 固定在 {version}",
+        "bot_versions": [
+            ((2, 0), "- 2.0/3.0：TARGETED 级别按 IP、ASN、国家区分的 `TGT_TokenReuse*` 规则，COMMON 各类别也加了很多新的 bot"),
+            ((4, 0), "- 4.0：Web Bot Authentication，用签名验证 AI bot 和 agent（6.0 之前只支持 CloudFront）"),
+            ((5, 0), "- 5.0：新增 400 多种 bot，新增 `CategoryPagePreview` 和 `CategoryWebhooks` 两个类别，并调整了匹配顺序，具体的 bot 规则先于通用信号匹配"),
+            ((6, 0), "- 6.0：Web Bot Authentication 支持区域资源，用这种方式验证过的 bot 在所有类别里都算已验证"),
+            ((6, 1), "- 6.1：多个类别继续增加特征，包括 Security、SEO 和爬虫框架"),
+        ],
         "missing_amr": "- 没有部署 Anti-DDoS 规则组：这个 ACL 默认放行，遇到 HTTP flood 时没有自动缓解（Medium）",
         "missing_iprep": "- 没有部署 Amazon IP 信誉列表：AWS 威胁情报名单上的 IP，包括正在做侦察和扫描的 IP，都不会被拦（Medium）",
         "missing_anon": "- 没有部署匿名 IP 列表：来自 VPN、Tor、代理和非 AWS 云主机的流量不会被标记。很多扫描器跑在云主机上（Low）",
@@ -109,6 +144,24 @@ LINES = {
         "rec_bot": "- Bot Control：放在 ACL 最后，固定到最新的静态版本，用 scope-down 限定在浏览器访问的 host 或路径上",
         "placement_block": "- 这个 ACL 默认 Block：规则组要放在 Allow 规则前面，否则检查不到被放行的流量。用 scope-down 限定在需要检查的路径上，先用 Count 观察",
         "placement_allow": "- 放在 IP 信誉和限速规则之后",
+        "example_ua": "匹配的 User-Agent 头",
+        "example_header": "匹配的自定义请求头",
+        "example_other": "匹配的条件",
+        "hosting_scope_state": "，规则组的 scope-down 为 `{scope}`",
+        "hosting_scope": "- 规则组的 scope-down 是 `{scope}`，只有匹配它的请求才会进入规则组。所以被放行的是匹配这个 scope-down 的云主机请求\n",
+        "hosting_scope_widen": "- 要去掉或放宽这个 scope-down，先改掉这个 override，否则放行范围会跟着扩大\n",
+        "opaque_risk_allow": "这条规则的动作是 Allow，这个值一旦泄露，知道它的人就能完全绕过 WAF",
+        "opaque_rec_allow": "如果这是给探针或监控用的共享密钥，改用不可伪造的条件（IP Set 或 WAF Token）",
+        "opaque_risk_other": "这个值可能是共享密钥，也可能是脱敏后的内容",
+        "opaque_rec_other": "确认这个值是不是需要保密的密钥",
+        "allow_override": "`{rule}` 被覆盖为 Allow",
+        "levels": lambda lv: "、".join({"low": "低", "medium": "中", "high": "高"}[x] for x in lv),
+        "cade_block": "- `DDoSRequests` 会 Block 可疑度为{levels}的请求（`sensitivity_to_block: {sens}`）",
+        "cade_challenge": "- `ChallengeDDoSRequests` 仍会 Challenge 可疑度为{levels}的请求（Challenge 灵敏度 `{sens}`）。少掉的是兜底的 Challenge：事件期间，没有被规则组标为可疑的可 Challenge 请求不再被 Challenge",
+        "cade_no_challenge": "- `ChallengeDDoSRequests` 也没有生效（{why}），事件期间不会 Challenge 任何请求",
+        "why_cdr_count": "被覆盖为 Count",
+        "why_usage_disabled": "`usage_of_challenge_action: DISABLED`",
+        "cade_gap": "- 可疑度为{levels}的请求既不会被 Challenge，也不会被 Block",
     },
 }
 
@@ -119,8 +172,8 @@ def _refs(items: list) -> str:
     return ", ".join(f"{i['name']} (priority {i['priority']})" for i in items)
 
 
-def _ticks(items: list) -> str:
-    return ", ".join(f"`{i['name']}`" for i in items)
+def _ticks(items: list, lang: str = "en") -> str:
+    return ("、" if lang == "zh" else ", ").join(f"`{i['name']}`" for i in items)
 
 
 NOT_APPLICABLE = "NOT_APPLICABLE"
@@ -165,6 +218,17 @@ def _extract_exactly_values(summary: str) -> list[tuple[str, str]]:
         results.append((m.group(1), m.group(2)))
     return results
 
+
+def _payment_indicators(summary: dict) -> list:
+    """Hosts, paths, and token domains that look like payment endpoints."""
+    values = set(summary.get("web_acl", {}).get("token_domains") or [])
+    for r in summary.get("rules", []):
+        for l in r.get("statement", {}).get("leaves", []) + (r.get("scope_down") or {}).get("leaves", []):
+            if (l["field"] in ("single_header:host", "uri_path") and isinstance(l["value"], str)
+                    and not l["value"].startswith("arn:")):
+                values.add(l["value"])
+    return sorted(v for v in values if PAYMENT_HINT.search(v))[:20]
+
 from waf_finding_templates import TEMPLATES_EN, TEMPLATES_ZH
 
 # ── Generators ─────────────────────────────────────────────────────────────
@@ -193,6 +257,7 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
         # Mixed forgeability within a group — needs LLM judgment
         return AMBIGUOUS
 
+    L = LINES[lang]
     # Group by forgeable_conditions content
     groups = defaultdict(list)
     for a in candidates:
@@ -203,29 +268,17 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
     for key, group in groups.items():
         names = [a["name"] for a in group]
         rule_names = " / ".join(names)
-        if len(group) == 1:
-            rule_line = f"{names[0]} (priority {group[0]['priority']})"
-            dup_note = ""
-            dup_rec = ""
-        else:
-            rule_line = ", ".join(f"{a['name']} (priority {a['priority']})" for a in group)
-            if lang == "zh":
-                dup_note = f"- {len(group)} 条规则逻辑完全相同，只需保留一条\n"
-                dup_rec = "- 删除重复规则，保留一条即可\n"
-            else:
-                dup_note = f"- {len(group)} rules have identical logic, only one is needed\n"
-                dup_rec = "- Remove duplicate rules, keep one\n"
+        rule_line = _refs(group)
 
         fc = group[0]["forgeable_conditions"]
         forgeable_fields = ", ".join(fc)
         is_are = "is" if len(fc) == 1 else "are"
-        # Build example
         if any("user-agent" in c for c in fc):
-            forgeable_example = "the matching User-Agent header"
+            forgeable_example = L["example_ua"]
         elif any("header" in c for c in fc):
-            forgeable_example = "the matching custom header"
+            forgeable_example = L["example_header"]
         else:
-            forgeable_example = "the matching condition"
+            forgeable_example = L["example_other"]
 
         # Check for opaque/secret values in the statement (fix #1)
         opaque_note = ""
@@ -249,7 +302,6 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
             stmt_summary=group[0]["statement_summary"],
             forgeable_fields=forgeable_fields, is_are=is_are,
             forgeable_example=forgeable_example,
-            dup_note=dup_note, dup_rec=dup_rec,
             opaque_note=opaque_note, opaque_rec=opaque_rec)
         results.append((md, {"severity": "Critical", "title_key": "forgeable_allow",
                              "rules": names, "sections": [1]}))
@@ -260,9 +312,20 @@ def _gen_hosting_provider_allow(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("hosting_provider_allow", {})
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
+    L = LINES[lang]
+    sd = check.get("scope_down")
+    scope_note = ""
+    if sd:
+        scope_note = L["hosting_scope"].format(scope=sd)
+        if check.get("path_scoped"):
+            scope_note += L["hosting_scope_widen"]
+    # A path scope-down limits the bypass to requests on those paths
+    severity = "Medium" if check.get("path_scoped") else "Critical"
     md = T["hosting_provider_allow"].format(
-        n="{n}", rule_name=check["rule"], priority=check["priority"])
-    return [(md, {"severity": "Critical", "title_key": "hosting_provider_allow",
+        n="{n}", severity=severity, rule_name=check["rule"], priority=check["priority"],
+        scope_state=L["hosting_scope_state"].format(scope=sd) if sd else "",
+        scope_note=scope_note)
+    return [(md, {"severity": severity, "title_key": "hosting_provider_allow",
                   "rules": [check["rule"]], "sections": [7]})]
 
 
@@ -393,20 +456,8 @@ def _gen_count_without_labels(summary, pre_checks, flags, T, lang):
     rules = check.get("rules", [])
     names = [r["name"] for r in rules]
     rule_names = " / ".join(names)
-    rule_line = ", ".join(f"{r['name']} (priority {r['priority']})" for r in rules)
-    # Check for duplicates within the group
-    dup_note = ""
-    dup_rec = ""
-    if len(rules) > 1:
-        if lang == "zh":
-            dup_note = f"- {len(rules)} 条规则可能逻辑相同——请检查是否存在重复\n"
-            dup_rec = "- 如果逻辑相同，删除重复规则\n"
-        else:
-            dup_note = f"- {len(rules)} rules may have identical logic — check if duplicates exist\n"
-            dup_rec = "- Remove duplicate rules if logic is identical\n"
     md = T["count_without_labels"].format(
-        n="{n}", rule_names=rule_names, rule_line=rule_line,
-        dup_note=dup_note, dup_rec=dup_rec)
+        n="{n}", rule_names=rule_names, rule_line=_refs(rules))
     return [(md, {"severity": "Awareness", "title_key": "count_without_labels",
                   "rules": names, "sections": [17]})]
 
@@ -426,16 +477,32 @@ def _gen_challenge_all_during_event(summary, pre_checks, flags, T, lang):
                    for o in overrides)
     if not disabled:
         return NOT_APPLICABLE
-    cfg = amr.get("managed", {}).get("config", {})
-    block_sens = cfg.get("sensitivity_to_block", "unknown")
-    sens_map = {"LOW": ("high-suspicion", "medium and low-suspicion"),
-                "MEDIUM": ("medium and high-suspicion", "low-suspicion"),
-                "HIGH": ("all suspicion levels of", "no")}
-    block_desc, remaining_desc = sens_map.get(block_sens, ("some", "remaining"))
+    cfg = amr.get("managed", {}).get("config") or {}
+    L = LINES[lang]
+    # Suspicion levels each sensitivity setting acts on
+    levels = {"LOW": ["high"], "MEDIUM": ["medium", "high"], "HIGH": ["low", "medium", "high"]}
+    block_sens = cfg.get("sensitivity_to_block", "LOW")
+    challenge_sens = cfg.get("sensitivity_to_challenge", "HIGH")
+    blocked = levels.get(block_sens, [])
+    details = [L["cade_block"].format(levels=L["levels"](blocked), sens=block_sens)]
+    cdr_count = any(o.get("rule_name") == "ChallengeDDoSRequests" and o.get("action") == "count"
+                    for o in overrides)
+    if cfg.get("usage_of_challenge_action") == "DISABLED" or cdr_count:
+        challenged = []
+        details.append(L["cade_no_challenge"].format(
+            why=L["why_cdr_count"] if cdr_count else L["why_usage_disabled"]))
+    else:
+        challenged = levels.get(challenge_sens, [])
+        details.append(L["cade_challenge"].format(levels=L["levels"](challenged), sens=challenge_sens))
+    gap = [lv for lv in ("low", "medium", "high") if lv not in blocked + challenged]
+    if gap:
+        details.append(L["cade_gap"].format(levels=L["levels"](gap)))
+    # Medium only if some suspicion level gets neither Challenge nor Block
+    severity = "Medium" if gap else "Low"
     md = T["challenge_all_during_event"].format(
-        n="{n}", rule_name=amr["name"], priority=amr["priority"],
-        block_sens=block_sens, block_desc=block_desc, remaining_desc=remaining_desc)
-    return [(md, {"severity": "Medium", "title_key": "challenge_all_during_event",
+        n="{n}", severity=severity, rule_name=amr["name"], priority=amr["priority"],
+        details="\n".join(details))
+    return [(md, {"severity": severity, "title_key": "challenge_all_during_event",
                   "rules": [amr["name"]], "sections": [3]})]
 
 
@@ -450,7 +517,7 @@ def _gen_unanchored_exempt_regex(summary, pre_checks, flags, T, lang):
         if not unanchored:
             continue
         unanchored_list = ", ".join(f"`{b['pattern']}`" for b in unanchored)
-        examples = ", ".join(f"`/admin{b['pattern'].replace(chr(92), '')}/export`"
+        examples = ", ".join(f"`/admin{b['pattern'].replace(chr(92), '').rstrip('/')}/export`"
                              for b in unanchored[:2])
         anchored = "`" + "|".join(
             f"^{b['pattern']}" if not (b.get("anchored_start") or b.get("anchored_end"))
@@ -506,49 +573,18 @@ def _gen_bot_control_search_allow(summary, pre_checks, flags, T, lang):
 
 
 def _gen_duplicate_rules(summary, pre_checks, flags, T, lang):
-    rules = summary.get("rules", [])
-    # Group rate-based rules
-    rate_groups = defaultdict(list)
-    for r in rules:
-        if r.get("type") != "rate_based":
-            continue
-        rb = r.get("rate_based", {})
-        sd = r.get("scope_down", {})
-        sd_summary = sd.get("summary", "") if sd else ""
-        key = (r["action"], rb.get("limit"), rb.get("evaluation_window_sec"), sd_summary)
-        rate_groups[key].append(r)
-
-    results = []
-    all_dup_names = []
-    all_pair_lines = []
-    for key, group in rate_groups.items():
-        if len(group) < 2:
-            continue
-        sorted_g = sorted(group, key=lambda x: x["priority"])
-        for i in range(0, len(sorted_g) - 1, 2):
-            all_pair_lines.append(f"{sorted_g[i]['name']} (priority {sorted_g[i]['priority']}) / {sorted_g[i+1]['name']} (priority {sorted_g[i+1]['priority']})")
-        all_dup_names.extend(r["name"] for r in group)
-
-    if not all_pair_lines:
+    check = pre_checks.get("duplicate_rules", {})
+    if check.get("status") != "FAIL":
         return NOT_APPLICABLE
-
-    rule_line = "; ".join(all_pair_lines)
-    pair_count = len(all_pair_lines)
-    if lang == "zh":
-        dup_problem = "对于 scope-down 重叠的速率限制规则，只有阈值最低的规则会对重叠流量生效——阈值更高的重复规则没有额外效果"
-        match_desc = "scope-down、limit 和 window"
-        rule_type = "速率限制"
-    else:
-        dup_problem = "For rate-based rules with overlapping scope-downs, only the lowest-threshold rule triggers for overlapping traffic — higher-threshold duplicates have no additional effect"
-        match_desc = "scope-down, limit, and window"
-        rule_type = "rate-limit"
-    md = T["duplicate_rules"].format(
-        n="{n}", rule_type=rule_type, rule_line=rule_line,
-        pair_count=pair_count, match_desc=match_desc,
-        dup_problem=dup_problem)
-    results.append((md, {"severity": "Awareness", "title_key": "duplicate_rules",
-                         "rules": all_dup_names, "sections": [6]}))
-    return results
+    groups = check["groups"]
+    fmt = "`{}`（priority {}）" if lang == "zh" else "`{}` (priority {})"
+    lines = "\n".join("- " + " / ".join(fmt.format(r["name"], r["priority"]) for r in g)
+                      for g in groups)
+    rules = [r for g in groups for r in g]
+    md = T["duplicate_rules"].format(n="{n}", count=len(groups), rule_line=_refs(rules),
+                                     groups=lines)
+    return [(md, {"severity": "Low", "title_key": "duplicate_rules",
+                  "rules": [r["name"] for r in rules], "sections": [6]})]
 
 
 def _gen_managed_versions(summary, pre_checks, flags, T, lang):
@@ -562,9 +598,12 @@ def _gen_managed_versions(summary, pre_checks, flags, T, lang):
     for b in bots:
         version = b.get("version") or L["default_version"]
         detail = L["outdated_bot"].format(version=b["version"]) if b.get("version") else L["unpinned_bot"]
+        m = re.search(r'(\d+)\.(\d+)', b.get("version") or "1.0")
+        current = (int(m.group(1)), int(m.group(2))) if m else (1, 0)
+        additions = "\n".join("  " + line for v, line in L["bot_versions"] if v > current)
         md = T["bot_control_version"].format(
             n="{n}", rule_name=b["name"], priority=b["priority"],
-            current_version=version, detail=detail)
+            current_version=version, detail=detail, additions=additions)
         results.append((md, {"severity": "Medium", "title_key": "bot_control_version",
                              "rules": [b["name"]], "sections": [12]}))
     others = [u for u in check.get("unpinned", []) if u["group"] != BOT_GROUP]
@@ -628,7 +667,7 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
     for (kind, label, group, _), m in merged.items():
         problems.append(L[kind].format(
             rules=sep.join(fmt.format(r["name"], r["priority"]) for r in m["subjects"]),
-            label=label, group=group, others=_ticks(m["others"])))
+            label=label, group=group, others=_ticks(m["others"], lang)))
         if kind not in kinds:
             kinds.append(kind)
     recs = "\n".join(L["rec_" + k] for k in kinds)
@@ -680,7 +719,7 @@ def _gen_uri_fragment_fallback(summary, pre_checks, flags, T, lang):
     has_allow = any(r["action"] == "allow" for r in rules)
     severity = "Critical" if has_allow else "Medium"
     md = T["uri_fragment_fallback"].format(
-        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules),
+        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules, lang),
         allow_note=LINES[lang]["fragment_allow"] if has_allow else "")
     return [(md, {"severity": severity, "title_key": "uri_fragment_fallback",
                   "rules": [r["name"] for r in rules], "sections": [1, 19]})]
@@ -730,7 +769,7 @@ def _gen_path_only_allow(summary, pre_checks, flags, T, lang):
     default_block = summary.get("web_acl", {}).get("default_action") == "block"
     severity = "Critical" if default_block else "Medium"
     md = T["path_only_allow"].format(
-        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules),
+        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules, lang),
         acl_note=LINES[lang]["default_block_note"] if default_block else "")
     return [(md, {"severity": severity, "title_key": "path_only_allow",
                   "rules": [r["name"] for r in rules], "sections": [1]})]
@@ -788,13 +827,9 @@ def _gen_opaque_search_string(summary, pre_checks, flags, T, lang):
             if opacity == "maybe":
                 return AMBIGUOUS
             seen_values.add(value)
-            is_allow = r.get("action") == "allow"
-            if is_allow:
-                risk_note = "Since this rule's action is Allow, a leaked value means full WAF bypass for anyone who knows it"
-                rec_note = "If this is a shared secret for probe/monitoring access, switch to an unforgeable condition (IP Set or WAF Token)"
-            else:
-                risk_note = "This value may be a shared secret or redacted content"
-                rec_note = "Verify whether this value is a secret that should be protected from exposure"
+            kind = "allow" if r.get("action") == "allow" else "other"
+            risk_note = LINES[lang]["opaque_risk_" + kind]
+            rec_note = LINES[lang]["opaque_rec_" + kind]
             md = T["opaque_search_string"].format(
                 n="{n}", rule_name=r["name"], priority=r["priority"],
                 stmt_summary=stmt_summary[:100], value=value[:30] + "..." if len(value) > 30 else value,
@@ -814,7 +849,7 @@ def _gen_managed_allow_override(summary, pre_checks, flags, T, lang):
             continue
         for o in mg.get("overrides", []):
             if o.get("action") == "allow" and o.get("rule_name", "") not in handled_rules:
-                override_detail = f"`{o['rule_name']}` overridden to Allow"
+                override_detail = LINES[lang]["allow_override"].format(rule=o["rule_name"])
                 md = T["managed_allow_override"].format(
                     n="{n}", rule_name=r["name"], priority=r["priority"],
                     override_detail=override_detail)
@@ -979,6 +1014,7 @@ def main():
         "has_crawler_labeling_rule": any(
             any(lbl.startswith(p) for p in CRAWLER_LABEL_PATTERNS)
             for r in rules for lbl in r.get("rule_labels", [])),
+        "payment_indicators": _payment_indicators(summary),
     }
 
     next_issue_number = len(all_findings) + 1

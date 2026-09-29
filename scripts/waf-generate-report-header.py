@@ -54,20 +54,27 @@ def _extract_issues(report: str) -> list[dict]:
 
 
 def _extract_impact(report: str, issue_number: int) -> str:
-    """Try to extract a one-line impact/problem summary for the Summary table."""
-    # Find the Issue section and look for the first line of **Problem**:
-    pattern = re.compile(
-        rf'^##\s+(?:Issue|问题)\s+#?{issue_number}\s*\([^)]+\)\s*[:：].*?\n'
-        r'.*?(?:\*\*(?:Problem|问题)\*\*\s*[:：]\s*\n\s*[-•]\s*(.+?))\n',
-        re.MULTILINE | re.DOTALL
-    )
-    m = pattern.search(report)
-    if m:
-        impact = m.group(1).strip()
-        if len(impact) > 80:
-            impact = impact[:77] + "..."
-        return impact
-    return ""
+    """First line of the issue's **Problem** section, for the Summary table.
+    Search only inside the issue's own section so a malformed Problem block
+    can't pick up text from the next issue."""
+    head = re.search(rf'^##\s+(?:Issue|问题)\s+#?{issue_number}\s*\(', report, re.MULTILINE)
+    if not head:
+        return ""
+    nxt = re.search(r'^## ', report[head.end():], re.MULTILINE)
+    section = report[head.end():head.end() + nxt.start()] if nxt else report[head.end():]
+    m = re.search(r'\*\*(?:Problem|问题)\*\*\s*[:：]\s*(.*?)(?:\n\s*\n|\n\*\*|$)', section, re.DOTALL)
+    if not m:
+        return ""
+    lines = [l.strip() for l in m.group(1).splitlines() if l.strip()]
+    if not lines:
+        return ""
+    impact = re.sub(r'^[-•*]\s*', '', lines[0]).replace("|", "\\|")
+    if len(impact) > 80:
+        impact = impact[:77]
+        if impact.count("`") % 2:  # don't leave a code span open
+            impact += "`"
+        impact += "..."
+    return impact
 
 
 def main():

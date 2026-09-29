@@ -216,17 +216,40 @@ def _check_challenge_on_post_api(rules: list) -> dict:
     return {"status": "PASS", "finding": None}
 
 def _check_hosting_provider_allow(rules: list) -> dict:
-    """Check #7: HostingProviderIPList overridden to Allow (dangerous)."""
+    """Check #7: HostingProviderIPList overridden to Allow (dangerous). The rule
+    group's scope-down limits which requests the Allow can apply to."""
     for r in rules:
         mg = r.get("managed")
         if not mg:
             continue
         for override in mg.get("overrides", []):
             if override.get("rule_name") == "HostingProviderIPList" and override.get("action") == "allow":
+                sd = r.get("scope_down")
                 return {"status": "FAIL",
                         "finding": f"HostingProviderIPList overridden to Allow in {r['name']} (priority {r['priority']}). "
                                    f"Cloud-hosted attack traffic bypasses all subsequent rules. Override to Count instead.",
-                        "rule": r["name"], "priority": r["priority"]}
+                        "rule": r["name"], "priority": r["priority"],
+                        "scope_down": sd["summary"] if sd else None,
+                        "path_scoped": bool(sd) and _has_uri_constraint(sd.get("leaves", []))}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_duplicate_rules(rules: list) -> dict:
+    """Rules identical in everything but name and priority. The later copy of
+    each group never changes the outcome."""
+    groups = {}
+    for r in sorted(rules, key=lambda r: r["priority"]):
+        sd = r.get("scope_down") or {}
+        key = json.dumps([r["type"], r["action"], sorted(r.get("rule_labels", [])),
+                          r.get("statement", {}).get("summary"), r.get("statement", {}).get("leaves"),
+                          sd.get("summary"), sd.get("leaves"),
+                          r.get("rate_based"), r.get("managed")], sort_keys=True)
+        groups.setdefault(key, []).append(_ref(r))
+    dups = [g for g in groups.values() if len(g) > 1]
+    if dups:
+        return {"status": "FAIL", "groups": dups,
+                "finding": f"{len(dups)} groups of identical rules: " +
+                           "; ".join(" / ".join(x["name"] for x in g) for g in dups)}
     return {"status": "PASS", "finding": None}
 
 def _check_uri_fragment_fallback(rules: list) -> dict:
@@ -382,11 +405,15 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
                                "label": l["value"], "producers": [_ref(p) for p in makers]})
 
     # IP block list evaluated after Allow rules
+    # A block list is an IP set, optionally ANDed with host conditions
     allows = [r for r in ordered if r["action"] == "allow"]
     for r in ordered:
         leaves = _leaves(r)
-        if (r["action"] == "block" and leaves
-                and all(l["type"] == "ip_set" and not l["negated"] for l in leaves)):
+        ips = [l for l in leaves if l["type"] == "ip_set" and not l["negated"]]
+        rest = [l for l in leaves if l not in ips]
+        if (r["action"] == "block" and ips
+                and all(l["field"] == "single_header:host" and not l["negated"] for l in rest)
+                and (not rest or r.get("statement", {}).get("summary", "").startswith("AND("))):
             before = [a for a in allows if a["priority"] < r["priority"]]
             if before:
                 issues.append({"kind": "blocklist_after_allow", "rule": _ref(r),
@@ -507,7 +534,8 @@ def _flag_exempt_regex(rules: list) -> list:
         if not exempt:
             continue
 
-        regex_str = exempt[0] if isinstance(exempt, list) and exempt else str(exempt)
+        # Several regex objects exempt a URI if any of them matches, same as joining with |
+        regex_str = "|".join(exempt) if isinstance(exempt, list) else str(exempt)
         branches = _split_regex_branches(regex_str)
         branch_analysis = []
         for b in branches:
@@ -561,6 +589,7 @@ def main():
         "managed_count": _check_managed_count(rules),
         "bot_control_config": _check_bot_control_config(rules),
         "order_issues": _check_order_issues(web_acl, rules),
+        "duplicate_rules": _check_duplicate_rules(rules),
     }
 
     # Build flags

@@ -95,15 +95,15 @@ python3 "{tool_dir}/scripts/waf-pre-checks.py" "{output_dir}" "{input_file}"
 
 ### Step 3b: Generate appendix
 
+Pick `lang` from the user's language: Chinese → `zh`, English → `en`, anything else → `en` (you translate in Step 4). Steps 3b and 3c both take it.
+
 ```bash
-python3 "{tool_dir}/scripts/waf-generate-appendix.py" "{output_dir}"
+python3 "{tool_dir}/scripts/waf-generate-appendix.py" "{output_dir}" --lang {lang}
 ```
 
 This writes `appendix.md` with fixed reference content: rule JSON templates, implementation steps, the priority order table, and override recommendations. Step 5 appends it to the report. When a finding recommends one of these fixed patterns, point to the appendix (e.g., "implementation steps: see Appendix B") and don't copy the content.
 
 ### Step 3c: Generate scripted findings
-
-Pick `--lang` from the user's language: Chinese → `zh`, English → `en`, anything else → `en` (you translate in Step 4).
 
 ```bash
 python3 "{tool_dir}/scripts/waf-generate-findings.py" "{output_dir}" --lang {lang}
@@ -136,13 +136,14 @@ For each section in `llm_sections`, read the matching reference file under `{too
 - **Section 5** (Bot Control): read `bot-control.md`. Evaluate the Bot Control strategy overall, including Common vs Targeted level and what native apps mean for it. The CategorySearchEngine/CategorySeo Allow finding is already scripted, so don't repeat it. If `llm_context.ua_allow_found` is true, analyze what happens to native app traffic at Bot Control once that UA Allow is fixed. Point to Appendix F for common override recommendations.
 - **Section 8** (Landing page / cookie logic): read `crawler-seo.md`. Evaluate security decisions based on cookies and whether a WAF token would be a better fit.
 - **Section 17** (Cross-rule dependencies and fix impact): read `common-patterns.md`. 17a (Count rules without labels) is already scripted, so skip it. For 17b, take every fix the report recommends, scripted or yours, and trace the affected traffic through the whole rule chain. Does fix A break rule B or remove a label something relies on? Write down the fix order and which changes must ship together.
-- **Section 21** (PCI DSS): only for payment or financial customers; skip it otherwise. Check whether dynamic protections (rate limits, auto-block IP sets, behavior-based bot rules, Challenge) would interfere with ASV scans, and whether long-term Count rules and unknown logging meet Requirement 6.4.2. Recommend confirming with the customer's QSA rather than stating non-compliance.
+- **Section 21** (PCI DSS): decide scope first, using the rule at the top of checklist section 21. It applies to any business that takes card payments, and `llm_context.payment_indicators` lists hosts and paths that look like payment endpoints. If those exist and the user hasn't said, ask. If it's in scope, check whether dynamic protections (rate limits, auto-block IP sets, behavior-based bot rules, Challenge) would interfere with ASV scans, and whether long-term Count rules and unknown logging meet Requirement 6.4.2. Recommend confirming with the customer's QSA rather than stating non-compliance.
 
 Append your findings to `waf-review-report.md`.
 
 Report format rules:
 - Don't write a report header or Summary table. Step 4b generates them.
 - Each finding uses `## Issue N (severity): {title}` (see "Report format" below).
+- Start `**Problem**:` and `**Recommendation**:` on their own line, followed by `- ` bullets. The Summary table takes its Impact text from the first Problem bullet.
 - Rule reference lines take one of three forms: `**Rule**: {name} (priority {N})`, `**Rules**: {name} (priority {N}), {name} (priority {N})`, or `**Rule**: N/A (missing rule)`. Always write `(priority N)` in full; the validator doesn't read other forms.
 - If a finding's severity depends on business context the user has to confirm, append ` ⏳` to its title.
 - Refer to scripted findings by issue number. Don't cite the number of a finding you haven't written yet; describe it instead.
@@ -154,7 +155,7 @@ Content rules, learned from reviews with customers:
 - `SizeRestrictions_BODY` in Count is a normal choice: legitimate bodies often exceed 8 KB, and scanners rarely need to. Don't recommend switching it to Block. If the user can list the endpoints that need large bodies, recommend keeping it in Count and adding a custom rule after CRS that blocks its label on all other paths. Never add a scope-down to CRS for this.
 - Don't recommend log-driven 4xx auto-blocking for burst scanning. It takes minutes to act and costs a lot to run.
 - When discussing Bot Control, state the inspection level the Web ACL actually uses before explaining what it can and can't detect.
-- For payment or financial customers, consider PCI DSS: rate limits, auto-block lists, and bot or Challenge rules can interfere with ASV scans (ASV Program Guide section 5.6), and Requirement 6.4.2 expects the WAF to block, or alert with immediate investigation, and to keep audit logs. See `references/checklist.md` section 21.
+- For customers that take card payments, consider PCI DSS: rate limits, auto-block lists, and bot or Challenge rules can interfere with ASV scans (ASV Program Guide section 5.6), and Requirement 6.4.2 expects the WAF to block, or alert with immediate investigation, and to keep audit logs. See `references/checklist.md` section 21.
 
 ### Step 4b: Generate report header and Summary table
 

@@ -10,7 +10,7 @@ Reads issue-rule-mapping.json (written by LLM in Step 4):
 
 Outputs:
   {output_dir}/mermaid-final.md — annotated diagram
-  Appends "## Appendix: Rule Execution Flow" to waf-review-report.md
+  Appends "## Appendix: Rule Execution Flow" (Chinese heading for --lang zh) to waf-review-report.md
 """
 import json
 import os
@@ -233,7 +233,10 @@ def _write_appendix(report_path: str, mermaid_text: str, output_dir: str):
         end = report.find(APPENDIX_END, start)
         tail = report[end + len(APPENDIX_END):] if end != -1 else ""
         report = report[:start].rstrip() + "\n" + tail.lstrip("\n")
-    block = f"\n---\n\n## Appendix: Rule Execution Flow\n\n{mermaid_text}"
+    meta_path = os.path.join(output_dir, "findings-metadata.json")
+    zh = os.path.isfile(meta_path) and json.loads(Path(meta_path).read_text(encoding="utf-8")).get("lang") == "zh"
+    heading = "附录：规则执行流程" if zh else "Appendix: Rule Execution Flow"
+    block = f"\n---\n\n## {heading}\n\n{mermaid_text}"
     appendix_path = os.path.join(output_dir, "appendix.md")
     if os.path.isfile(appendix_path):
         block += Path(appendix_path).read_text(encoding="utf-8")

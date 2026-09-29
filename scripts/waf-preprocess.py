@@ -485,6 +485,15 @@ def _extract_managed_config(mg: dict) -> dict | None:
                     result.update(val)
                 else:
                     result[key] = val
+    # get-web-acl nests the Anti-DDoS challenge settings; flatten them to the
+    # same keys the older flat format uses
+    challenge = (result.pop("client_side_action_config", None) or {}).get("challenge")
+    if challenge:
+        result["usage_of_challenge_action"] = challenge.get("usage_of_action")
+        if "sensitivity" in challenge:
+            result["sensitivity_to_challenge"] = challenge["sensitivity"]
+        result["uris_exempt_from_challenge"] = [
+            x.get("regex_string", "") for x in challenge.get("exempt_uri_regular_expressions", [])]
     return result or None
 
 def _extract_managed_group_name(mg: dict, rule_name: str) -> tuple[str, str]:

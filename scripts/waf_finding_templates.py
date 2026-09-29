@@ -11,23 +11,23 @@ TEMPLATES_EN = {
 **Problem**:
 - {forgeable_fields} {is_are} fully forgeable — an attacker can add {forgeable_example} to bypass all subsequent rules (IP reputation, Bot Control, rate limiting, etc.)
 - The blast radius is global — all traffic paths are affected, no host or URI restriction
-{dup_note}{opaque_note}
+{opaque_note}
 **Recommendation**:
 - Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow — the traffic does not need to bypass WAF entirely
 - If the rule is for internal probes or monitoring, use an unforgeable condition (IP Set or WAF Token) instead
-{dup_rec}{opaque_rec}
+{opaque_rec}
 ---
 """,
-"hosting_provider_allow": """## Issue {n} (Critical): HostingProviderIPList overridden to Allow — cloud-hosted attack traffic bypasses all subsequent rules
+"hosting_provider_allow": """## Issue {n} ({severity}): HostingProviderIPList overridden to Allow, so cloud-hosted traffic skips all later rules
 
 **Rule**: {rule_name} (priority {priority})
-**Current state**: `HostingProviderIPList` overridden to Allow
+**Current state**: `HostingProviderIPList` overridden to Allow{scope_state}
 
 **Problem**:
-- `HostingProviderIPList` default-Blocks cloud hosting and web hosting provider IPs. Overriding to Allow means all traffic from cloud platforms (AWS, GCP, Azure, etc.) is immediately allowed, skipping all subsequent rules
+- `HostingProviderIPList` default-Blocks cloud hosting and web hosting provider IPs. With the Allow override, a request from these IPs is allowed at once and skips every later rule
 - Modern DDoS attacks heavily use cloud infrastructure (VPS, cloud functions, containers) — Allow override lets this attack traffic bypass IP reputation, Bot Control, rate limiting, and all other protections
 - The correct approach is to override to Count (preserves labels for downstream rules), not Allow
-
+{scope_note}
 **Recommendation**:
 - Change `HostingProviderIPList` override from Allow to Count
 - Count mode does not Block — it only adds labels, so enterprise users routed through cloud proxies are not affected
@@ -146,22 +146,22 @@ TEMPLATES_EN = {
 **Problem**:
 - Count rules without labels only produce CloudWatch metrics — downstream rules cannot act on the match result
 - If the intent is to take action based on these matches, the current configuration cannot achieve it
-{dup_note}
+
 **Recommendation**:
-- If these rules are for monitoring only, keep one and add descriptive naming; remove duplicates
+- If these rules are for monitoring only, give them names that say so
 - If the intent is to act on matches (Block, Challenge, etc.), either change the action or add labels for downstream rules to consume
-{dup_rec}
+
 ---
 """,
-"challenge_all_during_event": """## Issue {n} (Medium): ChallengeAllDuringEvent overridden to Count — soft mitigation disabled during DDoS events
+"challenge_all_during_event": """## Issue {n} ({severity}): ChallengeAllDuringEvent overridden to Count, so the blanket Challenge during DDoS events is off
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: `ChallengeAllDuringEvent` overridden to Count
 
 **Problem**:
-- `ChallengeAllDuringEvent` is AntiDDoS AMR's core soft mitigation — during DDoS events, it Challenges all challengeable requests, filtering attack tools that cannot execute JavaScript
-- Overriding to Count means this rule only produces metrics during DDoS events, with no mitigation action
-- With `sensitivity_to_block: {block_sens}`, only {block_desc} DDoS requests are Blocked; disabling ChallengeAllDuringEvent leaves {remaining_desc} attack traffic with no soft mitigation
+- `ChallengeAllDuringEvent` is AntiDDoS AMR's blanket soft mitigation. During a DDoS event it Challenges every challengeable request, suspicious or not, which filters attack tools that can't run JavaScript
+- Overriding it to Count means this rule only produces metrics during DDoS events, with no mitigation action
+{details}
 
 **Recommendation**:
 - **Best**: if architecture supports it, use separate Web ACLs for frontend (browser) and backend (API/native app) traffic. Frontend Web ACL enables ChallengeAllDuringEvent with default config; backend Web ACL disables Challenge and raises Block sensitivity
@@ -219,18 +219,19 @@ TEMPLATES_EN = {
 
 ---
 """,
-"duplicate_rules": """## Issue {n} (Awareness): Duplicate {rule_type} rules — each pair has identical logic
+"duplicate_rules": """## Issue {n} (Low): {count} group(s) of identical rules
 
-**Rule**: {rule_line}
-**Current state**: {pair_count} pairs of {rule_type} rules with identical {match_desc}
+**Rules**: {rule_line}
+**Current state**: Rules that differ only in name and priority
 
 **Problem**:
-- {dup_problem}
-- Duplicate rules consume WCU and increase maintenance cost
+- The first rule in each group already decides every request it matches, so the later copies change nothing. They cost WCU and have to be kept in sync by hand
+{groups}
 
 **Recommendation**:
-- Remove the lower-priority duplicate from each pair, keeping the higher-priority version
-- If the pairs have different business intent (e.g., one for monitoring, one for enforcement), differentiate them in naming and configuration
+- Delete the later copy in each group. The Web ACL behaves the same afterwards, because the earlier copy runs first
+- Check CloudWatch alarms and dashboards that use the deleted rules' metric names
+- If two copies are meant to differ, change the conditions so they actually do
 
 ---
 """,
@@ -318,7 +319,8 @@ TEMPLATES_EN = {
 
 **Problem**:
 - {detail}
-- Versions 2.0/3.0 added most TARGETED rules (`TGT_TokenAbsent`, the `TGT_TokenReuse*` rules by IP, ASN, and country, `TGT_VolumetricSessionMaximum`, `TGT_SignalBrowserAutomationExtension`). Version 5.0 added 400+ bot signatures and new categories at COMMON level. Later versions keep adding signatures
+- Later versions added:
+{additions}
 - On the old version, far fewer bots are recognized, so COMMON-level categories match much less traffic
 
 **Recommendation**:
@@ -439,25 +441,25 @@ TEMPLATES_ZH = {
 **Current state**: {stmt_summary}，action 为 Allow，无 scope-down
 
 **Problem**:
-- {forgeable_fields} 是完全可伪造的，攻击者只需在请求中添加 {forgeable_example} 即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）
+- {forgeable_fields} 是完全可伪造的，攻击者只需在请求中添加{forgeable_example}即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）
 - 该规则的 blast radius 为全局——所有流量路径均受影响，无 host 或 URI 限制
-{dup_note}{opaque_note}
+{opaque_note}
 **Recommendation**:
 - 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow——该流量不需要绕过 WAF
 - 如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）
-{dup_rec}{opaque_rec}
+{opaque_rec}
 ---
 """,
-"hosting_provider_allow": """## Issue {n} (Critical): HostingProviderIPList 被覆盖为 Allow，云端攻击流量可绕过所有后续规则
+"hosting_provider_allow": """## Issue {n} ({severity}): HostingProviderIPList 被覆盖为 Allow，云主机流量会跳过所有后续规则
 
 **Rule**: {rule_name} (priority {priority})
-**Current state**: `HostingProviderIPList` 规则被覆盖为 Allow
+**Current state**: `HostingProviderIPList` 规则被覆盖为 Allow{scope_state}
 
 **Problem**:
-- `HostingProviderIPList` 默认 Block 云托管和 Web 托管提供商的 IP。将其覆盖为 Allow 意味着来自云平台（AWS、GCP、Azure 等）的所有流量将直接被放行，跳过所有后续规则
+- `HostingProviderIPList` 默认 Block 云托管和 Web 托管提供商的 IP。覆盖为 Allow 后，来自这些 IP 的请求直接放行，后面的规则都不再检查
 - 现代 DDoS 攻击大量使用云托管基础设施（VPS、云函数、容器）——Allow 覆盖使这些攻击流量完全绕过 IP 信誉、Bot Control、速率限制等所有保护
 - 正确做法是覆盖为 Count（保留标签，供下游规则使用），而非 Allow
-
+{scope_note}
 **Recommendation**:
 - 将 `HostingProviderIPList` 的覆盖从 Allow 改为 Count
 - 如果担心企业用户通过云代理访问时被误封，Count 模式已经解决了这个问题（不会 Block，只添加标签）
@@ -576,22 +578,22 @@ TEMPLATES_ZH = {
 **Problem**:
 - Count 规则不添加标签时，只产生 CloudWatch 指标，下游规则无法基于此匹配结果采取行动
 - 如果意图是基于匹配结果执行某种动作，当前配置无法实现
-{dup_note}
+
 **Recommendation**:
-- 如果这些规则是监控用途（仅观察），保留一条并添加说明性命名即可，删除重复规则
+- 如果这些规则只是用来观察，把名字改得能看出用途
 - 如果意图是对匹配结果采取行动（如 Block 或 Challenge），应将 action 改为目标动作，或添加标签供下游规则消费
-{dup_rec}
+
 ---
 """,
-"challenge_all_during_event": """## Issue {n} (Medium): ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间软缓解失效
+"challenge_all_during_event": """## Issue {n} ({severity}): ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间的兜底 Challenge 关掉了
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: `ChallengeAllDuringEvent` 被覆盖为 Count
 
 **Problem**:
-- `ChallengeAllDuringEvent` 是 AntiDDoS AMR 的核心软缓解机制——在检测到 DDoS 事件时，对所有可 Challenge 的请求发起 Challenge，过滤无法执行 JavaScript 的攻击工具
-- 将其覆盖为 Count 意味着 DDoS 事件期间该规则只产生指标，不执行任何缓解动作
-- 当前配置中 `sensitivity_to_block: {block_sens}`，只有{block_desc} DDoS 请求才会被 Block；`ChallengeAllDuringEvent` 被禁用后，{remaining_desc}攻击流量在事件期间将不受任何软缓解保护
+- `ChallengeAllDuringEvent` 是 AntiDDoS AMR 兜底的软缓解。检测到 DDoS 事件时，它对所有可 Challenge 的请求发起 Challenge，不管是否可疑，用来过滤不能执行 JavaScript 的攻击工具
+- 覆盖为 Count 后，事件期间这条规则只产生指标，不做任何缓解
+{details}
 
 **Recommendation**:
 - **最佳方案**：如果架构支持，使用前后端分离——前端 Web ACL（浏览器流量）启用 ChallengeAllDuringEvent 默认配置；后端 Web ACL（API/原生 App 流量）关闭 Challenge，提高 Block 灵敏度
@@ -649,18 +651,19 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"duplicate_rules": """## Issue {n} (Awareness): {rule_type}规则存在重复，每对规则逻辑完全相同
+"duplicate_rules": """## Issue {n} (Low): 有 {count} 组规则完全相同
 
-**Rule**: {rule_line}
-**Current state**: {pair_count} 对{rule_type}规则，{match_desc}完全相同
+**Rules**: {rule_line}
+**Current state**: 这些规则除了名字和 priority，其他配置完全一样
 
 **Problem**:
-- {dup_problem}
-- 重复规则消耗 WCU 且增加维护成本
+- 每组里排在前面的规则已经决定了它匹配到的请求怎么处理，后面的副本不会改变任何结果，只是多占 WCU，改规则时还得记得两边一起改
+{groups}
 
 **Recommendation**:
-- 删除低优先级的重复规则，保留高优先级版本
-- 如果两组规则有不同的业务意图（例如一组用于监控、一组用于执行），应在命名和配置上加以区分
+- 每组删掉排在后面的那条。前面那条先执行，删掉后 ACL 的行为不变
+- 检查有没有 CloudWatch 告警或仪表盘用到被删规则的指标名
+- 如果两条本来就想做不同的事，把条件改成真正不一样
 
 ---
 """,
@@ -748,7 +751,8 @@ TEMPLATES_ZH = {
 
 **Problem**:
 - {detail}
-- 2.0/3.0 版本加入了大部分 TARGETED 规则（`TGT_TokenAbsent`、按 IP、ASN、国家区分的 `TGT_TokenReuse*`、`TGT_VolumetricSessionMaximum`、`TGT_SignalBrowserAutomationExtension`）。5.0 版本在 COMMON 级别新增了 400 多种 bot 特征和新的类别。之后的版本还在继续增加特征
+- 之后的版本陆续加入了：
+{additions}
 - 旧版本能认出的 bot 少得多，COMMON 级别各个类别能命中的流量也少得多
 
 **Recommendation**:
