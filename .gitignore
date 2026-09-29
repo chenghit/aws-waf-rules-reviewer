@@ -1,7 +1,5 @@
 .DS_Store
 /waf-review-report.md
+/waf-review/
 __pycache__/
 docs/
-install.sh
-install.bat
-aws-waf-rules-reviewer.json

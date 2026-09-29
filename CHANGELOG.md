@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5 (2026-09-29)
+
+### Breaking
+- No longer an installable skill. `SKILL.md`, `install.sh`, and `install.bat` are removed. The workflow now lives in `AGENTS.md`, and any agent that reads it can run a review. If you copied the skill into `~/.kiro/skills/` or similar, delete that copy.
+
+### Workflow
+- `AGENTS.md` is tool-neutral. It says "read", "write", and "run" instead of Kiro tool names (`fs_read`, `fs_write`), and resolves script paths relative to itself, so the old path probing in Step 0 is gone.
+- `CLAUDE.md` imports `AGENTS.md` so Claude Code loads it.
+- Works without cloning: point the agent at the raw `AGENTS.md` URL and it clones the repo into a temp directory.
+- New Step 0 case: with no file given, the agent fetches the Web ACL through read-only AWS CLI calls (`list-web-acls`, `get-web-acl`, `get-logging-configuration`). It confirms the account first. Output goes to `./waf-review/<web-acl-name>/`.
+
+### Scripts
+- `waf-preprocess.py`: new `--logging <file>|none` option writes `web_acl.logging` into `waf-summary.json`.
+- `waf-generate-findings.py`: the logging finding now follows the real status. Enabled means no finding, disabled gets a new "WAF logging is not enabled" finding, and unknown keeps the old "can't verify" finding. Before this, the finding appeared on every review.
+
 ## v0.4 (2026-04-21)
 
 ### Scripts (9 total, +2 new)
@@ -23,7 +38,7 @@ Forgeable Allow (with opaque value detection), HostingProviderIPList Allow, scop
 ### Performance
 - LLM-written findings: ~21 → ~4 (for 27-rule example)
 - Reference context read by LLM: ~33KB → ~20KB
-- Estimated total time: ~10 min → ~5 min (27 rules)
+- Measured total time: ~10 min for 27 rules, about the same as v0.3. LLM thinking is ~4 min of that
 
 ## v0.3 (2026-03-31)
 

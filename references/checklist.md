@@ -99,7 +99,7 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules.
 
 ### 13. Logging and Monitoring
 
-If no WAF logging config visible → remind user logging is essential for diagnostics.
+Read `web_acl.logging.status` in waf-summary.json. `disabled` → logging is confirmed off. `unknown` → config wasn't supplied, remind user to verify. `enabled` → no finding.
 
 ### 14. Hashed or Opaque search_string
 

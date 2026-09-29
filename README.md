@@ -4,13 +4,13 @@
 
 [English](README_EN.md)
 
-一个用于评审 AWS WAF Web ACL 配置的 [Agent Skill](https://agentskills.io)，帮助发现安全问题、配置错误和优化机会。
+给 AI 编程 agent 用的 AWS WAF Web ACL 配置评审工具，找安全问题、配置错误和可优化的地方。不用安装。你的 agent 读完 [AGENTS.md](AGENTS.md) 就会照着做。Claude Code、Codex、Cursor、Kiro 都能用，其他能跑 shell 命令的 agent 也行。
 
 ## 工作流程
 
 ```mermaid
 flowchart LR
-    A["WAF JSON"] --> B["预处理"]
+    A["Web ACL JSON / AWS CLI"] --> B["预处理"]
     B --> C["Mermaid 图生成"]
     B --> D["机械预检"]
     D --> D2["附录生成"]
@@ -43,73 +43,50 @@ flowchart LR
 
 ## 功能
 
-给定一个 AWS WAF Web ACL 的 JSON 导出文件，该 skill 会：
+给一个 Web ACL，可以是 JSON 文件，也可以让 agent 从你的账号里拉，agent 会：
 
-1. **预处理** — 提取结构化规则摘要，压缩输入（56KB → 16KB）
-2. **机械预检** — 自动检测 token domain 冗余、版本过旧、冗余规则等 6 项确定性问题
-3. **确定性发现生成** — 19 个生成器自动产出约 80% 的发现（可伪造 Allow、scope-down 过窄、ChallengeAllDuringEvent 禁用、正则未锚定、缺失基线防护、优先级顺序等），支持中英双语
-4. **LLM 分析** — 仅分析需要判断力的检查项（Bot Control 策略、Cookie 逻辑、跨规则依赖），按 18 项检查清单中脚本未覆盖的部分逐项审查
-5. **报告生成** — 按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
-6. **Mermaid 流程图** — 自动生成规则执行流程图，标注问题引用
-7. **自审** — 机械验证 + 对抗性检查（仅针对 LLM 生成的发现），确保报告准确性
+1. **拉取配置**（可选）：用只读的 AWS CLI 命令拉 Web ACL 和它的日志配置
+2. **预处理**：提取结构化规则摘要，压缩输入（56KB → 16KB）
+3. **机械预检**：自动检测 token domain 冗余、版本过旧、冗余规则等 6 项确定性问题
+4. **确定性发现生成**：19 个生成器自动产出约 80% 的发现（可伪造 Allow、scope-down 过窄、ChallengeAllDuringEvent 禁用、正则未锚定、缺失基线防护、优先级顺序等），支持中英双语
+5. **LLM 分析**：仅分析需要判断力的检查项（Bot Control 策略、Cookie 逻辑、跨规则依赖），按 18 项检查清单中脚本未覆盖的部分逐项审查
+6. **报告生成**：按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
+7. **Mermaid 流程图**：自动生成规则执行流程图，标注问题引用
+8. **自审**：机械验证 + 对抗性检查（仅针对 LLM 生成的发现），确保报告准确性
 
-## 安装
+## 使用
 
-将目录复制到你的 AI 编程工具的 skill 目录。例如 Kiro CLI：
+没有安装这一步。需要 Python 3.10+（只用标准库），agent 要能跑 shell 命令。
+
+**在任意项目里用。** 对你的 agent 说：
+
+> 读一下 https://raw.githubusercontent.com/<OWNER>/aws-waf-rules-reviewer/main/AGENTS.md ，帮我评审 AWS WAF Web ACL。
+
+agent 会把这个仓库 clone 到临时目录，在那里跑脚本。报告写在你当前目录下。
+
+**clone 下来用。**
 
 ```bash
-cp -r aws-waf-rules-reviewer ~/.kiro/skills/
+git clone https://github.com/<OWNER>/aws-waf-rules-reviewer.git
+cd aws-waf-rules-reviewer
 ```
 
-安装后的目录结构：
-
-```
-~/.kiro/skills/aws-waf-rules-reviewer/
-├── SKILL.md
-├── references/
-│   ├── checklist.md
-│   ├── antiddos-amr.md
-│   ├── bot-control.md
-│   ├── challenge-captcha.md
-│   ├── common-patterns.md
-│   ├── crawler-seo.md
-│   ├── ip-reputation.md
-│   ├── managed-overrides.md
-│   └── rate-based.md
-└── scripts/
-    ├── managed-labels.json
-    ├── waf-preprocess.py
-    ├── waf-generate-mermaid.py
-    ├── waf-pre-checks.py
-    ├── waf-generate-appendix.py
-    ├── waf-generate-findings.py
-    ├── waf-generate-report-header.py
-    ├── waf-build-issue-map.py
-    ├── waf-annotate-mermaid.py
-    └── waf-validate-report.py
-```
-
-**依赖**: Python 3.10+（标准库，无需 pip install）
-
-对于其他工具（Claude Code、OpenRouter 等），将目录复制到对应的 skill 目录即可。脚本通过 `glob` 自动发现安装位置，无需配置路径。
+在这个目录里启动 agent。Codex、Cursor 等大多数 agent 会自己加载 `AGENTS.md`，Claude Code 通过 `CLAUDE.md` 加载。如果你的 agent 不会自动加载，第一句先说"读一下 AGENTS.md"。然后直接提需求，比如"评审 us-east-1 的 Web ACL prod-acl"，或者"评审 examples/web-acl-example.json"。
 
 ## 输入
 
-AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
+**JSON 文件或目录。** 可以从 AWS 控制台导出（Web ACL → "Download web ACL as JSON"），也可以用 `aws wafv2 get-web-acl` 拿。给文件路径，或者给包含该文件的目录都行。支持三种 JSON 格式：AWS CLI 输出（PascalCase）、控制台导出、snake_case 自定义格式。
 
-- 从 AWS 控制台导出（Web ACL → "Download web ACL as JSON"）
-- 使用 AWS CLI：`aws wafv2 get-web-acl --name <name> --scope <REGIONAL|CLOUDFRONT> --id <id>`
-
-可以提供 JSON 文件的直接路径，也可以提供包含 JSON 文件的目录路径。支持三种 JSON 格式：AWS CLI 输出（PascalCase）、控制台导出、snake_case 自定义格式。
+**什么都不给。** agent 用 AWS CLI 自己拉。它会先用 `aws sts get-caller-identity` 给你看当前账号，再问 scope、region 和要评审哪个 Web ACL。全程只读，凭证需要 `wafv2:ListWebACLs`、`wafv2:GetWebACL`、`wafv2:GetLoggingConfiguration` 三个权限。它还会顺带拉日志配置。JSON 导出里没有这一项，所以拉下来之后报告才能说清日志到底开没开。
 
 ## 输出
 
-一份 Markdown 格式的评审报告（`waf-review/waf-review-report.md`），包含：
+一份 Markdown 报告 `waf-review-report.md`。输入是本地文件时，放在文件旁边的 `waf-review/` 里。从账号拉取时，放在当前目录的 `./waf-review/<web-acl-name>/` 里，和保存下来的 `web-acl.json`、`logging-configuration.json` 在一起。报告包含：
 
-- **摘要表** — 所有发现的问题及其严重程度和影响一览
-- **详细发现** — 每个问题对应的规则、当前配置、问题描述和修复建议
-- **待用户确认项** — 需要业务上下文才能判断严重程度的发现，标记为 ⏳
-- **附录：规则执行流** — Mermaid 流程图，自动标注问题引用
+- **摘要表**：所有发现的问题及其严重程度和影响一览
+- **详细发现**：每个问题对应的规则、当前配置、问题描述和修复建议
+- **待用户确认项**：需要业务上下文才能判断严重程度的发现，标记为 ⏳
+- **附录：规则执行流**：Mermaid 流程图，自动标注问题引用
 
 ### 严重程度
 
@@ -118,7 +95,7 @@ AWS WAF Web ACL 的 JSON 格式配置文件，通常通过以下方式获取：
 | 🔴 Critical | 攻击者可以完全绕过防护，或核心防护机制被禁用 |
 | 🟡 Medium | 存在防护缺口，但需要特定条件才能利用 |
 | 🟢 Low | 配置不够优化，但不直接影响安全性 |
-| 🔵 Awareness | 非漏洞 — 用户应了解的运维信息 |
+| 🔵 Awareness | 非漏洞，用户应了解的运维信息 |
 
 ## 性能预期
 
@@ -135,9 +112,9 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 
 `examples/` 目录包含一个完整的输入输出示例：
 
-- `web-acl-example.json` — 组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
-- `waf-review/waf-review-report.md` — 实测输出的评审报告（中文）
-- `waf-review/` 下的其他文件 — 脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
+- `web-acl-example.json`：组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
+- `waf-review/waf-review-report.md`：实测输出的评审报告（中文）
+- `waf-review/` 下的其他文件：脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
 
 使用 Claude Sonnet 4.6 模型生成。
 
@@ -175,25 +152,23 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 
 ## 支持的模型
 
-本工具需要具备足够 **output token 容量** 的模型——评审报告可能很长，自审阶段还需要额外的输出空间。
+本工具需要具备足够 **output token 容量** 的模型。评审报告可能很长，自审阶段还需要额外的输出空间。
 
 **最低要求：64K output tokens。**
 
-### Kiro CLI 用户
-
-Kiro CLI 仅支持 Amazon Bedrock 上的 Claude 模型。在 Kiro 中使用 `/model` 切换模型。
+### Claude
 
 | 模型 | 输入 Tokens | 输出 Tokens | 适用场景 |
 |------|------------|------------|---------|
-| Claude Sonnet 4.6 (1M) | 1M | 64K | ✅ 默认 — ≤100 条规则 |
+| Claude Sonnet 4.6 (1M) | 1M | 64K | ✅ 默认，≤100 条规则 |
 | Claude Opus 4.6 (1M) | 1M | 128K | ✅ >100 条规则，复杂配置 |
 | Claude Opus 4.5 | 200K | 64K | ✅ ≤100 条规则 |
 | Claude Sonnet 4.5 | 200K | 64K | ✅ ≤100 条规则 |
 | Claude Opus 4.1 | 200K | 64K | ✅ ≤100 条规则 |
 
-### 其他 Agent 工具用户
+### 其他模型
 
-任何满足 64K output 要求的模型均可使用。以下模型已确认满足最低要求：
+满足 64K output 要求的模型都可以用。下面这些已确认满足：
 
 #### 国内厂商
 
@@ -217,7 +192,7 @@ Kiro CLI 仅支持 Amazon Bedrock 上的 Claude 模型。在 Kiro 中使用 `/mo
 | Gemini 2.5 Flash | Google | 1M | 64K | 可控思考预算 |
 | Gemini 3.1 Pro Preview | Google | 1M | 64K | 多模态旗舰 |
 
-> 以上模型未经本工具实际测试。兼容性取决于你的 agent 框架如何将 skill 编排逻辑映射到模型 API。模型规格和可用性可能随时变化，请以各厂商官方文档为准。
+> 以上模型未经本工具实际测试。兼容性取决于你的 agent 能不能按 AGENTS.md 里的流程走完。模型规格和可用性可能随时变化，请以各厂商官方文档为准。
 
 ## 免责声明
 

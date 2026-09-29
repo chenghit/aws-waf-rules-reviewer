@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """WAF Preprocess: Extract structured summary from AWS WAF Web ACL JSON.
 
-Usage: python3 waf-preprocess.py <input_path> <output_dir>
+Usage: python3 waf-preprocess.py <input_path> <output_dir> [--logging <file>|none]
   input_path: WAF JSON file or directory containing one
   output_dir: absolute path for output files (created if needed)
+  --logging:  output of `aws wafv2 get-logging-configuration`, or `none` if
+              that call returned WAFNonexistentItemException. Omit if unknown.
 
 Supports: AWS CLI (PascalCase), Console export, snake_case custom formats.
 """
@@ -102,6 +104,24 @@ def _extract_web_acl(data: dict) -> tuple[dict, str]:
     if fmt == "console_export":
         return data, fmt
     fatal("Unrecognized WAF JSON format")
+
+def _load_logging(arg: str | None) -> dict:
+    if arg is None:
+        return {"status": "unknown"}
+    if arg == "none":
+        return {"status": "disabled"}
+    try:
+        data = json.loads(Path(arg).read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as e:
+        fatal(f"Failed to parse logging config {arg}: {e}")
+    lc = _normalize_keys(data.get("LoggingConfiguration", data))
+    return {
+        "status": "enabled",
+        "log_scope": lc.get("log_scope", "CUSTOMER"),
+        "destinations": lc.get("log_destination_configs", []),
+        "redacted_fields": len(lc.get("redacted_fields", [])),
+        "has_filter": bool(lc.get("logging_filter")),
+    }
 
 # ── Line number tracking ──────────────────────────────────────────────────
 
@@ -565,11 +585,19 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
 # ── Main ──────────────────────────────────────────────────────────────────
 
 def main():
-    if len(sys.argv) < 3:
-        fatal("Usage: waf-preprocess.py <input_path> <output_dir>")
+    args = sys.argv[1:]
+    logging_arg = None
+    if "--logging" in args:
+        idx = args.index("--logging")
+        if idx + 1 >= len(args):
+            fatal("--logging requires a file path or 'none'")
+        logging_arg = args[idx + 1]
+        del args[idx:idx + 2]
+    if len(args) < 2:
+        fatal("Usage: waf-preprocess.py <input_path> <output_dir> [--logging <file>|none]")
 
-    input_path = sys.argv[1]
-    output_dir = sys.argv[2]
+    input_path = args[0]
+    output_dir = args[1]
 
     # Find input file
     input_file = _find_input_file(input_path)
@@ -657,6 +685,7 @@ def main():
             "token_domains": token_domains,
             "challenge_config": challenge_config,
             "captcha_config": captcha_config,
+            "logging": _load_logging(logging_arg),
         },
         "rule_count": len(rules),
         "rules": rules,

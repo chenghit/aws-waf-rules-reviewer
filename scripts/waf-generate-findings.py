@@ -313,10 +313,13 @@ def _gen_token_domain(summary, pre_checks, flags, T, lang):
 
 
 def _gen_no_logging(summary, pre_checks, flags, T, lang):
-    # WAF JSON exports typically don't include logging config.
-    # We flag this as Awareness unconditionally — the LLM sanity check can override.
-    md = T["no_logging"].format(n="{n}")
-    return [(md, {"severity": "Awareness", "title_key": "no_logging",
+    # Web ACL JSON never includes logging config; waf-preprocess.py --logging supplies it.
+    status = summary.get("web_acl", {}).get("logging", {}).get("status", "unknown")
+    if status == "enabled":
+        return NOT_APPLICABLE
+    key = "logging_disabled" if status == "disabled" else "no_logging"
+    md = T[key].format(n="{n}")
+    return [(md, {"severity": "Awareness", "title_key": key,
                   "rules": [], "sections": [13]})]
 
 

@@ -109,6 +109,21 @@ TEMPLATES_EN = {
 
 ---
 """,
+"logging_disabled": """## Issue {n} (Awareness): WAF logging is not enabled
+
+**Rule**: N/A (Web ACL global configuration)
+**Current state**: `get-logging-configuration` returned no logging configuration for this Web ACL
+
+**Problem**:
+- No request logs are recorded, so blocked or challenged requests cannot be traced after the fact
+- Without logs, false positives, rule tuning, and incident investigation have to rely on sampled requests and CloudWatch metrics only
+
+**Recommendation**:
+- Enable WAF logging to CloudWatch Logs, S3, or Kinesis Data Firehose
+- Recommend retaining at least 90 days of logs and configuring CloudWatch alarms for key metrics (Block rate, Challenge rate)
+
+---
+""",
 "default_action_redundancy": """## Issue {n} (Low): {rule_name} rule is redundant with default Allow action
 
 **Rule**: {rule_name} (priority {priority})
@@ -411,6 +426,21 @@ TEMPLATES_ZH = {
 
 **Recommendation**:
 - 通过 AWS 控制台或 CLI 确认是否已启用 WAF 日志（Kinesis Data Firehose、S3 或 CloudWatch Logs）
+- 建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）
+
+---
+""",
+"logging_disabled": """## Issue {n} (Awareness): 未启用 WAF 日志
+
+**Rule**: N/A（Web ACL 全局配置）
+**Current state**: `get-logging-configuration` 显示该 Web ACL 没有日志配置
+
+**Problem**:
+- 没有请求日志，被 Block 或 Challenge 的请求事后无法追查
+- 排查误报、调规则、调查安全事件时，只能依赖采样请求和 CloudWatch 指标
+
+**Recommendation**:
+- 启用 WAF 日志，目标可选 CloudWatch Logs、S3 或 Kinesis Data Firehose
 - 建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）
 
 ---
