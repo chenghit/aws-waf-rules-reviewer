@@ -15,7 +15,7 @@ import re
 import sys
 from datetime import date
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 
 
@@ -83,7 +83,7 @@ def main():
 
     output_dir = sys.argv[1]
     report_path = os.path.join(output_dir, "waf-review-report.md")
-    summary_path = os.path.join(output_dir, "waf-summary.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
 
     if not os.path.isfile(report_path):
         fatal(f"waf-review-report.md not found in {output_dir}")

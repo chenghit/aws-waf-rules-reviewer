@@ -9,7 +9,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 APPENDIX_SECTIONS = r"""
 ---
@@ -347,7 +347,7 @@ def main():
 
     output_dir = sys.argv[1]
     zh = "--lang" in sys.argv and sys.argv[sys.argv.index("--lang") + 1:][:1] == ["zh"]
-    summary_path = os.path.join(output_dir, "waf-summary.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
 
     # Read WCU from summary
     wcu_text = ("导出文件里没有 WCU 容量，添加规则前请在 AWS 控制台确认。" if zh else
@@ -366,7 +366,7 @@ def main():
     content = ((APPENDIX_SECTIONS_ZH if zh else APPENDIX_SECTIONS).replace("{wcu_text}", wcu_text)
                .replace("{{", "{").replace("}}", "}"))
 
-    output_file = os.path.join(output_dir, "appendix.md")
+    output_file = work_path(output_dir, "appendix.md")
     try:
         Path(output_file).write_text(content, encoding="utf-8")
     except OSError as e:

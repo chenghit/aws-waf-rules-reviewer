@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 # ── Forgeability mapping ──────────────────────────────────────────────────
 # Keep in sync with managed-labels.json (forgeability section).
@@ -562,7 +562,7 @@ def main():
 
     output_dir = sys.argv[1]
     input_file = sys.argv[2]
-    summary_file = os.path.join(output_dir, "waf-summary.json")
+    summary_file = work_path(output_dir, "waf-summary.json")
 
     if not os.path.isfile(summary_file):
         fatal(f"waf-summary.json not found in {output_dir}")
@@ -602,7 +602,7 @@ def main():
     result = {"pre_checks": pre_checks, "flags": flags}
 
     # Write output
-    output_file = os.path.join(output_dir, "pre-checks.json")
+    output_file = work_path(output_dir, "pre-checks.json")
     try:
         Path(output_file).write_text(
             json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")

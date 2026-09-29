@@ -11,7 +11,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 
 
@@ -48,9 +48,9 @@ def main():
         fatal("Usage: waf-build-issue-map.py <output_dir>")
 
     output_dir = sys.argv[1]
-    meta_path = os.path.join(output_dir, "findings-metadata.json")
+    meta_path = work_path(output_dir, "findings-metadata.json")
     report_path = os.path.join(output_dir, "waf-review-report.md")
-    summary_path = os.path.join(output_dir, "waf-summary.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
 
     for p in (meta_path, report_path, summary_path):
         if not os.path.isfile(p):
@@ -81,7 +81,7 @@ def main():
 
     # Write output
     output = {"annotations": mapping}
-    output_file = os.path.join(output_dir, "issue-rule-mapping.json")
+    output_file = work_path(output_dir, "issue-rule-mapping.json")
     Path(output_file).write_text(
         json.dumps(output, indent=2, ensure_ascii=False), encoding="utf-8")
 

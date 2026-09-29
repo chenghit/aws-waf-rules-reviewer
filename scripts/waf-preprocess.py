@@ -16,7 +16,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 # Keys to skip during processing (internal/display-only fields)
 SKIP_KEYS = frozenset({
@@ -745,7 +745,7 @@ def main():
 
     # Write output
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, "waf-summary.json")
+    output_file = work_path(output_dir, "waf-summary.json")
     try:
         with open(output_file, "w", encoding="utf-8") as f:
             json.dump(summary, f, indent=2, ensure_ascii=False)

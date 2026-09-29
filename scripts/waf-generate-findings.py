@@ -15,7 +15,7 @@ import re
 import sys
 from collections import defaultdict
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 # ── Constants ──────────────────────────────────────────────────────────────
 
@@ -907,8 +907,8 @@ def main():
 
     T = TEMPLATES_EN if lang == "en" else TEMPLATES_ZH
 
-    summary_path = os.path.join(output_dir, "waf-summary.json")
-    prechecks_path = os.path.join(output_dir, "pre-checks.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
+    prechecks_path = work_path(output_dir, "pre-checks.json")
 
     if not os.path.isfile(summary_path):
         fatal(f"waf-summary.json not found in {output_dir}")
@@ -1020,7 +1020,7 @@ def main():
     next_issue_number = len(all_findings) + 1
 
     # Write scripted-findings.md
-    findings_path = os.path.join(output_dir, "scripted-findings.md")
+    findings_path = work_path(output_dir, "scripted-findings.md")
     Path(findings_path).write_text("".join(findings_md), encoding="utf-8")
 
     # Write findings-metadata.json
@@ -1033,7 +1033,7 @@ def main():
         "next_issue_number": next_issue_number,
         "lang": lang,
     }
-    meta_path = os.path.join(output_dir, "findings-metadata.json")
+    meta_path = work_path(output_dir, "findings-metadata.json")
     Path(meta_path).write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8")
 

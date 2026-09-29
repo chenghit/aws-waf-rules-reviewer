@@ -22,7 +22,8 @@ flowchart LR
     E3 --> F["Mermaid Annotate"]
     F --> G["Report Validate"]
     G --> H["LLM Self-review"]
-    H --> I["Review Report"]
+    H --> J["HTML Render"]
+    J --> I["Review Report"]
 
     style B fill:#e1f5fe
     style C fill:#e1f5fe
@@ -33,6 +34,7 @@ flowchart LR
     style E3 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
+    style J fill:#e1f5fe
     style E fill:#fff3e0
     style H fill:#fff3e0
 ```
@@ -53,6 +55,7 @@ Given a Web ACL, either as a JSON file or fetched from your account, the agent:
 6. **Report generation**: severity-rated findings (Critical / Medium / Low / Awareness)
 7. **Mermaid flow diagram**: auto-generated rule execution flow with issue annotations
 8. **Self-review**: mechanical validation + adversarial checks (LLM-generated findings only) for report accuracy
+9. **HTML report**: a script turns the Markdown report into a single HTML file that needs no JavaScript, works offline, and links issue numbers to their findings
 
 ## Usage
 
@@ -81,12 +84,12 @@ Start your agent in that directory. Codex, Cursor, and most other agents load `A
 
 ## Output
 
-A Markdown report, `waf-review-report.md`. For a local file it goes in `waf-review/` next to that file. For a fetched Web ACL it goes in `./waf-review/<web-acl-name>/`, next to the saved `web-acl.json` and `logging-configuration.json`. The report contains:
+The report comes as two files: `waf-review-report.html` to read and share, and `waf-review-report.md` to edit (ask the agent to render the HTML again after editing). For a local file they go in `waf-review/` next to that file. For a fetched Web ACL they go in `./waf-review/<web-acl-name>/`. Intermediate files, including the fetched `web-acl.json` and `logging-configuration.json`, sit in a `work/` subfolder you can ignore. The report contains:
 
 - **Summary table**: all findings with severity and impact at a glance
 - **Detailed findings**: each issue with the affected rule, current state, problem description, and recommendation
 - **Items needing user confirmation**: findings where business context may change the severity, marked with ⏳
-- **Appendix: Rule Execution Flow**: Mermaid diagram with issue annotations
+- **Appendix: Rule Execution Flow**: the rules in priority order, with each rule's action and related issues. A Mermaid diagram in the Markdown, drawn as cards in the HTML
 
 ### Severity Levels
 

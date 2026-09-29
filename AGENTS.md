@@ -50,26 +50,28 @@ Use read-only calls only: `sts get-caller-identity`, `wafv2 list-web-acls`, `waf
    aws wafv2 list-web-acls --scope <SCOPE> --region <REGION>
    ```
    If the response has a `NextMarker`, repeat with `--next-marker <value>` until it doesn't. If there's more than one Web ACL and the user hasn't named one, show the list and ask. Review one Web ACL at a time.
-4. Set `output_dir` to `{current working directory}/waf-review/{web_acl_name}` and create it.
+4. Set `output_dir` to `{current working directory}/waf-review/{web_acl_name}` and create it with its `work/` subfolder.
 5. Save the Web ACL:
    ```bash
-   aws wafv2 get-web-acl --name <NAME> --scope <SCOPE> --id <ID> --region <REGION> > "{output_dir}/web-acl.json"
+   aws wafv2 get-web-acl --name <NAME> --scope <SCOPE> --id <ID> --region <REGION> > "{output_dir}/work/web-acl.json"
    ```
-   `input_file` is `{output_dir}/web-acl.json`.
+   `input_file` is `{output_dir}/work/web-acl.json`.
 6. Save the logging config, using the Web ACL's `ARN` from the list. A logging config belongs to one log scope, and the call only checks the scope you pass, so try each in turn and stop at the first that succeeds: `CUSTOMER`, `SECURITY_LAKE`, `CLOUDWATCH_TELEMETRY_RULE_MANAGED`.
    ```bash
-   aws wafv2 get-logging-configuration --resource-arn <ARN> --log-scope <LOG_SCOPE> --region <REGION> > "{output_dir}/logging-configuration.json"
+   aws wafv2 get-logging-configuration --resource-arn <ARN> --log-scope <LOG_SCOPE> --region <REGION> > "{output_dir}/work/logging-configuration.json"
    ```
-   - One scope succeeds: pass `--logging "{output_dir}/logging-configuration.json"` to Step 1.
+   - One scope succeeds: pass `--logging "{output_dir}/work/logging-configuration.json"` to Step 1.
    - All three return `WAFNonexistentItemException`: logging isn't enabled. Delete the empty file and pass `--logging none`.
    - Any other error, such as `AccessDeniedException`, or an older CLI that rejects `--log-scope`: delete the empty file, leave `--logging` out, and tell the user logging couldn't be checked.
 
 Example of resolved paths:
 ```
 tool_dir    = /tmp/aws-waf-rules-reviewer
-input_file  = /home/user/project/waf-review/prod-acl/web-acl.json
+input_file  = /home/user/project/waf-review/prod-acl/work/web-acl.json
 output_dir  = /home/user/project/waf-review/prod-acl
 ```
+
+The report is the only thing at the top of `output_dir`: `waf-review-report.md` and `waf-review-report.html`. The scripts put every intermediate file in `{output_dir}/work/`.
 
 Every script prints a `---RESULT---` block on stdout. Read its `STATUS` line. `OK` means go on. `FATAL` means tell the user what `CONTEXT` says and stop.
 
@@ -118,9 +120,9 @@ This produces the findings a script can fully decide, such as forgeable Allow ru
 **Do this step yourself in this session. Don't hand it to a subagent.**
 
 Read:
-- `{output_dir}/scripted-findings.md`
-- `{output_dir}/findings-metadata.json`
-- `{output_dir}/waf-summary.json`
+- `{output_dir}/work/scripted-findings.md`
+- `{output_dir}/work/findings-metadata.json`
+- `{output_dir}/work/waf-summary.json`
 - `{tool_dir}/references/checklist.md`
 
 **4.0 Adopt scripted findings.** If `--lang` matches the user's language, write `scripted-findings.md` verbatim to `{output_dir}/waf-review-report.md`. If not, translate it into the user's language and write that instead.
@@ -185,7 +187,7 @@ python3 "{tool_dir}/scripts/waf-validate-report.py" "{output_dir}" "{input_file}
 
 ### Step 7: Self-review
 
-Read `{output_dir}/validation.json`.
+Read `{output_dir}/work/validation.json`.
 
 **Mechanical checks.** If any check is `FAIL`, fix the report and run Step 6 again. Retry at most twice. If it still fails after 3 attempts in total, report the remaining errors to the user and stop. If everything is `PASS`, go on.
 
@@ -199,7 +201,15 @@ Read `{output_dir}/validation.json`.
 
 If you add or change findings here, put them before the `<!-- waf-appendix:start -->` marker, then run Steps 4b to 6 again. Step 5 replaces the marked appendix block, so running it again doesn't duplicate anything.
 
-Then tell the user: "Self-review completed. Mechanical: {passed}/{total} PASS. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} label or coverage problems found." Give the report path `{output_dir}/waf-review-report.md` and the count of findings per severity. List the findings marked ⏳ that need the user's business context.
+### Step 8: Render HTML
+
+```bash
+python3 "{tool_dir}/scripts/waf-render-html.py" "{output_dir}"
+```
+
+This writes `waf-review-report.html` next to the Markdown report. It needs no JavaScript and works offline; the rule flow is drawn in HTML, and issue numbers link to their findings. The script checks that every word of the Markdown made it into the HTML. If it returns `FATAL`, tell the user and give only the Markdown path. The Markdown file is the one to edit; after editing it, run this step again.
+
+Then tell the user: "Self-review completed. Mechanical: {passed}/{total} PASS. Adversarial: {N} re-derived, {N} corrections. Cross-ref: {N} label or coverage problems found." Give the report paths `{output_dir}/waf-review-report.html` and `{output_dir}/waf-review-report.md`, and the count of findings per severity. List the findings marked ⏳ that need the user's business context.
 
 ## Key principles
 
@@ -241,4 +251,5 @@ You write only Issue sections. `waf-generate-report-header.py` generates the hea
 - Finding text lives in `scripts/waf_finding_templates.py`, and short per-item lines live in `LINES` in `scripts/waf-generate-findings.py`. Every key needs both an English and a Chinese version.
 - Pre-checks read the structured `leaves` that `waf-preprocess.py` records for each statement (field, match type, value, text transformations, fallback, negation), not the summary string. `SearchString` values are base64-decoded there.
 - Test changes on real `get-web-acl` output as well as `examples/`: the example file is plain text in snake_case, while real exports are PascalCase with base64 `SearchString` values.
+- `waf-render-html.py` handles the Markdown the reports use. If findings start using other syntax, extend it and compare its output with a CommonMark renderer on real reports.
 - Keep `README.md` (Chinese) and `README_EN.md` in sync.

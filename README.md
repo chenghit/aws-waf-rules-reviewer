@@ -22,7 +22,8 @@ flowchart LR
     E3 --> F["Mermaid 标注"]
     F --> G["报告验证"]
     G --> H["LLM 自审"]
-    H --> I["评审报告"]
+    H --> J["HTML 生成"]
+    J --> I["评审报告"]
 
     style B fill:#e1f5fe
     style C fill:#e1f5fe
@@ -33,6 +34,7 @@ flowchart LR
     style E3 fill:#e1f5fe
     style F fill:#e1f5fe
     style G fill:#e1f5fe
+    style J fill:#e1f5fe
     style E fill:#fff3e0
     style H fill:#fff3e0
 ```
@@ -53,6 +55,7 @@ flowchart LR
 6. **报告生成**：按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 7. **Mermaid 流程图**：自动生成规则执行流程图，标注问题引用
 8. **自审**：机械验证 + 对抗性检查（仅针对 LLM 生成的发现），确保报告准确性
+9. **HTML 报告**：脚本把 Markdown 报告转成单文件 HTML，不依赖 JavaScript，离线可看，Issue 编号可以点击跳转
 
 ## 使用
 
@@ -81,12 +84,12 @@ cd aws-waf-rules-reviewer
 
 ## 输出
 
-一份 Markdown 报告 `waf-review-report.md`。输入是本地文件时，放在文件旁边的 `waf-review/` 里。从账号拉取时，放在当前目录的 `./waf-review/<web-acl-name>/` 里，和保存下来的 `web-acl.json`、`logging-configuration.json` 在一起。报告包含：
+同一份报告有两个文件：`waf-review-report.html` 用来看和发给别人，`waf-review-report.md` 用来改（改完让 agent 重新生成 HTML）。输入是本地文件时，报告放在文件旁边的 `waf-review/` 里。从账号拉取时，放在当前目录的 `./waf-review/<web-acl-name>/` 里。中间产物都在旁边的 `work/` 子目录里，包括拉下来的 `web-acl.json` 和 `logging-configuration.json`，不用管它们。报告包含：
 
 - **摘要表**：所有发现的问题及其严重程度和影响一览
 - **详细发现**：每个问题对应的规则、当前配置、问题描述和修复建议
 - **待用户确认项**：需要业务上下文才能判断严重程度的发现，标记为 ⏳
-- **附录：规则执行流**：Mermaid 流程图，自动标注问题引用
+- **附录：规则执行流**：按 priority 排列的规则链，标出每条规则的动作和相关问题。Markdown 里是 Mermaid 图，HTML 里直接画成卡片
 
 ### 严重程度
 

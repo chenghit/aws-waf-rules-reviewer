@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 
 
@@ -147,9 +147,9 @@ def main():
     output_dir = sys.argv[1]
 
     # Load inputs
-    base_path = os.path.join(output_dir, "mermaid-base.md")
-    meta_path = os.path.join(output_dir, "mermaid-metadata.json")
-    mapping_path = os.path.join(output_dir, "issue-rule-mapping.json")
+    base_path = work_path(output_dir, "mermaid-base.md")
+    meta_path = work_path(output_dir, "mermaid-metadata.json")
+    mapping_path = work_path(output_dir, "issue-rule-mapping.json")
     report_path = os.path.join(output_dir, "waf-review-report.md")
 
     for p in (base_path, meta_path, mapping_path, report_path):
@@ -162,13 +162,13 @@ def main():
     annotations = mapping.get("annotations", {})
 
     # Load summary for full rule labels during fold group expansion
-    summary_path = os.path.join(output_dir, "waf-summary.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
     summary_rules = []
     if os.path.isfile(summary_path):
         summary_rules = _load_json(summary_path).get("rules", [])
 
     if not annotations:
-        Path(os.path.join(output_dir, "mermaid-final.md")).write_text(
+        Path(work_path(output_dir, "mermaid-final.md")).write_text(
             base_text, encoding="utf-8")
         _write_appendix(report_path, base_text, output_dir)
         print("No annotations to apply", file=sys.stderr)
@@ -210,7 +210,7 @@ def main():
 
     # Reassemble
     final_mermaid = "```mermaid\n" + "\n".join(lines) + "\n```\n"
-    final_path = os.path.join(output_dir, "mermaid-final.md")
+    final_path = work_path(output_dir, "mermaid-final.md")
     Path(final_path).write_text(final_mermaid, encoding="utf-8")
 
     _write_appendix(report_path, final_mermaid, output_dir)
@@ -233,11 +233,11 @@ def _write_appendix(report_path: str, mermaid_text: str, output_dir: str):
         end = report.find(APPENDIX_END, start)
         tail = report[end + len(APPENDIX_END):] if end != -1 else ""
         report = report[:start].rstrip() + "\n" + tail.lstrip("\n")
-    meta_path = os.path.join(output_dir, "findings-metadata.json")
+    meta_path = work_path(output_dir, "findings-metadata.json")
     zh = os.path.isfile(meta_path) and json.loads(Path(meta_path).read_text(encoding="utf-8")).get("lang") == "zh"
     heading = "附录：规则执行流程" if zh else "Appendix: Rule Execution Flow"
     block = f"\n---\n\n## {heading}\n\n{mermaid_text}"
-    appendix_path = os.path.join(output_dir, "appendix.md")
+    appendix_path = work_path(output_dir, "appendix.md")
     if os.path.isfile(appendix_path):
         block += Path(appendix_path).read_text(encoding="utf-8")
     report = report.rstrip() + f"\n\n{APPENDIX_START}{block}\n{APPENDIX_END}\n"

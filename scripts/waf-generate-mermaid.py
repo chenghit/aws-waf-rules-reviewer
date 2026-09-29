@@ -13,7 +13,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 GROUPED_MODE_THRESHOLD = 25
 SCRIPTS_DIR = Path(__file__).parent
@@ -354,7 +354,7 @@ def main():
         fatal("Usage: waf-generate-mermaid.py <output_dir>")
 
     output_dir = sys.argv[1]
-    summary_file = os.path.join(output_dir, "waf-summary.json")
+    summary_file = work_path(output_dir, "waf-summary.json")
 
     if not os.path.isfile(summary_file):
         fatal(f"waf-summary.json not found in {output_dir}")
@@ -402,7 +402,7 @@ def main():
 
     # Write mermaid-base.md
     mermaid_md = f"```mermaid\n{mermaid_text}\n```\n"
-    mermaid_path = os.path.join(output_dir, "mermaid-base.md")
+    mermaid_path = work_path(output_dir, "mermaid-base.md")
     Path(mermaid_path).write_text(mermaid_md, encoding="utf-8")
 
     # Write mermaid-metadata.json
@@ -415,7 +415,7 @@ def main():
         "label_dependencies": deps,
         "fold_groups": fold_groups,
     }
-    meta_path = os.path.join(output_dir, "mermaid-metadata.json")
+    meta_path = work_path(output_dir, "mermaid-metadata.json")
     Path(meta_path).write_text(json.dumps(metadata, indent=2, ensure_ascii=False),
                                 encoding="utf-8")
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.7 (2026-09-29)
+
+### Changed
+- The output folder holds only the report: `waf-review-report.md` and `waf-review-report.html`. Every intermediate file, including `web-acl.json` and `logging-configuration.json` fetched in Case B, now goes in `work/`. Scripts resolve these paths through `work_path()` in `waf_utils.py`.
+
+### Added
+- `waf-render-html.py` (Step 8) turns the Markdown report into one self-contained HTML file. The rule flow is drawn with HTML and CSS instead of Mermaid, so the file needs no JavaScript and works offline; each rule card shows its action, overrides, scope-down, labels, and links to its issues. The example report is 56 KB. Inlining `mermaid.min.js` would have added 3.6 MB to every report.
+- The script checks that every word of the Markdown made it into the HTML and that every rule appears in the flow, and returns `FATAL` otherwise. Tested against markdown-it (CommonMark with tables) on 34 scripted reports and 17 LLM-written reports: identical structure and text, except where the renderer keeps text that CommonMark would drop or turn into emphasis, such as `Category_*/Signal_*`, an extra table cell, or an ordered list that starts right after a paragraph.
+
 ## v0.6.1 (2026-09-29)
 
 Fixes found by regenerating the example report with v0.6.

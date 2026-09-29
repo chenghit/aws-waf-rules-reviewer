@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal
+from waf_utils import fatal, work_path
 
 
 
@@ -193,8 +193,8 @@ def main():
 
     output_dir = sys.argv[1]
     report_path = os.path.join(output_dir, "waf-review-report.md")
-    summary_path = os.path.join(output_dir, "waf-summary.json")
-    meta_path = os.path.join(output_dir, "mermaid-metadata.json")
+    summary_path = work_path(output_dir, "waf-summary.json")
+    meta_path = work_path(output_dir, "mermaid-metadata.json")
 
     for p in (report_path, summary_path, meta_path):
         if not os.path.isfile(p):
@@ -205,7 +205,7 @@ def main():
     metadata = _load_json(meta_path)
 
     # Load pre-checks if available
-    prechecks_path = os.path.join(output_dir, "pre-checks.json")
+    prechecks_path = work_path(output_dir, "pre-checks.json")
     prechecks = _load_json(prechecks_path) if os.path.isfile(prechecks_path) else None
 
     # Run checks
@@ -219,7 +219,7 @@ def main():
         checks["prechecks_coverage"] = _check_prechecks_coverage(report, prechecks)
 
     # Write output
-    output_file = os.path.join(output_dir, "validation.json")
+    output_file = work_path(output_dir, "validation.json")
     Path(output_file).write_text(
         json.dumps(checks, indent=2, ensure_ascii=False), encoding="utf-8")
 
