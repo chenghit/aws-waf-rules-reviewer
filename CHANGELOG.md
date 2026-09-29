@@ -6,6 +6,11 @@
 - The CRS rule name is `SizeRestrictions_BODY`. Scripts and references wrote `SizeRestrictions_Body` in six places.
 - The ordering check counts managed rule groups with a rule overridden to Allow as Allow sources. A block list after `HostingProviderIPList → Allow` is now reported.
 - AGENTS.md has instructions for section 16, which v0.7.1 started handing to the LLM. It says that only the reason after `N/A` may be translated, never `(priority N)`, and that PCI scope questions become ` ⏳` findings when the agent can't ask the user.
+- `waf-summary.json` records only the input file name, not its local path.
+
+### Changed
+- The README warns against Claude Opus 5.5 and Claude Sonnet 5.5, which can be stopped by a safety classifier mid-report, and against GPT-family models on Amazon Bedrock. The model table is replaced by the requirements: at least 64K output tokens, 1M context recommended.
+- Added the MIT LICENSE, and the repository URL in AGENTS.md and the READMEs.
 
 ## v0.7.1 (2026-09-29)
 

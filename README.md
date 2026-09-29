@@ -6,6 +6,13 @@
 
 给 AI 编程 agent 用的 AWS WAF Web ACL 配置评审工具，找安全问题、配置错误和可优化的地方。不用安装。你的 agent 读完 [AGENTS.md](AGENTS.md) 就会照着做。Claude Code、Codex、Cursor、Kiro 都能用，其他能跑 shell 命令的 agent 也行。
 
+> [!WARNING]
+> 不要用 Claude Opus 5.5 或 Claude Sonnet 5.5，请用更早的 Claude 模型，比如 Claude Sonnet 5。
+>
+> 评审时，agent 要分析 SQLi/XSS 规则匹配、绕过路径、Bot 和 DDoS 防护这类安全内容。我们用 Claude Opus 5.5 评审真实的 Web ACL 时，报告生成被 safety classifier 中断过，报错是 `Error: Not run: the response that made this tool call was stopped by a safety classifier.`。Claude Sonnet 5.5 比 Opus 5.5 发布得还晚，很可能也有同样的问题。
+>
+> 也不要用 Amazon Bedrock 上的 GPT 系列模型，除非你测试过自己的完整流程。这类防御性的 WAF 分析可能被上游的网络安全检查静默拦截，看起来就像 agent 不再响应了。
+
 ## 工作流程
 
 ```mermaid
@@ -120,7 +127,7 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 - `waf-review/waf-review-report.html`、`waf-review/waf-review-report.md`：实测输出的评审报告（中文）
 - `waf-review/work/`：脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
 
-使用 Claude Code + Claude Opus 5.5 生成。
+使用 Claude Code + Claude Opus 5.5 生成。示例配置是组装的，这次没有触发 safety classifier，但在真实配置上触发过，见顶部的警告。
 
 ## 检查清单覆盖范围
 
@@ -160,50 +167,9 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 
 见 [CHANGELOG.md](CHANGELOG.md)。
 
-## 支持的模型
+## 模型要求
 
-本工具需要具备足够 **output token 容量** 的模型。评审报告可能很长，自审阶段还需要额外的输出空间。
-
-**最低要求：64K output tokens。**
-
-### Claude
-
-| 模型 | 输入 Tokens | 输出 Tokens | 适用场景 |
-|------|------------|------------|---------|
-| Claude Sonnet 4.6 (1M) | 1M | 64K | ✅ 默认，≤100 条规则 |
-| Claude Opus 4.6 (1M) | 1M | 128K | ✅ >100 条规则，复杂配置 |
-| Claude Opus 4.5 | 200K | 64K | ✅ ≤100 条规则 |
-| Claude Sonnet 4.5 | 200K | 64K | ✅ ≤100 条规则 |
-| Claude Opus 4.1 | 200K | 64K | ✅ ≤100 条规则 |
-
-### 其他模型
-
-满足 64K output 要求的模型都可以用。下面这些已确认满足：
-
-#### 国内厂商
-
-| 模型 | 厂商 | 输入 Tokens | 输出 Tokens | 备注 |
-|------|------|------------|------------|------|
-| MiMo-V2-Pro | 小米 | 1M | 128K | 1T 参数 MoE（42B 激活） |
-| Kimi K2.5 | 月之暗面 | 256K | 64K | 1T 参数 MoE（32B 激活） |
-| GLM5 Turbo | 智谱 AI | ~203K | 131K | 针对 OpenClaw agent 工作流优化 |
-| MiniMax M2.5 | MiniMax | 196K | 64K | 230B MoE（10B 激活） |
-| Step 3.5 Flash | 阶跃星辰 | 256K | 256K | 196B MoE（11B 激活） |
-
-#### 国际厂商
-
-| 模型 | 厂商 | 输入 Tokens | 输出 Tokens | 备注 |
-|------|------|------------|------------|------|
-| Amazon Nova 2 Lite | Amazon | 1M | 64K | 可通过 OpenRouter 使用 |
-| GPT-5.3 Codex | OpenAI | 400K | 128K | 代码/工程专用 |
-| GPT-5.4 | OpenAI | 922K | 128K | 首个具备 Codex 能力的主线推理模型 |
-| Grok 4 | xAI | 256K | 256K | 推理常开；超过 128K 输入时价格翻倍 |
-| Gemini 2.5 Pro | Google | 1M | 64K | 自适应思考 |
-| Gemini 2.5 Flash | Google | 1M | 64K | 可控思考预算 |
-| Gemini 3.1 Pro Preview | Google | 1M | 64K | 多模态旗舰 |
-
-> 以上模型未经本工具实际测试。兼容性取决于你的 agent 能不能按 AGENTS.md 里的流程走完。模型规格和可用性可能随时变化，请以各厂商官方文档为准。
-
+模型至少要有 64K output tokens：报告可能很长，自审阶段还要额外的输出空间。推荐用 1M context 的模型，规则多的 Web ACL 和参考文档都要放进上下文。选模型前请先看顶部的警告。
 ## 免责声明
 
 本工具由 AI 驱动，可能产生不准确或不完整的发现。生成的报告旨在作为人工评审的起点，而非替代。在根据报告做出任何变更之前，请务必结合实际 WAF 配置和业务上下文进行验证。

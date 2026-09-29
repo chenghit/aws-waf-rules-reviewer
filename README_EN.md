@@ -6,6 +6,13 @@
 
 A tool for AI coding agents that reviews AWS WAF Web ACL configurations for security issues, misconfigurations, and optimization opportunities. There's nothing to install. Your agent reads [AGENTS.md](AGENTS.md) and follows it. It works with Claude Code, Codex, Cursor, Kiro, and any other agent that can run shell commands.
 
+> [!WARNING]
+> Don't use Claude Opus 5.5 or Claude Sonnet 5.5. Use an earlier Claude model, such as Claude Sonnet 5.
+>
+> A review makes the agent analyze security material: SQLi/XSS rule matches, bypass paths, and bot and DDoS protections. While reviewing real Web ACLs with Claude Opus 5.5, a safety classifier stopped the report from being written, with `Error: Not run: the response that made this tool call was stopped by a safety classifier.` Claude Sonnet 5.5 came out after Opus 5.5 and is likely to have the same problem.
+>
+> Don't use GPT-family models on Amazon Bedrock either, unless you have tested your exact workflow. Upstream cyber-safety checks can silently block this kind of defensive WAF analysis, and the agent then looks like it stopped responding.
+
 ## Workflow
 
 ```mermaid
@@ -120,7 +127,7 @@ The `examples/` directory contains a complete input/output example:
 - `waf-review/waf-review-report.html` and `waf-review/waf-review-report.md`: actual review report output (Chinese)
 - `waf-review/work/`: script-generated intermediate files (summary, pre-checks, Mermaid diagrams, etc.)
 
-Generated with Claude Code and Claude Opus 5.5.
+Generated with Claude Code and Claude Opus 5.5. The example configuration is synthetic and didn't trigger the safety classifier this time, but real configurations have; see the warning at the top.
 
 ## Checklist Coverage
 
@@ -160,50 +167,9 @@ The review covers 21 categories:
 
 See [CHANGELOG.md](CHANGELOG.md).
 
-## Supported Models
+## Model Requirements
 
-This tool requires a model with sufficient **output token capacity**. The review report can be long, and the self-review stage needs additional output headroom.
-
-**Minimum requirement: 64K output tokens.**
-
-### Claude
-
-| Model | Input Tokens | Output Tokens | Use Case |
-|-------|-------------|--------------|----------|
-| Claude Sonnet 4.6 (1M) | 1M | 64K | ✅ Default, ≤100 rules |
-| Claude Opus 4.6 (1M) | 1M | 128K | ✅ >100 rules, complex configs |
-| Claude Opus 4.5 | 200K | 64K | ✅ ≤100 rules |
-| Claude Sonnet 4.5 | 200K | 64K | ✅ ≤100 rules |
-| Claude Opus 4.1 | 200K | 64K | ✅ ≤100 rules |
-
-### Other Models
-
-Any model that meets the 64K output requirement should work. These models are confirmed to meet it:
-
-#### Chinese Providers
-
-| Model | Provider | Input Tokens | Output Tokens | Notes |
-|-------|----------|-------------|--------------|-------|
-| MiMo-V2-Pro | Xiaomi | 1M | 128K | 1T-param MoE (42B active) |
-| Kimi K2.5 | Moonshot AI | 256K | 64K | 1T-param MoE (32B active) |
-| GLM5 Turbo | Z.AI (Zhipu) | ~203K | 131K | Optimized for OpenClaw agent workflows |
-| MiniMax M2.5 | MiniMax | 196K | 64K | 230B MoE (10B active) |
-| Step 3.5 Flash | StepFun | 256K | 256K | 196B MoE (11B active) |
-
-#### International Providers
-
-| Model | Provider | Input Tokens | Output Tokens | Notes |
-|-------|----------|-------------|--------------|-------|
-| Amazon Nova 2 Lite | Amazon | 1M | 64K | Available via OpenRouter |
-| GPT-5.3 Codex | OpenAI | 400K | 128K | Code/engineering focused |
-| GPT-5.4 | OpenAI | 922K | 128K | First mainline reasoning model with Codex capabilities |
-| Grok 4 | xAI | 256K | 256K | Reasoning always-on; pricing doubles above 128K input |
-| Gemini 2.5 Pro | Google | 1M | 64K | Adaptive thinking |
-| Gemini 2.5 Flash | Google | 1M | 64K | Controllable thinking budget |
-| Gemini 3.1 Pro Preview | Google | 1M | 64K | Multimodal flagship |
-
-> These models are not tested with this tool. Compatibility depends on how well your agent follows the workflow in AGENTS.md. Model specs and availability may change at any time. Refer to each provider's official documentation.
-
+The model needs at least 64K output tokens: reports can be long, and the self-review stage needs extra output room. A model with a 1M context window is recommended, since large Web ACLs and the reference files all go into the context. Read the warning at the top before choosing a model.
 ## Disclaimer
 
 This tool is powered by AI, which may produce inaccurate or incomplete findings. The generated report is a starting point for human review and doesn't replace it. Always verify findings against the actual WAF configuration and your business context before making changes.
