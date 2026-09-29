@@ -84,7 +84,7 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 
 ### 9. Missing Baseline Protections
 
-- [ ] CRS present? If recommending: override SizeRestrictions_Body to Count
+- [ ] CRS present? If recommending: override SizeRestrictions_BODY to Count
 - [ ] Body inspection limits: CloudFront inspects the first 16 KB by default (configurable up to 64 KB), ALB a fixed 8 KB. Content beyond the limit isn't inspected by any `_BODY` rule
 - [ ] `SizeRestrictions_BODY` in Count is a normal choice, not a finding. If the user can list the large-body endpoints: keep it in Count and add a rule after CRS that blocks its label on other paths. Never scope down CRS for this
 - [ ] Default-Block ACL: CRS/KnownBadInputs must run before the Allow rules to inspect allowed traffic (scripted)
@@ -181,7 +181,7 @@ Scripted.
 
 LLM. PCI DSS covers anyone who stores, processes, or transmits card data, including merchants that take card payments, not only financial companies. Decide scope first:
 - The user says the customer takes card payments or is a payment or financial business → in scope
-- Otherwise, `llm_context.payment_indicators` lists hosts or paths that look like payment endpoints → ask the user whether these systems are in PCI scope. Until they answer, write the findings with ` ⏳`
+- Otherwise, `llm_context.payment_indicators` lists hosts or paths that look like payment endpoints → ask the user whether these systems are in PCI scope. If you can't ask, or until they answer, write the findings with ` ⏳`
 - Neither → skip this section
 - [ ] ASV scans (Requirement 11.3.2, quarterly by an ASV; 11.3.2.1 after significant change) must not be interfered with by protections that change behavior based on traffic: rate limits, auto-block IP sets, behavior-based bot rules, Challenge (ASV Program Guide v4.0 r2 section 5.6). Consistent signature and path blocking typically doesn't count. An unresolved interference makes the scan inconclusive and then failed (section 7.6)
 - [ ] Recommend exceptions for the ASV's IPs on the dynamic mechanisms only, not an Allow rule at the top of the ACL

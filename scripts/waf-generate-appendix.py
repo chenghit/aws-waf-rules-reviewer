@@ -165,7 +165,7 @@ After implementing any recommended changes, verify the new WCU total does not ex
 When adding or reviewing managed rule groups, consider these common overrides:
 
 **AWSManagedRulesCommonRuleSet (CRS):**
-- Override `SizeRestrictions_Body` to **Count**. This rule blocks request bodies larger than 8KB, which frequently causes false positives on file upload endpoints, API endpoints with large payloads, and form submissions with rich content.
+- Override `SizeRestrictions_BODY` to **Count**. This rule blocks request bodies larger than 8KB, which frequently causes false positives on file upload endpoints, API endpoints with large payloads, and form submissions with rich content.
 
 **AWSManagedRulesBotControlRuleSet (Bot Control Common level):**
 - Override `SignalNonBrowserUserAgent` to **Count**. Default Block will block legitimate non-browser clients (native apps using okhttp/gohttp, API clients, monitoring tools).
@@ -330,7 +330,7 @@ token 免疫时间建议至少 4 小时（14400 秒）。真实用户完成一�
 添加或检查托管规则组时，可以参考这些常见的 override：
 
 **AWSManagedRulesCommonRuleSet (CRS)：**
-- 把 `SizeRestrictions_Body` 设为 **Count**。这条规则会拦截超过 8KB 的请求体，在文件上传、大 payload 的 API 和内容较多的表单提交上经常误报。
+- 把 `SizeRestrictions_BODY` 设为 **Count**。这条规则会拦截超过 8KB 的请求体，在文件上传、大 payload 的 API 和内容较多的表单提交上经常误报。
 
 **AWSManagedRulesBotControlRuleSet（Bot Control COMMON 级别）：**
 - 把 `SignalNonBrowserUserAgent` 设为 **Count**。默认 Block 会拦掉正常的非浏览器客户端（用 okhttp、gohttp 的原生 App，API 客户端，监控工具）。

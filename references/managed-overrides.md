@@ -1,7 +1,7 @@
 ## AWSManagedRulesCommonRuleSet (CRS) Notes
 
 - Provides OWASP Top 10 protection (SQLi, XSS, etc.)
-- `SizeRestrictions_Body` rule blocks request bodies larger than 8KB. This frequently causes false positives on file upload endpoints, API endpoints with large payloads, form submissions with rich content, etc. Most users don't know which of their endpoints need large bodies. When recommending CRS, always advise overriding `SizeRestrictions_Body` to Count.
+- `SizeRestrictions_BODY` rule blocks request bodies larger than 8KB. This frequently causes false positives on file upload endpoints, API endpoints with large payloads, form submissions with rich content, etc. Most users don't know which of their endpoints need large bodies. When recommending CRS, always advise overriding `SizeRestrictions_BODY` to Count.
 
 
 ## AWSManagedRulesKnownBadInputsRuleSet Notes

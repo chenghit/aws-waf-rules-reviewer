@@ -418,10 +418,10 @@ def _gen_missing_baseline(summary, pre_checks, flags, T, lang):
     if "CRS" in missing:
         if lang == "zh":
             details.append("CRS 提供 OWASP Top 10 防护（SQLi、XSS 等），是大多数 Web 应用的基础防护层")
-            recs.append("- 评估是否需要添加 CRS；如果添加，务必将 `SizeRestrictions_Body` 覆盖为 Count，避免对大 payload 的 API 端点产生误报（实现步骤见附录 F）")
+            recs.append("- 评估是否需要添加 CRS；如果添加，务必将 `SizeRestrictions_BODY` 覆盖为 Count，避免对大 payload 的 API 端点产生误报（实现步骤见附录 F）")
         else:
             details.append("CRS provides OWASP Top 10 protection (SQLi, XSS, etc.), the baseline protection layer for most web applications")
-            recs.append("- Evaluate whether to add CRS; if adding, override `SizeRestrictions_Body` to Count to avoid false positives on large-payload API endpoints (see Appendix F)")
+            recs.append("- Evaluate whether to add CRS; if adding, override `SizeRestrictions_BODY` to Count to avoid false positives on large-payload API endpoints (see Appendix F)")
     if "KnownBadInputs" in missing:
         if lang == "zh":
             details.append("KnownBadInputsRuleSet 防护 Log4Shell（CVE-2021-44228）、Java 反序列化漏洞等已知恶意输入模式，WCU 消耗低、误报率低")

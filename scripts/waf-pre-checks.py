@@ -405,8 +405,19 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
                                "label": l["value"], "producers": [_ref(p) for p in makers]})
 
     # IP block list evaluated after Allow rules
+    # Anything that can end evaluation with Allow: Allow rules, and managed
+    # rule groups with a rule overridden to Allow
+    allows = []
+    for r in ordered:
+        if r["action"] == "allow":
+            allows.append(r)
+            continue
+        over = [o["rule_name"] for o in (r.get("managed") or {}).get("overrides", [])
+                if o.get("action") == "allow"]
+        if over:
+            allows.append(dict(r, name=f"{r['name']} ({', '.join(over)} → Allow)"))
+
     # A block list is an IP set, optionally ANDed with host conditions
-    allows = [r for r in ordered if r["action"] == "allow"]
     for r in ordered:
         leaves = _leaves(r)
         ips = [l for l in leaves if l["type"] == "ip_set" and not l["negated"]]

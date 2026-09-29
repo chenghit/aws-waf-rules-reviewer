@@ -68,7 +68,6 @@ def _extract_rule_refs(report: str) -> list[dict]:
     refs = []
     # Match: **Rule**: name (priority N)
     # Match: **Rules**: name1 (priority N1), name2 (priority N2)
-    # Match: **规则**: name (priority N)
     pattern = re.compile(
         r'\*\*(?:Rules?|规则)\*\*\s*[:：]\s*(.+)',
         re.MULTILINE
