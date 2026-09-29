@@ -63,14 +63,14 @@ There's no install step. You need Python 3.10+ (standard library only), and your
 
 **From any project.** Tell your agent:
 
-> Read https://raw.githubusercontent.com/<OWNER>/aws-waf-rules-reviewer/main/AGENTS.md and review my AWS WAF Web ACL.
+> Read https://raw.githubusercontent.com/chenghit/aws-waf-rules-reviewer/main/AGENTS.md and review my AWS WAF Web ACL.
 
 The agent clones this repo into a temp directory and runs the scripts from there. The report goes under your current directory.
 
 **From a clone.**
 
 ```bash
-git clone https://github.com/<OWNER>/aws-waf-rules-reviewer.git
+git clone https://github.com/chenghit/aws-waf-rules-reviewer.git
 cd aws-waf-rules-reviewer
 ```
 

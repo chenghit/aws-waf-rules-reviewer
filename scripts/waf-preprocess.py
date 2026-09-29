@@ -745,7 +745,7 @@ def main():
 
     summary = {
         "schema_version": "1.0",
-        "input_file": input_file,
+        "input_file": os.path.basename(input_file),  # no local paths in shared output
         "input_format": fmt,
         "web_acl": {
             "name": web_acl.get("name", "unknown"),

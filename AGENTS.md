@@ -23,7 +23,7 @@ Requirements: `python3` 3.10+ (standard library only). On Windows, use `python` 
 - You loaded this file from disk, for example because the session runs inside this repo or the user gave you a path. `tool_dir` is that file's directory.
 - You read this file from a URL and have no local copy. Clone the repo to a temporary directory and use that:
   ```bash
-  git clone --depth 1 https://github.com/<OWNER>/aws-waf-rules-reviewer.git "${TMPDIR:-/tmp}/aws-waf-rules-reviewer"
+  git clone --depth 1 https://github.com/chenghit/aws-waf-rules-reviewer.git "${TMPDIR:-/tmp}/aws-waf-rules-reviewer"
   ```
   If that directory already exists, run `git -C "<dir>" pull --ff-only` instead. On Windows, use `%TEMP%`.
 

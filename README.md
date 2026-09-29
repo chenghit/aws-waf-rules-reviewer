@@ -63,14 +63,14 @@ flowchart LR
 
 **在任意项目里用。** 对你的 agent 说：
 
-> 读一下 https://raw.githubusercontent.com/<OWNER>/aws-waf-rules-reviewer/main/AGENTS.md ，帮我评审 AWS WAF Web ACL。
+> 读一下 https://raw.githubusercontent.com/chenghit/aws-waf-rules-reviewer/main/AGENTS.md ，帮我评审 AWS WAF Web ACL。
 
 agent 会把这个仓库 clone 到临时目录，在那里跑脚本。报告写在你当前目录下。
 
 **clone 下来用。**
 
 ```bash
-git clone https://github.com/<OWNER>/aws-waf-rules-reviewer.git
+git clone https://github.com/chenghit/aws-waf-rules-reviewer.git
 cd aws-waf-rules-reviewer
 ```
 
