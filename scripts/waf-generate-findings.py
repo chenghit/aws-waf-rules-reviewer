@@ -6,8 +6,8 @@ Usage: python3 waf-generate-findings.py <output_dir> [--lang en|zh]
   --lang: output language (default: en)
 
 Outputs:
-  {output_dir}/scripted-findings.md   — Issue section Markdown
-  {output_dir}/findings-metadata.json — structured metadata
+  {output_dir}/scripted-findings.md   : Issue section Markdown
+  {output_dir}/findings-metadata.json : structured metadata
 """
 import json
 import os
@@ -96,6 +96,9 @@ LINES = {
         "opaque_rec_other": "Verify whether this value is a secret that should be protected from exposure",
         "allow_override": "`{rule}` overridden to Allow",
         "levels": lambda lv: {1: "{}", 2: "{} and {}"}.get(len(lv), "{}, {}, and {}").format(*lv),
+        "challenge_rules_any": "the Challenge rules",
+        "exempt_inactive": "- Neither Challenge rule acts today (`ChallengeAllDuringEvent` is in Count and `ChallengeDDoSRequests` is off), so this matters once Challenge is turned back on\n",
+        "crawler_inactive": "- `ChallengeAllDuringEvent` is in Count, so the rule group doesn't challenge crawlers across the board today. Add this rule before turning it back on\n",
         "cade_block": "- `DDoSRequests` blocks {levels} suspicion requests (`sensitivity_to_block: {sens}`)",
         "cade_challenge": "- `ChallengeDDoSRequests` still challenges {levels} suspicion requests (challenge sensitivity `{sens}`). What's lost is the blanket challenge: during an event, challengeable requests the rule group hasn't marked as suspicious are no longer challenged",
         "cade_no_challenge": "- `ChallengeDDoSRequests` is off too ({why}), so nothing is challenged during an event",
@@ -156,6 +159,9 @@ LINES = {
         "opaque_rec_other": "确认这个值是不是需要保密的密钥",
         "allow_override": "`{rule}` 被覆盖为 Allow",
         "levels": lambda lv: "、".join({"low": "低", "medium": "中", "high": "高"}[x] for x in lv),
+        "challenge_rules_any": "Challenge 规则",
+        "exempt_inactive": "- 目前两条 Challenge 规则都没有生效（`ChallengeAllDuringEvent` 是 Count，`ChallengeDDoSRequests` 也没开），重新打开 Challenge 后这个问题才会起作用\n",
+        "crawler_inactive": "- `ChallengeAllDuringEvent` 现在是 Count，规则组目前不会对爬虫一律 Challenge。重新打开它之前先加上这条规则\n",
         "cade_block": "- `DDoSRequests` 会 Block 可疑度为{levels}的请求（`sensitivity_to_block: {sens}`）",
         "cade_challenge": "- `ChallengeDDoSRequests` 仍会 Challenge 可疑度为{levels}的请求（Challenge 灵敏度 `{sens}`）。少掉的是兜底的 Challenge：事件期间，没有被规则组标为可疑的可 Challenge 请求不再被 Challenge",
         "cade_no_challenge": "- `ChallengeDDoSRequests` 也没有生效（{why}），事件期间不会 Challenge 任何请求",
@@ -170,6 +176,43 @@ SEVERITY_RANK = {"Critical": 0, "Medium": 1, "Low": 2, "Awareness": 3}
 
 def _refs(items: list) -> str:
     return ", ".join(f"{i['name']} (priority {i['priority']})" for i in items)
+
+
+def _amr_state(summary: dict) -> dict | None:
+    """Which Anti-DDoS Challenge rules act today. ChallengeDDoSRequests only
+    runs when ChallengeAllDuringEvent is overridden to Count, and
+    usage_of_challenge_action DISABLED turns both off."""
+    amr = next((r for r in summary.get("rules", [])
+                if AMR_GROUP == (r.get("managed") or {}).get("group_name")), None)
+    if not amr:
+        return None
+    mg = amr["managed"]
+    over = {o.get("rule_name"): o.get("action") for o in mg.get("overrides", [])}
+    enabled = (mg.get("config") or {}).get("usage_of_challenge_action") != "DISABLED"
+    cade = enabled and "ChallengeAllDuringEvent" not in over
+    cdr = (enabled and over.get("ChallengeAllDuringEvent") == "count"
+           and "ChallengeDDoSRequests" not in over)
+    return {"rule": amr, "enabled": enabled, "cade": cade, "cdr": cdr}
+
+
+def _token_challenge(rules: list) -> list:
+    """TARGETED Bot Control with TGT_TokenAbsent overridden to Challenge or
+    CAPTCHA: every token-less request in its scope gets challenged, which is
+    an always-on Challenge for that scope."""
+    out = []
+    for r in rules:
+        mg = r.get("managed") or {}
+        if (mg.get("group_name") == BOT_GROUP
+                and (mg.get("config") or {}).get("inspection_level") == "TARGETED"
+                and any(o["rule_name"] == "TGT_TokenAbsent" and o["action"] in ("challenge", "captcha")
+                        for o in mg.get("overrides", []))):
+            out.append(r)
+    return out
+
+
+def _rule_line(items: list) -> str:
+    """The rule reference line: `**Rule**:` for one rule, `**Rules**:` for several."""
+    return ("**Rule**: " if len(items) == 1 else "**Rules**: ") + _refs(items)
 
 
 def _ticks(items: list, lang: str = "en") -> str:
@@ -268,7 +311,7 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
     for key, group in groups.items():
         names = [a["name"] for a in group]
         rule_names = " / ".join(names)
-        rule_line = _refs(group)
+        rule_line = _rule_line(group)
 
         fc = group[0]["forgeable_conditions"]
         forgeable_fields = ", ".join(fc)
@@ -288,10 +331,10 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
                 if _has_opaque_value(value) == "yes":
                     truncated = value[:30] + "..." if len(value) > 30 else value
                     if lang == "zh":
-                        opaque_note = f"- 匹配值 `{truncated}` 存储在 WAF 配置中，任何能读取 Web ACL 配置的人均可获取——泄露即意味着完全绕过 WAF\n"
+                        opaque_note = f"- 匹配值 `{truncated}` 存储在 WAF 配置中，任何能读取 Web ACL 配置的人都能拿到，一旦泄露就能完全绕过 WAF\n"
                         opaque_rec = "- 定期轮换密钥值，并审计 WAF 配置的 IAM 访问权限\n"
                     else:
-                        opaque_note = f"- The match value `{truncated}` is stored in the WAF configuration — anyone with read access to the Web ACL can obtain it, and a leaked value means full WAF bypass\n"
+                        opaque_note = f"- The match value `{truncated}` is stored in the WAF configuration. Anyone with read access to the Web ACL can obtain it, and a leaked value means full WAF bypass\n"
                         opaque_rec = "- Periodically rotate the secret value and audit IAM access to WAF configuration\n"
                     break
             if opaque_note:
@@ -337,7 +380,7 @@ def _gen_scope_down_too_narrow(summary, pre_checks, flags, T, lang):
     if not narrow:
         # Check if IP reputation groups exist but have no scope-down
         return NOT_APPLICABLE
-    rule_line = " and ".join(f"{s['rule']} (priority {s['priority']})" for s in narrow)
+    rule_line = _rule_line([{"name": s["rule"], "priority": s["priority"]} for s in narrow])
     md = T["scope_down_too_narrow"].format(n="{n}", rule_line=rule_line)
     return [(md, {"severity": "Medium", "title_key": "scope_down_too_narrow",
                   "rules": [s["rule"] for s in narrow], "sections": [2]})]
@@ -348,7 +391,7 @@ def _gen_challenge_on_post_api(summary, pre_checks, flags, T, lang):
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
     rules = check.get("rules", [])
-    rule_line = ", ".join(f"{r['name']} (priority {r['priority']})" for r in rules)
+    rule_line = _rule_line(rules)
     # Check for duplicates
     dup_rec = ""
     names = [r["name"] for r in rules]
@@ -377,14 +420,14 @@ def _gen_missing_baseline(summary, pre_checks, flags, T, lang):
             details.append("CRS 提供 OWASP Top 10 防护（SQLi、XSS 等），是大多数 Web 应用的基础防护层")
             recs.append("- 评估是否需要添加 CRS；如果添加，务必将 `SizeRestrictions_Body` 覆盖为 Count，避免对大 payload 的 API 端点产生误报（实现步骤见附录 F）")
         else:
-            details.append("CRS provides OWASP Top 10 protection (SQLi, XSS, etc.) — the baseline protection layer for most web applications")
+            details.append("CRS provides OWASP Top 10 protection (SQLi, XSS, etc.), the baseline protection layer for most web applications")
             recs.append("- Evaluate whether to add CRS; if adding, override `SizeRestrictions_Body` to Count to avoid false positives on large-payload API endpoints (see Appendix F)")
     if "KnownBadInputs" in missing:
         if lang == "zh":
             details.append("KnownBadInputsRuleSet 防护 Log4Shell（CVE-2021-44228）、Java 反序列化漏洞等已知恶意输入模式，WCU 消耗低、误报率低")
             recs.append("- 添加 AWSManagedRulesKnownBadInputsRuleSet（WCU 消耗低，建议优先添加）")
         else:
-            details.append("KnownBadInputsRuleSet protects against Log4Shell (CVE-2021-44228), Java deserialization exploits, and other known malicious input patterns — low WCU cost, low false positive rate")
+            details.append("KnownBadInputsRuleSet protects against Log4Shell (CVE-2021-44228), Java deserialization exploits, and other known malicious input patterns, with low WCU cost and few false positives")
             recs.append("- Add AWSManagedRulesKnownBadInputsRuleSet (low WCU cost, recommended as priority)")
     default_block = summary.get("web_acl", {}).get("default_action") == "block"
     recs.append(LINES[lang]["placement_block" if default_block else "placement_allow"])
@@ -457,7 +500,7 @@ def _gen_count_without_labels(summary, pre_checks, flags, T, lang):
     names = [r["name"] for r in rules]
     rule_names = " / ".join(names)
     md = T["count_without_labels"].format(
-        n="{n}", rule_names=rule_names, rule_line=_refs(rules))
+        n="{n}", rule_names=rule_names, rule_line=_rule_line(rules))
     return [(md, {"severity": "Awareness", "title_key": "count_without_labels",
                   "rules": names, "sections": [17]})]
 
@@ -508,8 +551,15 @@ def _gen_challenge_all_during_event(summary, pre_checks, flags, T, lang):
 
 def _gen_unanchored_exempt_regex(summary, pre_checks, flags, T, lang):
     regex_flags = flags.get("exempt_regex_branches", [])
-    if not regex_flags:
-        return NOT_APPLICABLE
+    state = _amr_state(summary)
+    if not regex_flags or (state and not state["enabled"]):
+        return NOT_APPLICABLE  # the exempt regex only matters while Challenge is in use
+    L = LINES[lang]
+    active = [n for n, on in (("ChallengeAllDuringEvent", state and state["cade"]),
+                              ("ChallengeDDoSRequests", state and state["cdr"])) if on]
+    severity = "Medium" if active else "Low"
+    challenge_rules = " / ".join(f"`{n}`" for n in active) or L["challenge_rules_any"]
+    state_note = "" if active else L["exempt_inactive"]
     results = []
     for rf in regex_flags:
         unanchored = [b for b in rf.get("branches", [])
@@ -524,10 +574,11 @@ def _gen_unanchored_exempt_regex(summary, pre_checks, flags, T, lang):
             else b["pattern"]
             for b in rf["branches"]) + "`"
         md = T["unanchored_exempt_regex"].format(
-            n="{n}", rule_name=rf["rule"], priority=rf["priority"],
+            n="{n}", severity=severity, rule_name=rf["rule"], priority=rf["priority"],
             regex=rf["full_regex"], unanchored_list=unanchored_list,
-            examples=examples, anchored_suggestion=anchored)
-        results.append((md, {"severity": "Medium", "title_key": "unanchored_exempt_regex",
+            examples=examples, anchored_suggestion=anchored,
+            challenge_rules=challenge_rules, state_note=state_note)
+        results.append((md, {"severity": severity, "title_key": "unanchored_exempt_regex",
                              "rules": [rf["rule"]], "sections": [3]}))
     return results if results else NOT_APPLICABLE
 
@@ -548,8 +599,14 @@ def _gen_missing_crawler_labeling(summary, pre_checks, flags, T, lang):
                 "asn_match" in r.get("statement", {}).get("leaf_types", []) and
                 labels):
             return NOT_APPLICABLE
-    md = T["missing_crawler_labeling"].format(n="{n}")
-    return [(md, {"severity": "Medium", "title_key": "missing_crawler_labeling",
+    state = _amr_state(summary)
+    # Crawlers get challenged by the blanket ChallengeAllDuringEvent; while it's
+    # off, the labeling rule is preparation for turning it back on
+    severity = "Medium" if state and state["cade"] else "Low"
+    md = T["missing_crawler_labeling"].format(
+        n="{n}", severity=severity,
+        state_note="" if severity == "Medium" else LINES[lang]["crawler_inactive"])
+    return [(md, {"severity": severity, "title_key": "missing_crawler_labeling",
                   "rules": [], "sections": [3]})]
 
 
@@ -581,7 +638,7 @@ def _gen_duplicate_rules(summary, pre_checks, flags, T, lang):
     lines = "\n".join("- " + " / ".join(fmt.format(r["name"], r["priority"]) for r in g)
                       for g in groups)
     rules = [r for g in groups for r in g]
-    md = T["duplicate_rules"].format(n="{n}", count=len(groups), rule_line=_refs(rules),
+    md = T["duplicate_rules"].format(n="{n}", count=len(groups), rule_line=_rule_line(rules),
                                      groups=lines)
     return [(md, {"severity": "Low", "title_key": "duplicate_rules",
                   "rules": [r["name"] for r in rules], "sections": [6]})]
@@ -610,7 +667,7 @@ def _gen_managed_versions(summary, pre_checks, flags, T, lang):
     if others:
         sqli_note = L["sqli_lineage"] if any("SQLi" in u["group"] for u in others) else ""
         md = T["managed_unpinned"].format(
-            n="{n}", rule_line=_refs(others),
+            n="{n}", rule_line=_rule_line(others),
             groups=", ".join(f"`{u['group']}`" for u in others), sqli_note=sqli_note)
         results.append((md, {"severity": "Low", "title_key": "managed_unpinned",
                              "rules": [u["name"] for u in others], "sections": [12]}))
@@ -645,6 +702,8 @@ def _gen_missing_always_on_challenge(summary, pre_checks, flags, T, lang):
         stmt = r.get("statement", {}).get("summary", "")
         if any(f"'{p}'" in stmt for p in landing_patterns):
             return NOT_APPLICABLE
+    if _token_challenge(rules):
+        return AMBIGUOUS  # covers only Bot Control's scope; the LLM judges whether that's enough
     md = T["missing_always_on_challenge"].format(n="{n}")
     return [(md, {"severity": "Medium", "title_key": "missing_always_on_challenge",
                   "rules": [], "sections": [16]})]
@@ -675,7 +734,7 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
     severity = "Low" if kinds == ["bot_control_not_last"] else "Medium"
     md = T["order_issues"].format(
         n="{n}", severity=severity, summary=L["order_title"].format(count=len(problems)),
-        rule_line=_refs(check["rules"]), problems="\n".join(problems), recs=recs)
+        rule_line=_rule_line(check["rules"]), problems="\n".join(problems), recs=recs)
     return [(md, {"severity": severity, "title_key": "order_issues",
                   "rules": [r["name"] for r in check["rules"]], "sections": [18]})]
 
@@ -719,7 +778,7 @@ def _gen_uri_fragment_fallback(summary, pre_checks, flags, T, lang):
     has_allow = any(r["action"] == "allow" for r in rules)
     severity = "Critical" if has_allow else "Medium"
     md = T["uri_fragment_fallback"].format(
-        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules, lang),
+        n="{n}", severity=severity, rule_line=_rule_line(rules), rule_names=_ticks(rules, lang),
         allow_note=LINES[lang]["fragment_allow"] if has_allow else "")
     return [(md, {"severity": severity, "title_key": "uri_fragment_fallback",
                   "rules": [r["name"] for r in rules], "sections": [1, 19]})]
@@ -738,7 +797,7 @@ def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
     kinds = {pb["kind"] for r in check["rules"] for pb in r["problems"]}
     recs = [L["rec_" + k] for k in ("literal_wildcard", "query_in_path") if k in kinds]
     md = T["uri_path_pitfalls"].format(
-        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details),
+        n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details),
         recs="\n".join(recs))
     return [(md, {"severity": "Medium", "title_key": "uri_path_pitfalls",
                   "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
@@ -754,7 +813,7 @@ def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
         transforms=" / ".join(f"`{t}`" for t in r["transforms"]),
         case=L["case_note"] if r["case_sensitive"] else "") for r in check["rules"]]
     md = T["path_block_decoding"].format(
-        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details))
+        n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
     return [(md, {"severity": "Medium", "title_key": "path_block_decoding",
                   "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
 
@@ -769,7 +828,7 @@ def _gen_path_only_allow(summary, pre_checks, flags, T, lang):
     default_block = summary.get("web_acl", {}).get("default_action") == "block"
     severity = "Critical" if default_block else "Medium"
     md = T["path_only_allow"].format(
-        n="{n}", severity=severity, rule_line=_refs(rules), rule_names=_ticks(rules, lang),
+        n="{n}", severity=severity, rule_line=_rule_line(rules), rule_names=_ticks(rules, lang),
         acl_note=LINES[lang]["default_block_note"] if default_block else "")
     return [(md, {"severity": severity, "title_key": "path_only_allow",
                   "rules": [r["name"] for r in rules], "sections": [1]})]
@@ -786,7 +845,7 @@ def _gen_managed_count(summary, pre_checks, flags, T, lang):
                                        names=", ".join(f"`{x}`" for x in o["overridden"]))
                 for o in check.get("overrides", [])]
     md = T["managed_count"].format(
-        n="{n}", rule_line=_refs(check["rules"]), details="\n".join(details))
+        n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
     return [(md, {"severity": "Medium", "title_key": "managed_count",
                   "rules": [r["name"] for r in check["rules"]], "sections": [20]})]
 
@@ -1010,7 +1069,7 @@ def main():
         "has_always_on_challenge": any(
             r.get("action") == "challenge" and r.get("type") == "custom" and
             "label_match" in r.get("statement", {}).get("summary", "")
-            for r in rules),
+            for r in rules) or bool(_token_challenge(rules)),
         "has_crawler_labeling_rule": any(
             any(lbl.startswith(p) for p in CRAWLER_LABEL_PATTERNS)
             for r in rules for lbl in r.get("rule_labels", [])),

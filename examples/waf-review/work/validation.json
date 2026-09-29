@@ -1,12 +1,16 @@
 {
   "summary_issue_count": {
     "status": "PASS",
-    "summary_rows": 21,
-    "issue_sections": 21
+    "summary_rows": 23,
+    "issue_sections": 23
   },
   "summary_detail_match": {
     "status": "PASS",
     "mismatches": []
+  },
+  "issue_format": {
+    "status": "PASS",
+    "problems": []
   },
   "rule_references": {
     "status": "PASS",

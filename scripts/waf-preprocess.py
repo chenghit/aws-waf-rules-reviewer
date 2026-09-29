@@ -215,6 +215,27 @@ def _leaf(ltype: str, node: dict, ftm: str, match=None, value=None) -> dict:
             "transforms": [t.get("type", "NONE") for t in tts],
             "fallback": fallback, "negated": False}
 
+def _scoped_field(base: str, val) -> str:
+    """Cookies, Headers, and JsonBody carry a match scope and pattern that
+    change what is inspected: `cookies[scope=KEY, include=a]` matches the
+    cookie name `a`, not its value."""
+    if not isinstance(val, dict):
+        return base
+    parts = []
+    if val.get("match_scope"):
+        parts.append(f"scope={val['match_scope']}")
+    mp = val.get("match_pattern") or {}
+    for k, v in mp.items():
+        if k == "all":
+            parts.append("all")
+        elif isinstance(v, list):
+            parts.append(f"{k.split('_')[0]}={','.join(map(str, v))}")
+    if val.get("oversize_handling"):
+        parts.append(f"oversize={val['oversize_handling']}")
+    if val.get("invalid_fallback_behavior"):
+        parts.append(f"invalid={val['invalid_fallback_behavior']}")
+    return f"{base}[{', '.join(parts)}]" if parts else base
+
 def _field_to_match_str(ftm: dict) -> str:
     if not ftm or not isinstance(ftm, dict):
         return "unknown_field"
@@ -229,7 +250,7 @@ def _field_to_match_str(ftm: dict) -> str:
         if key == "body":
             return "body"
         if key == "json_body":
-            return "json_body"
+            return _scoped_field("json_body", val)
         if key == "method":
             return "method"
         if key == "uri_fragment":
@@ -240,9 +261,9 @@ def _field_to_match_str(ftm: dict) -> str:
         if key in ("ja3_fingerprint", "ja4_fingerprint"):
             return key
         if key == "cookie" or key == "cookies":
-            return "cookie"
+            return _scoped_field("cookies", val)
         if key == "headers":
-            return "headers"
+            return _scoped_field("headers", val)
         if key == "header_order":
             return "header_order"
         return key

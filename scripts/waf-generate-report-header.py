@@ -105,8 +105,11 @@ def main():
     sorted_issues = sorted(issues, key=lambda i: SEVERITY_ORDER.get(i["severity_key"], 9))
 
     # Build Summary table
+    meta_path = work_path(output_dir, "findings-metadata.json")
+    zh = os.path.isfile(meta_path) and json.loads(
+        Path(meta_path).read_text(encoding="utf-8")).get("lang") == "zh"
     table_lines = [
-        "| Severity | Issue | Impact |",
+        "| 严重程度 | 问题 | 影响 |" if zh else "| Severity | Issue | Impact |",
         "|----------|-------|--------|",
     ]
     for issue in sorted_issues:
@@ -117,13 +120,14 @@ def main():
     summary_table = "\n".join(table_lines)
 
     # Build header
-    header = f"""# AWS WAF Web ACL Rules Review Report
-
-**Web ACL**: {acl_name}
-**Review Date**: {today}
-**Objective**: Review WAF configuration for security issues, misconfigurations, and optimization opportunities
-
-## Summary
+    if zh:
+        head = (f"# AWS WAF Web ACL 规则评审报告\n\n**Web ACL**：{acl_name}\n**评审日期**：{today}\n"
+                "**目的**：检查 WAF 配置中的安全问题、配置错误和可优化之处\n\n## 摘要")
+    else:
+        head = (f"# AWS WAF Web ACL Rules Review Report\n\n**Web ACL**: {acl_name}\n**Review Date**: {today}\n"
+                "**Objective**: Review WAF configuration for security issues, misconfigurations, "
+                "and optimization opportunities\n\n## Summary")
+    header = f"""{head}
 
 {summary_table}
 

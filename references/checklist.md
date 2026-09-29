@@ -126,6 +126,7 @@ For byte_match rules with hash/random-token search_string:
 ### 16. Always-on Challenge for Landing Pages
 
 - [ ] Is there an always-on Challenge targeting landing page URIs? (read crawler-seo.md for implementation)
+- [ ] Bot Control at TARGETED with `TGT_TokenAbsent` overridden to Challenge also works as an always-on Challenge, but only for requests inside Bot Control's scope-down. Scripts hand this case to you: check whether that scope covers the landing pages, and whether the labels it relies on can be forged
 - [ ] If absent + DDoS protection objectives → Medium severity. Recommend two-rule pattern: Count+Label on landing page URIs → Challenge on label (exclude crawlers)
 - [ ] Token immunity time ≥ 4 hours (14400s)?
 - [ ] Crawler labeling rule placed before Challenge rule?

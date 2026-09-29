@@ -3,17 +3,17 @@
 # ── English Templates ──────────────────────────────────────────────────────
 
 TEMPLATES_EN = {
-"forgeable_allow": """## Issue {n} (Critical): {rule_names} — forgeable Allow rule bypasses all subsequent protections
+"forgeable_allow": """## Issue {n} (Critical): {rule_names} is a forgeable Allow rule that bypasses all later protections
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: {stmt_summary}, action Allow, no scope-down
 
 **Problem**:
-- {forgeable_fields} {is_are} fully forgeable — an attacker can add {forgeable_example} to bypass all subsequent rules (IP reputation, Bot Control, rate limiting, etc.)
-- The blast radius is global — all traffic paths are affected, no host or URI restriction
+- {forgeable_fields} {is_are} fully forgeable. An attacker can add {forgeable_example} to bypass all subsequent rules (IP reputation, Bot Control, rate limiting, etc.)
+- The blast radius is global: every path is affected, with no host or URI restriction
 {opaque_note}
 **Recommendation**:
-- Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow — the traffic does not need to bypass WAF entirely
+- Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow. The traffic doesn't need to bypass the WAF entirely
 - If the rule is for internal probes or monitoring, use an unforgeable condition (IP Set or WAF Token) instead
 {opaque_rec}
 ---
@@ -25,22 +25,22 @@ TEMPLATES_EN = {
 
 **Problem**:
 - `HostingProviderIPList` default-Blocks cloud hosting and web hosting provider IPs. With the Allow override, a request from these IPs is allowed at once and skips every later rule
-- Modern DDoS attacks heavily use cloud infrastructure (VPS, cloud functions, containers) — Allow override lets this attack traffic bypass IP reputation, Bot Control, rate limiting, and all other protections
+- Modern DDoS attacks heavily use cloud infrastructure (VPS, cloud functions, containers). The Allow override lets this attack traffic bypass IP reputation, Bot Control, rate limiting, and all other protections
 - The correct approach is to override to Count (preserves labels for downstream rules), not Allow
 {scope_note}
 **Recommendation**:
 - Change `HostingProviderIPList` override from Allow to Count
-- Count mode does not Block — it only adds labels, so enterprise users routed through cloud proxies are not affected
+- Count doesn't block, it only adds labels, so enterprise users routed through cloud proxies are not affected
 
 ---
 """,
-"scope_down_too_narrow": """## Issue {n} (Medium): IP reputation / Anonymous IP rule groups have overly narrow scope-down — only inspects homepage
+"scope_down_too_narrow": """## Issue {n} (Medium): IP reputation / Anonymous IP rule groups have a scope-down that only inspects the homepage
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: scope-down is `uri_path EXACTLY '/'`, only applies to homepage path
 
 **Problem**:
-- Both rule groups only inspect `GET /` requests — all other paths (`/api/*`, `/login`, `/signup`, etc.) are not covered by IP reputation checks
+- Both rule groups only inspect `GET /` requests. All other paths (`/api/*`, `/login`, `/signup`, etc.) are not covered by IP reputation checks
 - Malicious IPs only need to target any non-homepage path to completely bypass both rule groups
 - This renders IP reputation protection effectively useless, especially for API path attacks
 
@@ -50,15 +50,15 @@ TEMPLATES_EN = {
 
 ---
 """,
-"challenge_on_post_api": """## Issue {n} (Medium): Challenge rules target API/POST paths — effectively equivalent to Block
+"challenge_on_post_api": """## Issue {n} (Medium): Challenge rules target API/POST paths, which is effectively Block
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: Challenge action applied to API paths and/or POST requests
 
 **Problem**:
 - Challenge can only be completed by browser GET requests (requires JavaScript execution and HTML response)
 - API paths are typically accessed by native apps or JavaScript fetch/XHR, which cannot complete Challenge
-- POST requests cannot complete Challenge — the client receives HTTP 202 but cannot resubmit the original POST
+- POST requests cannot complete Challenge: the client receives HTTP 202 but cannot resubmit the original POST
 - Effective result: these rules act as Block for API clients and native apps
 
 **Recommendation**:
@@ -77,6 +77,7 @@ TEMPLATES_EN = {
 
 **Recommendation**:
 {missing_rec}
+
 ---
 """,
 "token_domain": """## Issue {n} (Low): Token Domain configuration contains redundant subdomains
@@ -85,7 +86,7 @@ TEMPLATES_EN = {
 **Current state**: token_domains contains {domain_list}
 
 **Problem**:
-- Token Domain uses suffix matching — `{apex}` automatically covers all subdomains at any depth
+- Token Domain uses suffix matching, so `{apex}` automatically covers all subdomains at any depth
 - Listing subdomains is redundant; it does not cause security issues but adds configuration maintenance cost
 
 **Recommendation**:
@@ -99,7 +100,7 @@ TEMPLATES_EN = {
 **Current state**: WAF JSON export does not include logging configuration
 
 **Problem**:
-- WAF logging configuration is not included in the Web ACL JSON export — this finding does not mean logging is disabled, only that it cannot be verified from the export
+- WAF logging configuration is not included in the Web ACL JSON export. This finding does not mean logging is disabled, only that it cannot be verified from the export
 - WAF logs are essential for security incident investigation, rule tuning, and false positive analysis
 
 **Recommendation**:
@@ -138,13 +139,13 @@ TEMPLATES_EN = {
 
 ---
 """,
-"count_without_labels": """## Issue {n} (Awareness): {rule_names} — Count rules without labels, metric-only
+"count_without_labels": """## Issue {n} (Awareness): {rule_names} are Count rules without labels, metrics only
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: Count action, no RuleLabels
 
 **Problem**:
-- Count rules without labels only produce CloudWatch metrics — downstream rules cannot act on the match result
+- Count rules without labels only produce CloudWatch metrics. Downstream rules cannot act on the match result
 - If the intent is to take action based on these matches, the current configuration cannot achieve it
 
 **Recommendation**:
@@ -165,28 +166,29 @@ TEMPLATES_EN = {
 
 **Recommendation**:
 - **Best**: if architecture supports it, use separate Web ACLs for frontend (browser) and backend (API/native app) traffic. Frontend Web ACL enables ChallengeAllDuringEvent with default config; backend Web ACL disables Challenge and raises Block sensitivity
-- **If frontend and API share the same domain**: deploy dual AMR instances in the same Web ACL — one for browser traffic (ChallengeAllDuringEvent enabled), one for API/native app traffic (Challenge disabled, Block sensitivity MEDIUM). See Appendix B for implementation steps
-- Do NOT use the "single instance + all Count + custom label rules" pattern — it requires understanding 6+ AMR labels, disables AMR's internal coordination logic, and still requires answering which paths can Challenge
+- **If frontend and API share the same domain**: deploy dual AMR instances in the same Web ACL, one for browser traffic (ChallengeAllDuringEvent enabled), one for API/native app traffic (Challenge disabled, Block sensitivity MEDIUM). See Appendix B for implementation steps
+- Do NOT use the "single instance + all Count + custom label rules" pattern. It requires understanding 6+ AMR labels, disables AMR's internal coordination logic, and still requires answering which paths can Challenge
 
 ---
 """,
-"unanchored_exempt_regex": """## Issue {n} (Medium): AntiDDoS AMR exempt URI regex is unanchored — attackers can bypass via path injection
+"unanchored_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR exempt URI regex is unanchored, so crafted paths skip Challenge
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: Exempt regex `{regex}`, API path branches are not anchored with `^`
 
 **Problem**:
 - The following regex branches are not anchored with `^`, meaning they are "contains" matches rather than "starts-with": {unanchored_list}
-- Attackers can craft paths containing these keywords to bypass `ChallengeAllDuringEvent`, e.g.: {examples}
+- Attackers can craft paths containing these keywords to get past {challenge_rules}, e.g.: {examples}
 - This allows attack requests to be exempted from Challenge during DDoS events
-
+{state_note}
 **Recommendation**:
 - Add `^` anchoring to all API path branches: {anchored_suggestion}
-- Static asset suffix matching (e.g., `\\.(css|js|png)$`) is already correctly anchored with `$` — no change needed
+- Check the real paths first. If the API sits under a prefix such as `/v1/`, anchor on that prefix (`^\\/v1\\/query`), or the anchored branch stops matching
+- Static asset suffix matching (e.g., `\\.(css|js|png)$`) is already anchored with `$` and needs no change
 
 ---
 """,
-"missing_crawler_labeling": """## Issue {n} (Medium): Missing crawler labeling rule — search engine crawlers may be Challenged during DDoS events
+"missing_crawler_labeling": """## Issue {n} ({severity}): Missing crawler labeling rule, so search engine crawlers may be challenged during DDoS events
 
 **Rule**: N/A (missing rule)
 **Current state**: No ASN + UA crawler labeling rule in the Web ACL
@@ -194,8 +196,8 @@ TEMPLATES_EN = {
 **Problem**:
 - `ChallengeAllDuringEvent` will Challenge all challengeable requests during DDoS events, including search engine crawlers (Googlebot, Bingbot, etc.)
 - Real-world cases show crawlers may index the Challenge interstitial page (HTTP 202) instead of actual content during DDoS events, severely damaging SEO rankings
-- Bot Control's `bot:verified` label can identify verified crawlers, but Bot Control must be placed last in the rule chain (cost optimization) — by then AntiDDoS AMR has already evaluated the request
-
+- Bot Control's `bot:verified` label can identify verified crawlers, but Bot Control must be placed last in the rule chain (cost optimization), and by then AntiDDoS AMR has already evaluated the request
+{state_note}
 **Recommendation**:
 - Add an ASN + UA crawler labeling rule before AntiDDoS AMR to label Google (ASN 15169), Bing (ASN 8075), and other crawlers with `crawler:verified` (full rule JSON in Appendix A)
 - Add a scope-down to AntiDDoS AMR excluding the `crawler:verified` label
@@ -208,10 +210,10 @@ TEMPLATES_EN = {
 **Current state**: `{override_names}` overridden to Allow
 
 **Problem**:
-- These Allow overrides only affect "unverified" search engine bots — requests claiming to be search engine crawlers but failing reverse DNS verification
-- Real Googlebot/Bingbot (verified) are already not Blocked by these rules — they pass through with `bot:verified` label regardless of the override
-- Forged Googlebot UAs (reverse DNS fails) do NOT match `CategorySearchEngine` — they fall through to `SignalNonBrowserUserAgent` and are Blocked, regardless of the override
-- The Allow override lets unverified search engine bots bypass all subsequent WAF rules — limited blast radius, but unnecessary
+- These Allow overrides only affect "unverified" search engine bots: requests claiming to be search engine crawlers but failing reverse DNS verification
+- Real Googlebot/Bingbot (verified) are already not blocked by these rules. They pass through with `bot:verified` label regardless of the override
+- Forged Googlebot UAs (reverse DNS fails) do NOT match `CategorySearchEngine`. They fall through to `SignalNonBrowserUserAgent` and are Blocked, regardless of the override
+- The Allow override lets unverified search engine bots bypass all later WAF rules. The blast radius is limited, but the override isn't needed
 
 **Recommendation**:
 - Remove the Allow overrides on `{override_names}`, restore default Block
@@ -221,7 +223,7 @@ TEMPLATES_EN = {
 """,
 "duplicate_rules": """## Issue {n} (Low): {count} group(s) of identical rules
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Rules that differ only in name and priority
 
 **Problem**:
@@ -235,14 +237,14 @@ TEMPLATES_EN = {
 
 ---
 """,
-"missing_always_on_challenge": """## Issue {n} (Medium): Missing Always-on Challenge — DDoS protection relies on reactive detection delay
+"missing_always_on_challenge": """## Issue {n} (Medium): Missing Always-on Challenge, so DDoS protection waits for reactive detection
 
 **Rule**: N/A (missing rule)
 **Current state**: No Always-on Challenge rules for landing pages in the Web ACL
 
 **Problem**:
 - All reactive protections (AntiDDoS AMR, rate-based rules) have an inherent delay between attack start and mitigation activation
-- Always-on Challenge is proactive — it continuously requires browser verification on landing page paths, filtering non-browser attack traffic from the first request with zero detection delay
+- Always-on Challenge is proactive. It continuously requires browser verification on landing page paths, filtering non-browser attack traffic from the first request with zero detection delay
 - Without Always-on Challenge, non-browser DDoS traffic can reach the origin unimpeded during the detection delay window
 
 **Recommendation**:
@@ -269,13 +271,13 @@ TEMPLATES_EN = {
 
 ---
 """,
-"managed_allow_override": """## Issue {n} (Awareness): Managed rule group has Allow override — bypasses all subsequent rules
+"managed_allow_override": """## Issue {n} (Awareness): Managed rule group has an Allow override that bypasses all later rules
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: {override_detail}
 
 **Problem**:
-- Overriding a managed rule to Allow means matching requests are immediately allowed and skip ALL remaining rules — both within the rule group and in the Web ACL
+- Overriding a managed rule to Allow means matching requests are immediately allowed and skip ALL remaining rules, both in the rule group and in the Web ACL
 - This is the most dangerous override type; it creates a potential bypass path
 
 **Recommendation**:
@@ -286,7 +288,7 @@ TEMPLATES_EN = {
 """,
 "order_issues": """## Issue {n} ({severity}): Rule order issues: {summary}
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Existing rules are evaluated in an order that changes what gets inspected or blocked
 
 **Problem**:
@@ -321,7 +323,7 @@ TEMPLATES_EN = {
 - {detail}
 - Later versions added:
 {additions}
-- On the old version, far fewer bots are recognized, so COMMON-level categories match much less traffic
+- On the old version, far fewer bots are recognized, so the category rules match much less traffic
 
 **Recommendation**:
 - Pin the latest static version (see the AWS Managed Rules changelog). Run it in Count first and compare labels with current traffic: 5.0 changed rule match precedence and added categories, so the same request can get different labels after the upgrade
@@ -331,7 +333,7 @@ TEMPLATES_EN = {
 """,
 "managed_unpinned": """## Issue {n} (Low): Managed rule groups not pinned to a version
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: No `VersionToUse` on {groups}
 
 **Problem**:
@@ -345,7 +347,7 @@ TEMPLATES_EN = {
 """,
 "uri_fragment_fallback": """## Issue {n} ({severity}): UriFragment condition always matches, so the path restriction is void
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: {rule_names} match `UriFragment` with `FallbackBehavior: MATCH`
 
 **Problem**:
@@ -359,7 +361,7 @@ TEMPLATES_EN = {
 """,
 "uri_path_pitfalls": """## Issue {n} (Medium): URI path conditions that can never match as written
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Conditions on `UriPath` whose pattern can't match a real path
 
 **Problem**:
@@ -373,7 +375,7 @@ TEMPLATES_EN = {
 """,
 "path_block_decoding": """## Issue {n} (Medium): Path Block rules don't URL-decode, so encoded paths slip through
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Block rules match `UriPath` without `URL_DECODE`
 
 **Problem**:
@@ -389,7 +391,7 @@ TEMPLATES_EN = {
 """,
 "path_only_allow": """## Issue {n} ({severity}): Allow rules match only on request content, with no IP or other unforgeable condition
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: {rule_names} allow requests by path (and other request content) alone
 
 **Problem**:
@@ -404,7 +406,7 @@ TEMPLATES_EN = {
 """,
 "managed_count": """## Issue {n} (Medium): Managed protections left in Count
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Managed rule groups, or rules inside them, set to Count
 
 **Problem**:
@@ -437,15 +439,15 @@ TEMPLATES_EN = {
 TEMPLATES_ZH = {
 "forgeable_allow": """## Issue {n} (Critical): {rule_names} 基于可伪造条件实现全局 Allow 绕过
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: {stmt_summary}，action 为 Allow，无 scope-down
 
 **Problem**:
 - {forgeable_fields} 是完全可伪造的，攻击者只需在请求中添加{forgeable_example}即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）
-- 该规则的 blast radius 为全局——所有流量路径均受影响，无 host 或 URI 限制
+- 该规则的 blast radius 是全局的：所有路径都受影响，没有 host 或 URI 限制
 {opaque_note}
 **Recommendation**:
-- 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow——该流量不需要绕过 WAF
+- 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow，这些流量不需要绕过 WAF
 - 如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）
 {opaque_rec}
 ---
@@ -457,7 +459,7 @@ TEMPLATES_ZH = {
 
 **Problem**:
 - `HostingProviderIPList` 默认 Block 云托管和 Web 托管提供商的 IP。覆盖为 Allow 后，来自这些 IP 的请求直接放行，后面的规则都不再检查
-- 现代 DDoS 攻击大量使用云托管基础设施（VPS、云函数、容器）——Allow 覆盖使这些攻击流量完全绕过 IP 信誉、Bot Control、速率限制等所有保护
+- 现代 DDoS 攻击大量使用云托管基础设施（VPS、云函数、容器）。Allow 覆盖让这些攻击流量完全绕过 IP 信誉、Bot Control、速率限制等所有保护
 - 正确做法是覆盖为 Count（保留标签，供下游规则使用），而非 Allow
 {scope_note}
 **Recommendation**:
@@ -468,7 +470,7 @@ TEMPLATES_ZH = {
 """,
 "scope_down_too_narrow": """## Issue {n} (Medium): IP 信誉和匿名 IP 规则组的 scope-down 过窄，仅检查首页
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: scope-down 为 `uri_path EXACTLY '/'`，仅对首页路径生效
 
 **Problem**:
@@ -484,13 +486,13 @@ TEMPLATES_ZH = {
 """,
 "challenge_on_post_api": """## Issue {n} (Medium): Challenge 规则作用于 API/POST 路径，实际效果等同于 Block
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: 对 API 路径和/或 POST 请求应用 Challenge action
 
 **Problem**:
 - Challenge 只能由浏览器 GET 请求完成（需要执行 JavaScript 并接受 HTML 响应）
 - API 路径通常由原生 App 或 JavaScript fetch/XHR 访问，无法完成 Challenge
-- POST 请求无法完成 Challenge——客户端会收到 HTTP 202 但无法重新提交原始 POST 请求
+- POST 请求无法完成 Challenge：客户端会收到 HTTP 202 但无法重新提交原始 POST 请求
 - 实际效果：这些规则对 API 客户端和原生 App 等同于 Block
 
 **Recommendation**:
@@ -501,7 +503,7 @@ TEMPLATES_ZH = {
 """,
 "missing_baseline": """## Issue {n} ({severity}): 缺少 {missing_names} 基线防护规则组
 
-**Rule**: N/A（缺失规则）
+**Rule**: N/A (缺失规则)
 **Current state**: Web ACL 中没有 {missing_names}
 
 **Problem**:
@@ -509,15 +511,16 @@ TEMPLATES_ZH = {
 
 **Recommendation**:
 {missing_rec}
+
 ---
 """,
 "token_domain": """## Issue {n} (Low): Token Domain 配置包含冗余子域名
 
-**Rule**: N/A（Web ACL 全局配置）
+**Rule**: N/A (Web ACL 全局配置)
 **Current state**: token_domains 包含 {domain_list}
 
 **Problem**:
-- Token Domain 使用后缀匹配——`{apex}` 自动覆盖所有子域名
+- Token Domain 使用后缀匹配，`{apex}` 自动覆盖所有子域名
 - 列出子域名是冗余的，不会造成安全问题，但增加了配置维护成本
 
 **Recommendation**:
@@ -527,11 +530,11 @@ TEMPLATES_ZH = {
 """,
 "no_logging": """## Issue {n} (Awareness): 未检测到 WAF 日志配置
 
-**Rule**: N/A（Web ACL 全局配置）
+**Rule**: N/A (Web ACL 全局配置)
 **Current state**: WAF JSON 导出文件中不包含日志配置信息
 
 **Problem**:
-- WAF JSON 导出不包含日志配置——此发现不代表日志未启用，仅表示无法从导出文件中验证
+- WAF JSON 导出不包含日志配置。这一条不代表日志未启用，仅表示无法从导出文件中验证
 - WAF 日志对于安全事件调查、规则调优和误报分析至关重要
 
 **Recommendation**:
@@ -542,7 +545,7 @@ TEMPLATES_ZH = {
 """,
 "logging_disabled": """## Issue {n} (Awareness): 未启用 WAF 日志
 
-**Rule**: N/A（Web ACL 全局配置）
+**Rule**: N/A (Web ACL 全局配置)
 **Current state**: `get-logging-configuration` 显示该 Web ACL 没有日志配置
 
 **Problem**:
@@ -572,7 +575,7 @@ TEMPLATES_ZH = {
 """,
 "count_without_labels": """## Issue {n} (Awareness): {rule_names} 规则为 Count 但未添加标签，仅产生指标
 
-**Rule**: {rule_line}
+{rule_line}
 **Current state**: Count action，无 RuleLabels
 
 **Problem**:
@@ -596,38 +599,39 @@ TEMPLATES_ZH = {
 {details}
 
 **Recommendation**:
-- **最佳方案**：如果架构支持，使用前后端分离——前端 Web ACL（浏览器流量）启用 ChallengeAllDuringEvent 默认配置；后端 Web ACL（API/原生 App 流量）关闭 Challenge，提高 Block 灵敏度
-- **如果前后端共用同一域名**：在同一 Web ACL 中部署双 AMR 实例——一个针对浏览器流量（启用 ChallengeAllDuringEvent），另一个针对 API/原生 App 流量（禁用 Challenge，Block 灵敏度 MEDIUM）。实现步骤见附录 B
-- 不推荐"单实例 + 全部 Count + 自定义标签规则"方案——需要理解 6+ 个 AMR 标签的语义，Count 覆盖会禁用 AMR 内置联动逻辑，且仍需回答"哪些路径可以 Challenge"
+- **最佳方案**：如果架构支持，使用前后端分离：前端 Web ACL（浏览器流量）启用 ChallengeAllDuringEvent 默认配置；后端 Web ACL（API/原生 App 流量）关闭 Challenge，提高 Block 灵敏度
+- **如果前后端共用同一域名**：在同一 Web ACL 中部署双 AMR 实例，一个针对浏览器流量（启用 ChallengeAllDuringEvent），另一个针对 API/原生 App 流量（禁用 Challenge，Block 灵敏度 MEDIUM）。实现步骤见附录 B
+- 不推荐"单实例 + 全部 Count + 自定义标签规则"方案：需要理解 6+ 个 AMR 标签的语义，Count 覆盖会禁用 AMR 内置联动逻辑，且仍需回答"哪些路径可以 Challenge"
 
 ---
 """,
-"unanchored_exempt_regex": """## Issue {n} (Medium): AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过
+"unanchored_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: 豁免正则 `{regex}`，API 路径分支未使用 `^` 锚定
 
 **Problem**:
 - 以下正则分支未以 `^` 锚定，意味着它们是"包含"匹配而非"以...开头"匹配：{unanchored_list}
-- 攻击者可以构造包含这些关键词的任意路径来绕过 `ChallengeAllDuringEvent`，例如：{examples}
+- 攻击者可以构造包含这些关键词的任意路径，让 {challenge_rules} 跳过这些请求，例如：{examples}
 - 这使得攻击者可以通过精心构造的路径，让攻击请求被豁免于 Challenge
-
+{state_note}
 **Recommendation**:
 - 为所有 API 路径分支添加 `^` 锚定：{anchored_suggestion}
+- 先确认真实路径。如果 API 挂在 `/v1/` 这样的前缀下，要连前缀一起锚定（`^\\/v1\\/query`），否则加了 `^` 的分支就匹配不上了
 - 静态资源后缀匹配已正确使用 `$` 锚定，无需修改
 
 ---
 """,
-"missing_crawler_labeling": """## Issue {n} (Medium): 缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge
+"missing_crawler_labeling": """## Issue {n} ({severity}): 缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge
 
-**Rule**: N/A（缺失规则）
+**Rule**: N/A (缺失规则)
 **Current state**: Web ACL 中没有 ASN + UA 爬虫标记规则
 
 **Problem**:
 - `ChallengeAllDuringEvent` 会在 DDoS 事件期间对所有可 Challenge 的请求发起 Challenge，包括搜索引擎爬虫（Googlebot、Bingbot 等）
 - 真实案例表明，爬虫在 DDoS 事件期间可能索引 Challenge 拦截页（HTTP 202）而非实际内容，严重损害 SEO 排名
 - Bot Control 的 `bot:verified` 标签虽然可以识别已验证爬虫，但 Bot Control 必须放在规则链末尾（成本优化），此时 AntiDDoS AMR 已经评估完毕，无法使用该标签
-
+{state_note}
 **Recommendation**:
 - 在 AntiDDoS AMR 之前添加 ASN + UA 爬虫标记规则，为 Google（ASN 15169）、Bing（ASN 8075）等爬虫添加 `crawler:verified` 标签（完整规则 JSON 见附录 A）
 - 在 AntiDDoS AMR 的 scope-down 中排除 `crawler:verified` 标签，防止爬虫被 Challenge
@@ -641,7 +645,7 @@ TEMPLATES_ZH = {
 
 **Problem**:
 - 这两个规则的 Allow 覆盖只影响"未验证"的搜索引擎 Bot（自称是搜索引擎爬虫但无法通过反向 DNS 验证的请求）
-- 真正的 Googlebot/Bingbot（已验证）本来就不会被这两个规则 Block——它们通过 `bot:verified` 标签直接放行，与覆盖无关
+- 真正的 Googlebot/Bingbot（已验证）本来就不会被这两个规则 Block，它们带着 `bot:verified` 标签直接放行，与覆盖无关
 - 伪造 Googlebot UA 的攻击者不会匹配 `CategorySearchEngine`（反向 DNS 验证失败后落入 `SignalNonBrowserUserAgent`），也与覆盖无关
 - Allow 覆盖让未验证的搜索引擎 Bot 绕过所有后续 WAF 规则，虽然 blast radius 有限，但并非必要
 
@@ -653,7 +657,7 @@ TEMPLATES_ZH = {
 """,
 "duplicate_rules": """## Issue {n} (Low): 有 {count} 组规则完全相同
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: 这些规则除了名字和 priority，其他配置完全一样
 
 **Problem**:
@@ -669,12 +673,12 @@ TEMPLATES_ZH = {
 """,
 "missing_always_on_challenge": """## Issue {n} (Medium): 缺少 Always-on Challenge，DDoS 防护依赖响应式检测的延迟窗口
 
-**Rule**: N/A（缺失规则）
+**Rule**: N/A (缺失规则)
 **Current state**: Web ACL 中没有针对 landing page 的 Always-on Challenge 规则
 
 **Problem**:
 - 所有响应式防护（AntiDDoS AMR、速率限制规则）在攻击开始到缓解生效之间都存在不可避免的检测延迟窗口
-- Always-on Challenge 是主动式防护——对 landing page 路径持续要求浏览器验证，无需等待攻击检测，从第一个请求起即过滤无法执行 JavaScript 的攻击工具
+- Always-on Challenge 是主动式防护：对 landing page 路径持续要求浏览器验证，无需等待攻击检测，从第一个请求起即过滤无法执行 JavaScript 的攻击工具
 - 缺少 Always-on Challenge 意味着在检测延迟窗口内，大量非浏览器攻击流量可以无阻碍地到达源站
 
 **Recommendation**:
@@ -701,13 +705,13 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"managed_allow_override": """## Issue {n} (Awareness): 托管规则组存在 Allow 覆盖——匹配请求将绕过所有后续规则
+"managed_allow_override": """## Issue {n} (Awareness): 托管规则组存在 Allow 覆盖，匹配的请求会绕过所有后续规则
 
 **Rule**: {rule_name} (priority {priority})
 **Current state**: {override_detail}
 
 **Problem**:
-- 将托管规则覆盖为 Allow 意味着匹配的请求将被立即放行，跳过所有后续规则——包括同一规则组内和 Web ACL 中的所有规则
+- 将托管规则覆盖为 Allow 意味着匹配的请求将被立即放行，跳过所有后续规则，包括同一规则组内和 Web ACL 中的所有规则
 - 这是最危险的覆盖类型，会创建潜在的绕过路径
 
 **Recommendation**:
@@ -718,7 +722,7 @@ TEMPLATES_ZH = {
 """,
 "order_issues": """## Issue {n} ({severity}): 规则顺序问题，{summary}
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: 现有规则的评估顺序，影响到了哪些请求会被检查或拦截
 
 **Problem**:
@@ -732,7 +736,7 @@ TEMPLATES_ZH = {
 """,
 "recommended_protections": """## Issue {n} ({severity}): 建议补充的防护：{names}
 
-**Rule**: N/A（缺失规则）
+**Rule**: N/A (缺失规则)
 **Current state**: 这个 ACL 默认放行，面向公网流量，但没有部署这些防护
 
 **Problem**:
@@ -753,7 +757,7 @@ TEMPLATES_ZH = {
 - {detail}
 - 之后的版本陆续加入了：
 {additions}
-- 旧版本能认出的 bot 少得多，COMMON 级别各个类别能命中的流量也少得多
+- 旧版本能认出的 bot 少得多，各个类别规则能命中的流量也少得多
 
 **Recommendation**:
 - 固定到最新的静态版本（见 AWS Managed Rules changelog）。先用 Count 跑一段时间，对比升级前后的标签：5.0 调整了规则的匹配顺序并新增了类别，同一个请求升级后可能命中不同的标签
@@ -763,7 +767,7 @@ TEMPLATES_ZH = {
 """,
 "managed_unpinned": """## Issue {n} (Low): 托管规则组没有固定版本
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: {groups} 没有设置 `VersionToUse`
 
 **Problem**:
@@ -777,7 +781,7 @@ TEMPLATES_ZH = {
 """,
 "uri_fragment_fallback": """## Issue {n} ({severity}): UriFragment 条件恒为真，路径限制失效
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: {rule_names} 用 `UriFragment` 做匹配，且 `FallbackBehavior: MATCH`
 
 **Problem**:
@@ -791,7 +795,7 @@ TEMPLATES_ZH = {
 """,
 "uri_path_pitfalls": """## Issue {n} (Medium): 有些 URI 路径条件按现在的写法永远不会命中
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: `UriPath` 上的匹配模式和真实路径对不上
 
 **Problem**:
@@ -805,7 +809,7 @@ TEMPLATES_ZH = {
 """,
 "path_block_decoding": """## Issue {n} (Medium): 路径拦截规则没做 URL 解码，编码后的路径可以绕过
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: Block 规则匹配 `UriPath` 时没有 `URL_DECODE`
 
 **Problem**:
@@ -821,7 +825,7 @@ TEMPLATES_ZH = {
 """,
 "path_only_allow": """## Issue {n} ({severity}): Allow 规则只按请求内容放行，没有 IP 等不可伪造的条件
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: {rule_names} 只凭路径等请求内容就放行
 
 **Problem**:
@@ -836,7 +840,7 @@ TEMPLATES_ZH = {
 """,
 "managed_count": """## Issue {n} (Medium): 托管规则的防护处于 Count
 
-**Rules**: {rule_line}
+{rule_line}
 **Current state**: 托管规则组整组，或组里的部分规则，被设成了 Count
 
 **Problem**:

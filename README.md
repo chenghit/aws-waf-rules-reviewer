@@ -104,10 +104,11 @@ cd aws-waf-rules-reviewer
 
 v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅减少 LLM 的输出量和参考文档读取量。
 
-| 规则数量 | LLM 分析 thinking 时间 | 脚本步骤耗时 | 总耗时（估算） |
-|---------|----------------------|------------|-------------|
-| 27 条（实测） | ~4 分钟 | < 1 分钟 | ~10 分钟 |
-| 100+ 条（预估） | ~8 分钟 | < 1 分钟 | ~15 分钟 |
+| 规则数量 | LLM 分析（Step 4） | 自审（Step 7） | 全部脚本步骤 | 总耗时 |
+|---------|------------------|--------------|------------|-------|
+| 27 条（v0.7.1 实测） | 约 7.7 分钟 | 约 1.4 分钟 | < 10 秒 | 约 9.6 分钟 |
+
+实测环境：Claude Code，Claude Opus 5.5，`examples/web-acl-example.json`。
 
 > 相比 v0.3，总耗时未显著减少，但用户体验有明显改善：只有 Step 4（LLM 分析）有一段 thinking 等待，其他步骤均有连续输出。此外，脚本生成的发现支持中英双语，报告细节更加丰富。
 
@@ -116,10 +117,10 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 `examples/` 目录包含一个完整的输入输出示例：
 
 - `web-acl-example.json`：组装的 27 条规则 WAF 配置（涵盖 AntiDDoS AMR、Bot Control、rate-based、自定义规则等典型场景）
-- `waf-review/waf-review-report.md`：实测输出的评审报告（中文）
-- `waf-review/` 下的其他文件：脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
+- `waf-review/waf-review-report.html`、`waf-review/waf-review-report.md`：实测输出的评审报告（中文）
+- `waf-review/work/`：脚本生成的中间文件（summary、pre-checks、Mermaid 图等）
 
-使用 Claude Sonnet 4.6 模型生成。
+使用 Claude Code + Claude Opus 5.5 生成。
 
 ## 检查清单覆盖范围
 

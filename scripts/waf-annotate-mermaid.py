@@ -236,7 +236,9 @@ def _write_appendix(report_path: str, mermaid_text: str, output_dir: str):
     meta_path = work_path(output_dir, "findings-metadata.json")
     zh = os.path.isfile(meta_path) and json.loads(Path(meta_path).read_text(encoding="utf-8")).get("lang") == "zh"
     heading = "附录：规则执行流程" if zh else "Appendix: Rule Execution Flow"
-    block = f"\n---\n\n## {heading}\n\n{mermaid_text}"
+    # The last Issue already ends with ---; don't add a second rule
+    sep = "" if report.rstrip().endswith("---") else "\n---\n"
+    block = f"{sep}\n## {heading}\n\n{mermaid_text}"
     appendix_path = work_path(output_dir, "appendix.md")
     if os.path.isfile(appendix_path):
         block += Path(appendix_path).read_text(encoding="utf-8")

@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.7.1 (2026-09-29)
+
+Fixes from regenerating the example with v0.7.
+
+### Fixed
+- Scripted findings assumed `ChallengeAllDuringEvent` was on. The exempt-regex finding now names the Challenge rule that actually skips exempt paths, drops to Low when neither Challenge rule acts, and is skipped when Challenge is disabled. The crawler labeling finding is Low while `ChallengeAllDuringEvent` is in Count. Both read the rule group state through one helper.
+- The exempt-regex fix now warns that adding `^` breaks branches for APIs under a prefix such as `/v1/`.
+- A TARGETED Bot Control with `TGT_TokenAbsent` overridden to Challenge counts as an always-on Challenge for its scope. The "missing Always-on Challenge" finding goes to the LLM instead of being reported as missing.
+- The Bot Control version finding no longer says "COMMON level" for a TARGETED rule group.
+- `waf-summary.json` keeps the match scope and pattern for Cookies, Headers, and JsonBody, e.g. `cookies[scope=KEY, included=ab_session_id, oversize=MATCH]`. Before, a cookie name match read like a value match.
+- Scripted findings use `**Rules**:` for more than one rule, and no longer join rules with "and".
+- The report header and Summary table are in Chinese for `--lang zh`.
+- No second horizontal rule before the appendix, and a blank line before `---` in the missing-baseline finding.
+- Em dashes removed from finding templates and the appendix.
+
+### Added
+- Validation check `issue_format`. It fails a report whose severity isn't exactly Critical, Medium, Low, or Awareness (for example `(Low ⏳)`), that lists several rules under `**Rule**:`, or whose `**Problem**:` isn't followed by bullets.
+
 ## v0.7 (2026-09-29)
 
 ### Changed

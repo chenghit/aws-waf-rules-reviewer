@@ -1,0 +1,261 @@
+{
+  "scripted_count": 17,
+  "scripted_issues": [
+    {
+      "number": 1,
+      "severity": "Critical",
+      "title": "probe_service_pass_2 / probe_service_pass 基于可伪造条件实现全局 Allow 绕过",
+      "rules": [
+        "probe_service_pass_2",
+        "probe_service_pass"
+      ],
+      "checklist_sections": [
+        1
+      ]
+    },
+    {
+      "number": 2,
+      "severity": "Critical",
+      "title": "APP-BYPASS_2 / APP-BYPASS 基于可伪造条件实现全局 Allow 绕过",
+      "rules": [
+        "APP-BYPASS_2",
+        "APP-BYPASS"
+      ],
+      "checklist_sections": [
+        1
+      ]
+    },
+    {
+      "number": 3,
+      "severity": "Medium",
+      "title": "AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过",
+      "rules": [
+        "AWS-AWSManagedRulesAntiDDoSRuleSet"
+      ],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 4,
+      "severity": "Medium",
+      "title": "Challenge 规则作用于 API/POST 路径，实际效果等同于 Block",
+      "rules": [
+        "challenge-all-reasonable-specific_path_2",
+        "platform_create_payment_bot_control",
+        "challenge-all-reasonable-specific_path",
+        "platform_create_payment_bot_control_2"
+      ],
+      "checklist_sections": [
+        4
+      ]
+    },
+    {
+      "number": 5,
+      "severity": "Medium",
+      "title": "IP 信誉和匿名 IP 规则组的 scope-down 过窄，仅检查首页",
+      "rules": [
+        "AWS-AWSManagedRulesAmazonIpReputationList",
+        "AWS-AWSManagedRulesAnonymousIpList"
+      ],
+      "checklist_sections": [
+        2
+      ]
+    },
+    {
+      "number": 6,
+      "severity": "Medium",
+      "title": "HostingProviderIPList 被覆盖为 Allow，云主机流量会跳过所有后续规则",
+      "rules": [
+        "AWS-AWSManagedRulesAnonymousIpList"
+      ],
+      "checklist_sections": [
+        7
+      ]
+    },
+    {
+      "number": 7,
+      "severity": "Medium",
+      "title": "规则顺序问题，发现 2 处",
+      "rules": [
+        "ban_chat_ipv6_2",
+        "ban_chat_ipv6"
+      ],
+      "checklist_sections": [
+        18
+      ]
+    },
+    {
+      "number": 8,
+      "severity": "Medium",
+      "title": "Bot Control 跑的是旧版本，识别能力弱很多",
+      "rules": [
+        "AWS-AWSManagedRulesBotControlRuleSet"
+      ],
+      "checklist_sections": [
+        12
+      ]
+    },
+    {
+      "number": 9,
+      "severity": "Medium",
+      "title": "缺少 CRS 和 KnownBadInputs 基线防护规则组",
+      "rules": [],
+      "checklist_sections": [
+        9
+      ]
+    },
+    {
+      "number": 10,
+      "severity": "Low",
+      "title": "ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间的兜底 Challenge 关掉了",
+      "rules": [
+        "AWS-AWSManagedRulesAntiDDoSRuleSet"
+      ],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 11,
+      "severity": "Low",
+      "title": "有 11 组规则完全相同",
+      "rules": [
+        "spec_43_JA4_DDoS",
+        "spec_43_JA4_DDoS_2",
+        "challenge-all-reasonable-specific_path_2",
+        "challenge-all-reasonable-specific_path",
+        "chat_platform_deny_options_method_2",
+        "chat_platform_deny_options_method",
+        "probe_service_pass_2",
+        "probe_service_pass",
+        "example-com_ratelimit_challenge_2",
+        "example-com_ratelimit_challenge",
+        "APP-BYPASS_2",
+        "APP-BYPASS",
+        "ban_chat_ipv6_2",
+        "ban_chat_ipv6",
+        "platform-all-ratelimit_2",
+        "platform-all-ratelimit",
+        "chat-all-ratelimit_2",
+        "chat-all-ratelimit",
+        "chat_challengeable-request_bot_control_2",
+        "chat_challengeable-request_bot_control",
+        "platform_create_payment_bot_control",
+        "platform_create_payment_bot_control_2"
+      ],
+      "checklist_sections": [
+        6
+      ]
+    },
+    {
+      "number": 12,
+      "severity": "Low",
+      "title": "Bot Control 的 CategorySearchEngine 和 CategorySeo 被覆盖为 Allow",
+      "rules": [
+        "AWS-AWSManagedRulesBotControlRuleSet"
+      ],
+      "checklist_sections": [
+        5
+      ]
+    },
+    {
+      "number": 13,
+      "severity": "Low",
+      "title": "allow_all 规则与默认 Allow 动作重复",
+      "rules": [
+        "allow_all"
+      ],
+      "checklist_sections": [
+        15
+      ]
+    },
+    {
+      "number": 14,
+      "severity": "Low",
+      "title": "缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge",
+      "rules": [],
+      "checklist_sections": [
+        3
+      ]
+    },
+    {
+      "number": 15,
+      "severity": "Low",
+      "title": "Token Domain 配置包含冗余子域名",
+      "rules": [],
+      "checklist_sections": [
+        11
+      ]
+    },
+    {
+      "number": 16,
+      "severity": "Awareness",
+      "title": "spec_43_JA4_DDoS / spec_43_JA4_DDoS_2 规则为 Count 但未添加标签，仅产生指标",
+      "rules": [
+        "spec_43_JA4_DDoS",
+        "spec_43_JA4_DDoS_2"
+      ],
+      "checklist_sections": [
+        17
+      ]
+    },
+    {
+      "number": 17,
+      "severity": "Awareness",
+      "title": "未检测到 WAF 日志配置",
+      "rules": [],
+      "checklist_sections": [
+        13
+      ]
+    }
+  ],
+  "issue_rule_mapping": {
+    "probe_service_pass_2": "⚠️ Issue #1, #11",
+    "probe_service_pass": "⚠️ Issue #1, #11",
+    "APP-BYPASS_2": "⚠️ Issue #2, #11",
+    "APP-BYPASS": "⚠️ Issue #2, #11",
+    "AWS-AWSManagedRulesAntiDDoSRuleSet": "⚠️ Issue #3, #10",
+    "challenge-all-reasonable-specific_path_2": "⚠️ Issue #4, #11",
+    "platform_create_payment_bot_control": "⚠️ Issue #4, #11",
+    "challenge-all-reasonable-specific_path": "⚠️ Issue #4, #11",
+    "platform_create_payment_bot_control_2": "⚠️ Issue #4, #11",
+    "AWS-AWSManagedRulesAmazonIpReputationList": "⚠️ Issue #5",
+    "AWS-AWSManagedRulesAnonymousIpList": "⚠️ Issue #5, #6",
+    "ban_chat_ipv6_2": "⚠️ Issue #7, #11",
+    "ban_chat_ipv6": "⚠️ Issue #7, #11",
+    "AWS-AWSManagedRulesBotControlRuleSet": "⚠️ Issue #8, #12",
+    "spec_43_JA4_DDoS": "⚠️ Issue #11, #16",
+    "spec_43_JA4_DDoS_2": "⚠️ Issue #11, #16",
+    "chat_platform_deny_options_method_2": "⚠️ Issue #11",
+    "chat_platform_deny_options_method": "⚠️ Issue #11",
+    "example-com_ratelimit_challenge_2": "⚠️ Issue #11",
+    "example-com_ratelimit_challenge": "⚠️ Issue #11",
+    "platform-all-ratelimit_2": "⚠️ Issue #11",
+    "platform-all-ratelimit": "⚠️ Issue #11",
+    "chat-all-ratelimit_2": "⚠️ Issue #11",
+    "chat-all-ratelimit": "⚠️ Issue #11",
+    "chat_challengeable-request_bot_control_2": "⚠️ Issue #11",
+    "chat_challengeable-request_bot_control": "⚠️ Issue #11",
+    "allow_all": "⚠️ Issue #13"
+  },
+  "llm_sections": [
+    5,
+    8,
+    16,
+    17,
+    21
+  ],
+  "llm_context": {
+    "ua_allow_found": true,
+    "has_antiddos_amr": true,
+    "has_bot_control": true,
+    "has_always_on_challenge": true,
+    "has_crawler_labeling_rule": false,
+    "payment_indicators": [
+      "/api/v1/payments"
+    ]
+  },
+  "next_issue_number": 18,
+  "lang": "zh"
+}

@@ -145,9 +145,9 @@ Append your findings to `waf-review-report.md`.
 Report format rules:
 - Don't write a report header or Summary table. Step 4b generates them.
 - Each finding uses `## Issue N (severity): {title}` (see "Report format" below).
-- Start `**Problem**:` and `**Recommendation**:` on their own line, followed by `- ` bullets. The Summary table takes its Impact text from the first Problem bullet.
-- Rule reference lines take one of three forms: `**Rule**: {name} (priority {N})`, `**Rules**: {name} (priority {N}), {name} (priority {N})`, or `**Rule**: N/A (missing rule)`. Always write `(priority N)` in full; the validator doesn't read other forms.
-- If a finding's severity depends on business context the user has to confirm, append ` ⏳` to its title.
+- Start `**Problem**:` and `**Recommendation**:` on their own line, followed by `- ` bullets. The Summary table takes its Impact text from the first Problem bullet. Step 6 checks the severity word, the Rule/Rules form, and the Problem bullets.
+- Rule reference lines take one of three forms: `**Rule**: {name} (priority {N})`, `**Rules**: {name} (priority {N}), {name} (priority {N})`, or `**Rule**: N/A (missing rule)`, with the words in the parentheses in the report's language. Use `**Rules**:` whenever there's more than one rule. Always write `(priority N)` in full; the validator doesn't read other forms.
+- If a finding's severity depends on business context the user has to confirm, append ` ⏳` to the end of its title, never inside the severity brackets: `## Issue 7 (Low): Title ⏳`.
 - Refer to scripted findings by issue number. Don't cite the number of a finding you haven't written yet; describe it instead.
 - End the last Issue section with `---`. No conclusion paragraph.
 

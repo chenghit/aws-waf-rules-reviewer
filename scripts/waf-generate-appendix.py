@@ -146,7 +146,7 @@ Recommended token immunity time: ≥ 4 hours (14400 seconds). Real users complet
 | 8 | Always-on Challenge | Proactive DDoS defense for landing pages |
 | 9 | Custom rules | Business-specific logic |
 | 10 | Application layer rule groups (CRS, KnownBadInputs) | OWASP Top 10 protections |
-| 11 | Bot Control / ATP / ACFP | Per-request pricing — place last |
+| 11 | Bot Control / ATP / ACFP | Per-request pricing, place last |
 
 Key principles: label producers before consumers, AntiDDoS AMR as early as possible, cheaper rules before expensive ones.
 
@@ -169,10 +169,10 @@ When adding or reviewing managed rule groups, consider these common overrides:
 
 **AWSManagedRulesBotControlRuleSet (Bot Control Common level):**
 - Override `SignalNonBrowserUserAgent` to **Count**. Default Block will block legitimate non-browser clients (native apps using okhttp/gohttp, API clients, monitoring tools).
-- Override `CategoryHttpLibrary` to **Count**. Same reason — legitimate HTTP libraries used by native apps and API clients will be blocked.
+- Override `CategoryHttpLibrary` to **Count**. Same reason: legitimate HTTP libraries used by native apps and API clients will be blocked.
 
 **AWSManagedRulesAnonymousIpList:**
-- Review `HostingProviderIPList` carefully. Default Block will block requests from cloud platforms and hosting providers. If your clients may originate from cloud-hosted environments (e.g., enterprise users behind cloud proxies, SaaS integrations), override to **Count**. Never override to Allow — that lets cloud-hosted attack traffic bypass all subsequent rules.
+- Review `HostingProviderIPList` carefully. Default Block will block requests from cloud platforms and hosting providers. If your clients may originate from cloud-hosted environments (e.g., enterprise users behind cloud proxies, SaaS integrations), override to **Count**. Never override to Allow: that lets cloud-hosted attack traffic bypass all subsequent rules.
 """
 
 

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWS WAF Web ACL 规则评审报告 · example-prod</title>
+<style>
+:root{--fg:#1f2328;--mut:#59636e;--line:#d1d9e0;--soft:#f6f8fa;--link:#0969da;
+--crit:#cf222e;--med:#bf8700;--low:#1a7f37;--aw:#0969da}
+*{box-sizing:border-box}
+body{margin:0;color:var(--fg);background:#fff;font:15px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+main{max-width:980px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:28px;margin:0 0 16px}
+h2{font-size:20px;margin:36px 0 12px;padding-top:8px}
+h3{font-size:17px;margin:28px 0 10px}
+h2[id^=issue-]{border-left:5px solid var(--line);padding-left:12px}
+h2.sev-critical{border-color:var(--crit)}h2.sev-medium{border-color:var(--med)}
+h2.sev-low{border-color:var(--low)}h2.sev-awareness{border-color:var(--aw)}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+code{font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--soft);padding:1px 5px;border-radius:4px;word-break:break-word}
+pre{background:var(--soft);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow:auto}
+pre code{background:none;padding:0;word-break:normal}
+table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px}
+th,td{border:1px solid var(--line);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--soft)}
+hr{border:0;border-top:1px solid var(--line);margin:28px 0}
+blockquote{margin:12px 0;padding:4px 14px;border-left:4px solid var(--line);color:var(--mut)}
+ul,ol{padding-left:24px}li{margin:3px 0}
+.flow{margin:16px 0}
+.fnode{border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:#fff;position:relative}
+.fnode.start,.fnode.end{display:inline-block;background:var(--soft);font-weight:600}
+.frow{display:flex;gap:12px;align-items:stretch}
+.frow .fnode{flex:1;min-width:0}
+.fexit{flex:0 0 150px;align-self:center;font-size:13px;color:var(--mut);text-align:center}
+.fexit b{display:block;color:var(--fg);font-size:14px}
+.farrow{padding:2px 0 2px 28px;color:var(--mut);font-size:12px}
+.farrow::before{content:"↓ "}
+.fhead{font-weight:600;word-break:break-word}
+.fprio{display:inline-block;min-width:38px;color:var(--mut)}
+.fact{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:10px;padding:0 8px;margin-left:6px;font-weight:500}
+.act-allow{border-left:4px solid var(--low)}.act-block{border-left:4px solid var(--crit)}
+.act-challenge,.act-captcha{border-left:4px solid var(--med)}
+.fdet{font-size:13px;color:var(--mut);margin-top:4px;word-break:break-word}
+.fdet div{margin-top:2px}
+.fiss{margin-top:6px;font-size:13px}
+.fiss a{display:inline-block;background:#fff8c5;border:1px solid #d4a72c;border-radius:10px;padding:0 7px;margin:2px 4px 0 0;color:#6e5600}
+@media print{main{max-width:none;padding:0}a{color:inherit}.fnode,pre,table,h2{break-inside:avoid}}
+</style>
+</head>
+<body>
+<main>
+<h1>AWS WAF Web ACL 规则评审报告</h1>
+<p><strong>Web ACL</strong>：example-prod<br><strong>评审日期</strong>：2026-09-29<br><strong>目的</strong>：检查 WAF 配置中的安全问题、配置错误和可优化之处</p>
+<h2>摘要</h2>
+<table><thead><tr><th>严重程度</th><th>问题</th><th>影响</th></tr></thead><tbody><tr><td>🔴 Critical</td><td><a href="#issue-1">#1</a> probe_service_pass_2 / probe_service_pass 基于可伪造条件实现全局 Allow 绕过</td><td>single_header:x-detect-header 是完全可伪造的，攻击者只需在请求中添加匹配的自定义请求头即可绕过所有后续规则（包括 IP 信誉...</td></tr><tr><td>🔴 Critical</td><td><a href="#issue-2">#2</a> APP-BYPASS_2 / APP-BYPASS 基于可伪造条件实现全局 Allow 绕过</td><td>single_header:user-agent 是完全可伪造的，攻击者只需在请求中添加匹配的 User-Agent 头即可绕过所有后续规则（包括 IP ...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-3">#3</a> AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过</td><td>以下正则分支未以 <code>^</code> 锚定，意味着它们是"包含"匹配而非"以...开头"匹配：<code>\/query</code>, <code>\/models</code>, <code>\/messages</code>,...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-4">#4</a> Challenge 规则作用于 API/POST 路径，没有有效 token 的请求等同于 Block</td><td>Challenge 只能由浏览器的 GET 请求完成（要执行 JavaScript、接受 HTML 响应）。POST 请求、fetch/XHR 和原生 A...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-5">#5</a> IP 信誉和匿名 IP 规则组的 scope-down 过窄，仅检查首页</td><td>两个规则组实际上只对 <code>GET /</code> 请求生效，所有其他路径（<code>/api/*</code>、<code>/login</code>、<code>/signup</code> 等）均不受 IP 信誉检查保护</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-6">#6</a> HostingProviderIPList 被覆盖为 Allow，云主机流量会跳过所有后续规则</td><td><code>HostingProviderIPList</code> 默认 Block 云托管和 Web 托管提供商的 IP。覆盖为 Allow 后，来自这些 IP 的请求直接...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-7">#7</a> 规则顺序问题，发现 2 处</td><td>IP 黑名单 <code>ban_chat_ipv6_2</code>（priority 9）排在 Allow 规则 <code>probe_service_pass_2</code>、<code>APP-B</code>...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-8">#8</a> Bot Control 跑的是旧版本，识别能力弱很多</td><td>Bot Control 固定在 Version_4.0</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-9">#9</a> 缺少 CRS 和 KnownBadInputs 基线防护规则组 ⏳</td><td>CRS 提供 OWASP Top 10 防护（SQLi、XSS 等），是大多数 Web 应用的基础防护层</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-18">#18</a> 修掉 UA 放行后，原生 App 流量会被 Challenge 和 Bot Control 拦下 ⏳</td><td>这个 Web ACL 的 Bot Control 是 TARGETED 级别，除了 UA 和来源 IP，还做浏览器指纹、行为分析和 token 检查。但它...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-19">#19</a> 进不进 Bot Control 靠业务 cookie 决定，带上 cookie 就能跳过</td><td>cookie 由客户端自己发送。攻击者随便带上一个名为 <code>ab_session_id</code> 或 <code>smidV2</code> 的 cookie（规则只看名字，不看值），请...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-20">#20</a> Always-on Challenge 只覆盖 chat，token 免疫时间是默认 300 秒 ⏳</td><td><code>example.com</code>、<code>www.example.com</code> 和 <code>platform.example.com</code> 的 landing page 没有 al...</td></tr><tr><td>🟡 Medium</td><td><a href="#issue-21">#21</a> 支付接口可能在 PCI DSS 范围内，动态防护和 Count 规则要和 QSA 确认 ⏳</td><td>如果这个支付接口会接收、处理或传输卡数据，它背后的系统就在 PCI DSS 范围内。ASV 扫描（Requirement 11.3.2，每季度一次，重大变...</td></tr><tr><td>🟢 Low</td><td><a href="#issue-10">#10</a> ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间的兜底 Challenge 关掉了</td><td><code>ChallengeAllDuringEvent</code> 是 AntiDDoS AMR 兜底的软缓解。检测到 DDoS 事件时，它对所有可 Challenge ...</td></tr><tr><td>🟢 Low</td><td><a href="#issue-11">#11</a> 有 11 组规则完全相同</td><td>每组里排在前面的规则已经决定了它匹配到的请求怎么处理，后面的副本不会改变任何结果，只是多占 WCU，改规则时还得记得两边一起改</td></tr><tr><td>🟢 Low</td><td><a href="#issue-12">#12</a> Bot Control 的 CategorySearchEngine 和 CategorySeo 被覆盖为 Allow</td><td>这两个规则的 Allow 覆盖只影响"未验证"的搜索引擎 Bot（自称是搜索引擎爬虫但无法通过反向 DNS 验证的请求）</td></tr><tr><td>🟢 Low</td><td><a href="#issue-13">#13</a> allow_all 规则与默认 Allow 动作重复</td><td>该规则匹配所有请求（任何 URI 都以 <code>/</code> 开头），action 为 Allow</td></tr><tr><td>🟢 Low</td><td><a href="#issue-14">#14</a> 缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge</td><td><code>ChallengeAllDuringEvent</code> 会在 DDoS 事件期间对所有可 Challenge 的请求发起 Challenge，包括搜索引擎爬虫...</td></tr><tr><td>🟢 Low</td><td><a href="#issue-15">#15</a> Token Domain 配置包含冗余子域名</td><td>Token Domain 使用后缀匹配，<code>example.com</code> 自动覆盖所有子域名</td></tr><tr><td>🟢 Low</td><td><a href="#issue-23">#23</a> 限速规则没有覆盖 api 主机，平台限速的 Challenge 对 API 等同于 Block ⏳</td><td>token domain 里有 <code>api.example.com</code> 和 <code>api-docs.example.com</code>，但没有任何限速规则覆盖这两个主机。如...</td></tr><tr><td>🔵 Awareness</td><td><a href="#issue-16">#16</a> spec_43_JA4_DDoS / spec_43_JA4_DDoS_2 规则为 Count 但未添加标签，仅产生指标</td><td>Count 规则不添加标签时，只产生 CloudWatch 指标，下游规则无法基于此匹配结果采取行动</td></tr><tr><td>🔵 Awareness</td><td><a href="#issue-17">#17</a> 未检测到 WAF 日志配置</td><td>WAF JSON 导出不包含日志配置。这一条不代表日志未启用，仅表示无法从导出文件中验证</td></tr><tr><td>🔵 Awareness</td><td><a href="#issue-22">#22</a> 各项修复之间的依赖和建议顺序</td><td>Issue 1 和 Issue 2 改成 Count+Label 后，探针和原生 App 流量会继续经过限速（priority 7、10、11 都是 Ch...</td></tr></tbody></table>
+<hr>
+<h2 id="issue-1" class="sev-critical">Issue 1 (Critical): probe_service_pass_2 / probe_service_pass 基于可伪造条件实现全局 Allow 绕过</h2>
+<p><strong>Rules</strong>: probe_service_pass_2 (priority 4), probe_service_pass (priority 17)<br><strong>Current state</strong>: single_header:x-detect-header EXACTLY 'cloud-detect-16TNBPz9L00rabcdefgh'，action 为 Allow，无 scope-down</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>single_header:x-detect-header 是完全可伪造的，攻击者只需在请求中添加匹配的自定义请求头即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）</li><li>该规则的 blast radius 是全局的：所有路径都受影响，没有 host 或 URI 限制</li><li>匹配值 <code>cloud-detect-16TNBPz9L00rabcde...</code> 存储在 WAF 配置中，任何能读取 Web ACL 配置的人都能拿到，一旦泄露就能完全绕过 WAF</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>将 action 改为 Count+Label（如 <code>custom:native-app</code> 或 <code>custom:probe</code>），不要直接 Allow，这些流量不需要绕过 WAF</li><li>如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）</li><li>定期轮换密钥值，并审计 WAF 配置的 IAM 访问权限</li></ul>
+<hr>
+<h2 id="issue-2" class="sev-critical">Issue 2 (Critical): APP-BYPASS_2 / APP-BYPASS 基于可伪造条件实现全局 Allow 绕过</h2>
+<p><strong>Rules</strong>: APP-BYPASS_2 (priority 8), APP-BYPASS (priority 19)<br><strong>Current state</strong>: single_header:user-agent STARTS_WITH 'example'，action 为 Allow，无 scope-down</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>single_header:user-agent 是完全可伪造的，攻击者只需在请求中添加匹配的 User-Agent 头即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）</li><li>该规则的 blast radius 是全局的：所有路径都受影响，没有 host 或 URI 限制</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>将 action 改为 Count+Label（如 <code>custom:native-app</code> 或 <code>custom:probe</code>），不要直接 Allow，这些流量不需要绕过 WAF</li><li>如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）</li></ul>
+<hr>
+<h2 id="issue-3" class="sev-medium">Issue 3 (Medium): AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过</h2>
+<p><strong>Rule</strong>: AWS-AWSManagedRulesAntiDDoSRuleSet (priority 0)<br><strong>Current state</strong>: 豁免正则 <code>\/query|\/models|\/messages|\/balance|\/completions|\/api\/|\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$</code>，API 路径分支未使用 <code>^</code> 锚定</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>以下正则分支未以 <code>^</code> 锚定，意味着它们是"包含"匹配而非"以...开头"匹配：<code>\/query</code>, <code>\/models</code>, <code>\/messages</code>, <code>\/balance</code>, <code>\/completions</code>, <code>\/api\/</code></li><li>攻击者可以构造包含这些关键词的任意路径，让 <code>ChallengeDDoSRequests</code> 跳过这些请求，例如：<code>/admin/query/export</code>, <code>/admin/models/export</code></li><li>这使得攻击者可以通过精心构造的路径，让攻击请求被豁免于 Challenge</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>为所有 API 路径分支添加 <code>^</code> 锚定：<code>^\/query|^\/models|^\/messages|^\/balance|^\/completions|^\/api\/|\.(acc|avi|css|gif|ico|jpe?g|js|json|mp[34]|ogg|otf|pdf|png|tiff?|ttf|webm|webp|woff2?|xml|svg)$</code></li><li>先确认真实路径。如果 API 挂在 <code>/v1/</code> 这样的前缀下，要连前缀一起锚定（<code>^\/v1\/query</code>），否则加了 <code>^</code> 的分支就匹配不上了</li><li>静态资源后缀匹配已正确使用 <code>$</code> 锚定，无需修改</li></ul>
+<hr>
+<h2 id="issue-4" class="sev-medium">Issue 4 (Medium): Challenge 规则作用于 API/POST 路径，没有有效 token 的请求等同于 Block</h2>
+<p><strong>Rules</strong>: challenge-all-reasonable-specific_path_2 (priority 2), platform_create_payment_bot_control (priority 13), challenge-all-reasonable-specific_path (priority 15), platform_create_payment_bot_control_2 (priority 24)<br><strong>Current state</strong>: <code>challenge-all-reasonable-specific_path</code> 对所有主机的 <code>/api/event_logging/batch</code> 做 Challenge，不限方法；<code>platform_create_payment_bot_control</code> 对 <code>platform.example.com</code> 的 <code>POST /api/v1/payments</code> 做 Challenge</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>Challenge 只能由浏览器的 GET 请求完成（要执行 JavaScript、接受 HTML 响应）。POST 请求、fetch/XHR 和原生 App 收到 HTTP 202 后没法完成验证，原请求也不会重发</li><li>请求带着未过期的 WAF token 时，Challenge 的效果和 Count 一样。所以这几条规则实际做的是"没有有效 token 就拦"：浏览器先在别的页面拿到 token，再调这两个接口，可以正常通过</li><li>这个 Web ACL 没有配置 <code>challenge_config</code>，token 免疫时间是默认的 300 秒。如果前端没有集成 JS SDK 在后台刷新 token，用户在页面上停留超过 5 分钟再提交支付，这个请求就会被拦</li><li>原生 App 和其他 API 客户端没有 token，调这两个接口一律被拦。<code>challenge-all-reasonable-specific_path_2</code> 在 priority 2，排在 <code>APP-BYPASS_2</code>（priority 8）前面，App 的 UA 放行对它不起作用</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>先确认这两个接口的调用方。如果只有浏览器调用，这道 token 门槛是合理的，可以保留，同时在前端集成 JS SDK，或者把 token 免疫时间调长（见附录 C）</li><li>如果有原生 App 调用，集成 AWS WAF Mobile SDK 让 App 请求也带上 token。在那之前，用标签把 App 流量排除在这两条规则之外（见 Issue 18）。打标签的规则要排在 priority 2 之前，现在的 <code>APP-BYPASS_2</code> 在 priority 8，产生的标签到不了 <code>challenge-all-reasonable-specific_path_2</code></li><li>如果目的是防接口被滥用，限速规则（rate-based rule）比 Challenge 更合适</li></ul>
+<hr>
+<h2 id="issue-5" class="sev-medium">Issue 5 (Medium): IP 信誉和匿名 IP 规则组的 scope-down 过窄，仅检查首页</h2>
+<p><strong>Rules</strong>: AWS-AWSManagedRulesAmazonIpReputationList (priority 5), AWS-AWSManagedRulesAnonymousIpList (priority 6)<br><strong>Current state</strong>: scope-down 为 <code>uri_path EXACTLY &#x27;/&#x27;</code>，仅对首页路径生效</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>两个规则组实际上只对 <code>GET /</code> 请求生效，所有其他路径（<code>/api/*</code>、<code>/login</code>、<code>/signup</code> 等）均不受 IP 信誉检查保护</li><li>恶意 IP 只需访问任何非首页路径即可完全绕过这两个规则组</li><li>这使得 IP 信誉保护形同虚设，尤其对 API 路径的攻击毫无防护</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>移除这两个规则组的 scope-down，让其检查所有流量</li><li>如果出于性能或成本考虑需要限制范围，至少应覆盖所有关键路径，而不是仅限于首页</li></ul>
+<hr>
+<h2 id="issue-6" class="sev-medium">Issue 6 (Medium): HostingProviderIPList 被覆盖为 Allow，云主机流量会跳过所有后续规则</h2>
+<p><strong>Rule</strong>: AWS-AWSManagedRulesAnonymousIpList (priority 6)<br><strong>Current state</strong>: <code>HostingProviderIPList</code> 规则被覆盖为 Allow，规则组的 scope-down 为 <code>uri_path EXACTLY &#x27;/&#x27;</code></p>
+<p><strong>Problem</strong>:</p>
+<ul><li><code>HostingProviderIPList</code> 默认 Block 云托管和 Web 托管提供商的 IP。覆盖为 Allow 后，来自这些 IP 的请求直接放行，后面的规则都不再检查</li><li>现代 DDoS 攻击大量使用云托管基础设施（VPS、云函数、容器）。Allow 覆盖让这些攻击流量完全绕过 IP 信誉、Bot Control、速率限制等所有保护</li><li>正确做法是覆盖为 Count（保留标签，供下游规则使用），而非 Allow</li><li>规则组的 scope-down 是 <code>uri_path EXACTLY &#x27;/&#x27;</code>，只有匹配它的请求才会进入规则组。所以被放行的是匹配这个 scope-down 的云主机请求</li><li>要去掉或放宽这个 scope-down，先改掉这个 override，否则放行范围会跟着扩大</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>将 <code>HostingProviderIPList</code> 的覆盖从 Allow 改为 Count</li><li>如果担心企业用户通过云代理访问时被误封，Count 模式已经解决了这个问题（不会 Block，只添加标签）</li></ul>
+<hr>
+<h2 id="issue-7" class="sev-medium">Issue 7 (Medium): 规则顺序问题，发现 2 处</h2>
+<p><strong>Rules</strong>: ban_chat_ipv6_2 (priority 9), ban_chat_ipv6 (priority 20)<br><strong>Current state</strong>: 现有规则的评估顺序，影响到了哪些请求会被检查或拦截</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>IP 黑名单 <code>ban_chat_ipv6_2</code>（priority 9）排在 Allow 规则 <code>probe_service_pass_2</code>、<code>APP-BYPASS_2</code> 后面。被这些规则放行的请求不会再经过黑名单，已经拉黑的 IP 只要同时命中这些 Allow 规则，就会被放行</li><li><code>ban_chat_ipv6_2</code> 还排在 <code>AWS-AWSManagedRulesAnonymousIpList</code>（priority 6）后面，这个规则组把 <code>HostingProviderIPList</code> 覆盖成了 Allow（Issue 6）。黑名单里的云主机 IP 访问 <code>chat.example.com</code> 的 <code>/</code> 时，会先被这个覆盖放行</li><li>IP 黑名单 <code>ban_chat_ipv6</code>（priority 20）排在 Allow 规则 <code>probe_service_pass_2</code>、<code>APP-BYPASS_2</code>、<code>probe_service_pass</code>、<code>APP-BYPASS</code> 后面。被这些规则放行的请求不会再经过黑名单，已经拉黑的 IP 只要同时命中这些 Allow 规则，就会被放行</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>把 IP 黑名单调到所有 Allow 规则前面</li><li>新增规则类型时放在哪个位置，参考附录 D</li></ul>
+<hr>
+<h2 id="issue-8" class="sev-medium">Issue 8 (Medium): Bot Control 跑的是旧版本，识别能力弱很多</h2>
+<p><strong>Rule</strong>: AWS-AWSManagedRulesBotControlRuleSet (priority 25)<br><strong>Current state</strong>: Version_4.0</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>Bot Control 固定在 Version_4.0</li><li>之后的版本陆续加入了：<ul><li>5.0：新增 400 多种 bot，新增 <code>CategoryPagePreview</code> 和 <code>CategoryWebhooks</code> 两个类别，并调整了匹配顺序，具体的 bot 规则先于通用信号匹配</li><li>6.0：Web Bot Authentication 支持区域资源，用这种方式验证过的 bot 在所有类别里都算已验证</li><li>6.1：多个类别继续增加特征，包括 Security、SEO 和爬虫框架</li></ul></li><li>旧版本能认出的 bot 少得多，各个类别规则能命中的流量也少得多</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>固定到最新的静态版本（见 AWS Managed Rules changelog）。先用 Count 跑一段时间，对比升级前后的标签：5.0 调整了规则的匹配顺序并新增了类别，同一个请求升级后可能命中不同的标签</li><li>订阅规则组的 SNS 主题，并给固定的版本设置 <code>DaysToExpiry</code> 的 CloudWatch 告警</li></ul>
+<hr>
+<h2 id="issue-9" class="sev-medium">Issue 9 (Medium): 缺少 CRS 和 KnownBadInputs 基线防护规则组 ⏳</h2>
+<p><strong>Rule</strong>: N/A (缺失规则)<br><strong>Current state</strong>: Web ACL 中没有 CRS 和 KnownBadInputs</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>CRS 提供 OWASP Top 10 防护（SQLi、XSS 等），是大多数 Web 应用的基础防护层</li><li>KnownBadInputsRuleSet 防护 Log4Shell（CVE-2021-44228）、Java 反序列化漏洞等已知恶意输入模式，WCU 消耗低、误报率低</li><li>这个 Web ACL 里的规则几乎都是 DDoS、限速和 bot 相关的，没有任何检查请求内容的规则。<code>platform.example.com</code> 上还有支付接口 <code>/api/v1/payments</code></li><li>⏳ 如果内容检测放在别的层（比如另一个 Web ACL 或应用自带的防护），这一条可以降级</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>评估是否需要添加 CRS；如果添加，务必将 <code>SizeRestrictions_BODY</code> 覆盖为 Count，避免对大 payload 的 API 端点产生误报（实现步骤见附录 F）</li><li>添加 AWSManagedRulesKnownBadInputsRuleSet（WCU 消耗低，建议优先添加）</li><li>放在 IP 信誉和限速规则之后</li><li>添加前请在 AWS 控制台确认剩余 WCU 容量（当前已使用 435 WCU，上限 5000）</li></ul>
+<hr>
+<h2 id="issue-10" class="sev-low">Issue 10 (Low): ChallengeAllDuringEvent 被覆盖为 Count，DDoS 事件期间的兜底 Challenge 关掉了</h2>
+<p><strong>Rule</strong>: AWS-AWSManagedRulesAntiDDoSRuleSet (priority 0)<br><strong>Current state</strong>: <code>ChallengeAllDuringEvent</code> 被覆盖为 Count</p>
+<p><strong>Problem</strong>:</p>
+<ul><li><code>ChallengeAllDuringEvent</code> 是 AntiDDoS AMR 兜底的软缓解。检测到 DDoS 事件时，它对所有可 Challenge 的请求发起 Challenge，不管是否可疑，用来过滤不能执行 JavaScript 的攻击工具</li><li>覆盖为 Count 后，事件期间这条规则只产生指标，不做任何缓解</li><li><code>DDoSRequests</code> 会 Block 可疑度为高的请求（<code>sensitivity_to_block: LOW</code>）</li><li><code>ChallengeDDoSRequests</code> 仍会 Challenge 可疑度为低、中、高的请求（Challenge 灵敏度 <code>HIGH</code>）。少掉的是兜底的 Challenge：事件期间，没有被规则组标为可疑的可 Challenge 请求不再被 Challenge</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li><strong>最佳方案</strong>：如果架构支持，使用前后端分离：前端 Web ACL（浏览器流量）启用 ChallengeAllDuringEvent 默认配置；后端 Web ACL（API/原生 App 流量）关闭 Challenge，提高 Block 灵敏度</li><li><strong>如果前后端共用同一域名</strong>：在同一 Web ACL 中部署双 AMR 实例，一个针对浏览器流量（启用 ChallengeAllDuringEvent），另一个针对 API/原生 App 流量（禁用 Challenge，Block 灵敏度 MEDIUM）。实现步骤见附录 B</li><li>不推荐"单实例 + 全部 Count + 自定义标签规则"方案：需要理解 6+ 个 AMR 标签的语义，Count 覆盖会禁用 AMR 内置联动逻辑，且仍需回答"哪些路径可以 Challenge"</li></ul>
+<hr>
+<h2 id="issue-11" class="sev-low">Issue 11 (Low): 有 11 组规则完全相同</h2>
+<p><strong>Rules</strong>: spec_43_JA4_DDoS (priority 1), spec_43_JA4_DDoS_2 (priority 14), challenge-all-reasonable-specific_path_2 (priority 2), challenge-all-reasonable-specific_path (priority 15), chat_platform_deny_options_method_2 (priority 3), chat_platform_deny_options_method (priority 16), probe_service_pass_2 (priority 4), probe_service_pass (priority 17), example-com_ratelimit_challenge_2 (priority 7), example-com_ratelimit_challenge (priority 18), APP-BYPASS_2 (priority 8), APP-BYPASS (priority 19), ban_chat_ipv6_2 (priority 9), ban_chat_ipv6 (priority 20), platform-all-ratelimit_2 (priority 10), platform-all-ratelimit (priority 21), chat-all-ratelimit_2 (priority 11), chat-all-ratelimit (priority 22), chat_challengeable-request_bot_control_2 (priority 12), chat_challengeable-request_bot_control (priority 23), platform_create_payment_bot_control (priority 13), platform_create_payment_bot_control_2 (priority 24)<br><strong>Current state</strong>: 这些规则除了名字和 priority，其他配置完全一样</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>每组里排在前面的规则已经决定了它匹配到的请求怎么处理，后面的副本不会改变任何结果，只是多占 WCU，改规则时还得记得两边一起改</li><li><code>spec_43_JA4_DDoS</code>（priority 1） / <code>spec_43_JA4_DDoS_2</code>（priority 14）</li><li><code>challenge-all-reasonable-specific_path_2</code>（priority 2） / <code>challenge-all-reasonable-specific_path</code>（priority 15）</li><li><code>chat_platform_deny_options_method_2</code>（priority 3） / <code>chat_platform_deny_options_method</code>（priority 16）</li><li><code>probe_service_pass_2</code>（priority 4） / <code>probe_service_pass</code>（priority 17）</li><li><code>example-com_ratelimit_challenge_2</code>（priority 7） / <code>example-com_ratelimit_challenge</code>（priority 18）</li><li><code>APP-BYPASS_2</code>（priority 8） / <code>APP-BYPASS</code>（priority 19）</li><li><code>ban_chat_ipv6_2</code>（priority 9） / <code>ban_chat_ipv6</code>（priority 20）</li><li><code>platform-all-ratelimit_2</code>（priority 10） / <code>platform-all-ratelimit</code>（priority 21）</li><li><code>chat-all-ratelimit_2</code>（priority 11） / <code>chat-all-ratelimit</code>（priority 22）</li><li><code>chat_challengeable-request_bot_control_2</code>（priority 12） / <code>chat_challengeable-request_bot_control</code>（priority 23）</li><li><code>platform_create_payment_bot_control</code>（priority 13） / <code>platform_create_payment_bot_control_2</code>（priority 24）</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>每组删掉排在后面的那条。前面那条先执行，删掉后 ACL 的行为不变</li><li>检查有没有 CloudWatch 告警或仪表盘用到被删规则的指标名</li><li>如果两条本来就想做不同的事，把条件改成真正不一样</li></ul>
+<hr>
+<h2 id="issue-12" class="sev-low">Issue 12 (Low): Bot Control 的 CategorySearchEngine 和 CategorySeo 被覆盖为 Allow</h2>
+<p><strong>Rule</strong>: AWS-AWSManagedRulesBotControlRuleSet (priority 25)<br><strong>Current state</strong>: <code>CategorySearchEngine / CategorySeo</code> 被覆盖为 Allow</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>这两个规则的 Allow 覆盖只影响"未验证"的搜索引擎 Bot（自称是搜索引擎爬虫但无法通过反向 DNS 验证的请求）</li><li>真正的 Googlebot/Bingbot（已验证）本来就不会被这两个规则 Block，它们带着 <code>bot:verified</code> 标签直接放行，与覆盖无关</li><li>伪造 Googlebot UA 的攻击者不会匹配 <code>CategorySearchEngine</code>（反向 DNS 验证失败后落入 <code>SignalNonBrowserUserAgent</code>），也与覆盖无关</li><li>Bot Control 在 priority 25，后面只剩 <code>allow_all</code>（Issue 13），default action 也是 Allow。所以这个覆盖的实际效果是：未验证的搜索引擎 Bot 不再被 Block</li><li>Bot Control 的 scope-down 只放进带 <code>challenge:spec</code> 或 <code>challenge:landingpage</code> 标签的请求，这个覆盖只影响这部分流量。影响面很小，但没有必要</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>移除 <code>CategorySearchEngine / CategorySeo</code> 的 Allow 覆盖，恢复默认 Block</li><li>如果担心 DDoS 事件期间爬虫被 Challenge 影响 SEO，正确做法是添加 ASN + UA 爬虫标记规则（见附录 A），而不是在 Bot Control 中使用 Allow 覆盖</li></ul>
+<hr>
+<h2 id="issue-13" class="sev-low">Issue 13 (Low): allow_all 规则与默认 Allow 动作重复</h2>
+<p><strong>Rule</strong>: allow_all (priority 26)<br><strong>Current state</strong>: <code>uri_path STARTS_WITH &#x27;/&#x27;</code> → Allow，而 Web ACL 的 default_action 已经是 Allow</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>该规则匹配所有请求（任何 URI 都以 <code>/</code> 开头），action 为 Allow</li><li>Web ACL 的 default_action 已经是 Allow，因此该规则完全冗余</li><li>该规则消耗 WCU 且增加规则评估开销，没有任何实际作用</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>删除 allow_all 规则</li></ul>
+<hr>
+<h2 id="issue-14" class="sev-low">Issue 14 (Low): 缺少爬虫标记规则，DDoS 事件期间搜索引擎爬虫可能被 Challenge</h2>
+<p><strong>Rule</strong>: N/A (缺失规则)<br><strong>Current state</strong>: Web ACL 中没有 ASN + UA 爬虫标记规则</p>
+<p><strong>Problem</strong>:</p>
+<ul><li><code>ChallengeAllDuringEvent</code> 会在 DDoS 事件期间对所有可 Challenge 的请求发起 Challenge，包括搜索引擎爬虫（Googlebot、Bingbot 等）</li><li>真实案例表明，爬虫在 DDoS 事件期间可能索引 Challenge 拦截页（HTTP 202）而非实际内容，严重损害 SEO 排名</li><li>Bot Control 的 <code>bot:verified</code> 标签虽然可以识别已验证爬虫，但 Bot Control 必须放在规则链末尾（成本优化），此时 AntiDDoS AMR 已经评估完毕，无法使用该标签</li><li><code>ChallengeAllDuringEvent</code> 现在是 Count，规则组目前不会对爬虫一律 Challenge。重新打开它之前先加上这条规则</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>在 AntiDDoS AMR 之前添加 ASN + UA 爬虫标记规则，为 Google（ASN 15169）、Bing（ASN 8075）等爬虫添加 <code>crawler:verified</code> 标签（完整规则 JSON 见附录 A）</li><li>在 AntiDDoS AMR 的 scope-down 中排除 <code>crawler:verified</code> 标签，防止爬虫被 Challenge</li></ul>
+<hr>
+<h2 id="issue-15" class="sev-low">Issue 15 (Low): Token Domain 配置包含冗余子域名</h2>
+<p><strong>Rule</strong>: N/A (Web ACL 全局配置)<br><strong>Current state</strong>: token_domains 包含 <code>example.com</code>, <code>www.example.com</code>, <code>chat.example.com</code>, <code>platform.example.com</code>, <code>api.example.com</code>, <code>api-docs.example.com</code></p>
+<p><strong>Problem</strong>:</p>
+<ul><li>Token Domain 使用后缀匹配，<code>example.com</code> 自动覆盖所有子域名</li><li>列出子域名是冗余的，不会造成安全问题，但增加了配置维护成本</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>仅保留 <code>example.com</code>，删除其他子域名条目</li></ul>
+<hr>
+<h2 id="issue-16" class="sev-awareness">Issue 16 (Awareness): spec_43_JA4_DDoS / spec_43_JA4_DDoS_2 规则为 Count 但未添加标签，仅产生指标</h2>
+<p><strong>Rules</strong>: spec_43_JA4_DDoS (priority 1), spec_43_JA4_DDoS_2 (priority 14)<br><strong>Current state</strong>: Count action，无 RuleLabels</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>Count 规则不添加标签时，只产生 CloudWatch 指标，下游规则无法基于此匹配结果采取行动</li><li>如果意图是基于匹配结果执行某种动作，当前配置无法实现</li><li>规则名带 DDoS，看起来是打算以后改成 Block。它匹配 <code>chat.example.com</code> 上 43 个 JA4 指纹中的任意一个。其中 <code>t13d1516h2_8daaf6152771_02713d6af862</code> 在公开的 JA4 资料里常被列为 Chrome 浏览器的指纹。如果名单里混有常见浏览器的指纹，直接改成 Block 会拦掉大量正常用户</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>如果这些规则只是用来观察，把名字改得能看出用途</li><li>改成 Block 或 Challenge 之前，先用 WAF 日志核对每个指纹对应的 User-Agent 和流量占比，去掉正常浏览器的指纹</li><li>如果意图是对匹配结果采取行动，可以把 action 改为目标动作，或添加标签供下游规则消费。只对个别指纹有把握时，优先加标签，再配合限速或 Challenge 使用</li></ul>
+<hr>
+<h2 id="issue-17" class="sev-awareness">Issue 17 (Awareness): 未检测到 WAF 日志配置</h2>
+<p><strong>Rule</strong>: N/A (Web ACL 全局配置)<br><strong>Current state</strong>: WAF JSON 导出文件中不包含日志配置信息</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>WAF JSON 导出不包含日志配置。这一条不代表日志未启用，仅表示无法从导出文件中验证</li><li>WAF 日志对于安全事件调查、规则调优和误报分析至关重要</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>通过 AWS 控制台或 CLI 确认是否已启用 WAF 日志（Kinesis Data Firehose、S3 或 CloudWatch Logs）</li><li>建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）</li></ul>
+<hr>
+<h2 id="issue-18" class="sev-medium">Issue 18 (Medium): 修掉 UA 放行后，原生 App 流量会被 Challenge 和 Bot Control 拦下 ⏳</h2>
+<p><strong>Rules</strong>: AWS-AWSManagedRulesBotControlRuleSet (priority 25), APP-BYPASS_2 (priority 8), chat_challengeable-request_bot_control_2 (priority 12), platform_create_payment_bot_control (priority 13)<br><strong>Current state</strong>: Bot Control 用 TARGETED 级别，开了机器学习，固定在 Version_4.0；scope-down 只放进带 <code>challenge:spec</code> 或 <code>challenge:landingpage</code> 标签的请求；<code>TGT_TokenAbsent</code> 覆盖为 Challenge，<code>TGT_TokenReuseIpLow</code> 覆盖为 CAPTCHA</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>这个 Web ACL 的 Bot Control 是 TARGETED 级别，除了 UA 和来源 IP，还做浏览器指纹、行为分析和 token 检查。但它只检查两类请求：<code>platform.example.com</code> 上带有效 token 的 <code>POST /api/v1/payments</code>（<code>challenge:spec</code>，没有 token 的在 priority 13 就被 Challenge 拦了），以及 <code>chat.example.com</code> 上可 Challenge、没带两个业务 cookie 的 GET 请求（<code>challenge:landingpage</code>）。其他流量都不经过 Bot Control</li><li>原生 App 现在靠 <code>APP-BYPASS_2</code>（priority 8）的 UA 放行跳过后面所有规则。按 Issue 2 改成 Count+Label 以后，App 流量会继续往下走：支付 POST 在 priority 13 被 Challenge 拦下；<code>chat.example.com</code> 上路径不在豁免正则里的 GET 请求会拿到 <code>challenge:landingpage</code> 标签进入 Bot Control，没有 token 就被 <code>TGT_TokenAbsent</code> Challenge，非浏览器 UA 还会被 <code>SignalNonBrowserUserAgent</code>（默认 Block）拦下</li><li>在 Bot Control 范围内，<code>TGT_TokenReuseIpLow</code> 的 CAPTCHA 对 POST 支付请求没法完成，命中就等同于 Block</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>短期：把 <code>APP-BYPASS_2</code> 改成 Count+Label（如 <code>custom:native-app</code>），在 Bot Control 的 scope-down 和 <code>platform_create_payment_bot_control</code> 里用 NOT 排除这个标签。这个标签来自 UA，仍然能伪造，但伪造后只能跳过这两条规则，IP 信誉、黑名单和限速照样生效</li><li>中期：集成 AWS WAF Mobile SDK，让 App 请求带上 WAF token，然后去掉上面的排除。TARGETED 级别下，带 token 的 App 请求不会触发 <code>TGT_TokenAbsent</code>。去掉排除时，把 <code>SignalNonBrowserUserAgent</code> 和 <code>CategoryHttpLibrary</code> 覆盖为 Count（见附录 F）</li><li>保留 <code>TGT_TokenAbsent</code> 的 Challenge 覆盖，它是 chat 首页上逐个请求检查 token 的那一层。App 的问题用排除来解决，不要把它改回 Count</li><li>⏳ 请确认原生 App 会调用哪些主机和路径，UA 是否都以 <code>example</code> 开头</li></ul>
+<hr>
+<h2 id="issue-19" class="sev-medium">Issue 19 (Medium): 进不进 Bot Control 靠业务 cookie 决定，带上 cookie 就能跳过</h2>
+<p><strong>Rules</strong>: chat_challengeable-request_bot_control_2 (priority 12), chat_challengeable-request_bot_control (priority 23), AWS-AWSManagedRulesBotControlRuleSet (priority 25)<br><strong>Current state</strong>: <code>challenge:landingpage</code> 标签只打给没带 <code>ab_session_id</code> 和 <code>smidV2</code> 两个 cookie 的 chat 请求，两个 cookie 条件的 oversize 处理都是 MATCH</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>cookie 由客户端自己发送。攻击者随便带上一个名为 <code>ab_session_id</code> 或 <code>smidV2</code> 的 cookie（规则只看名字，不看值），请求就拿不到 <code>challenge:landingpage</code> 标签，整个跳过 Bot Control，<code>TGT_TokenAbsent</code> 的 Challenge 和 TARGETED 的行为检测都不会发生</li><li>两个 cookie 条件的 oversize 处理是 MATCH，又包在 NOT 里。cookie 超出 WAF 的检查上限时，条件按"有这个 cookie"处理，请求同样拿不到标签。发一个超大的 Cookie 头也能跳过</li><li>对 DDoS 脚本来说，加一个固定的 cookie 几乎没有成本。这条规则想做的事（不打扰老用户、少花 Bot Control 的钱）可以用不能伪造的条件来做</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>用 WAF token 代替业务 cookie。AntiDDoS AMR 在 priority 0 已经给请求打上 <code>awswaf:managed:token:accepted</code> 等 token 标签，把两个 cookie 条件换成 NOT <code>awswaf:managed:token:accepted</code> 的标签匹配。老用户带着有效 token，照样不进 Bot Control，但这个条件没法伪造</li><li>这样改完，Bot Control 实际只对没有 token 的请求做 Challenge，TARGETED 的会话级检测（比如 token 重用）用不上。如果需要会话级检测，就去掉 cookie 条件，让 chat 的首页请求都进 Bot Control，代价是 TARGETED 按请求计费</li><li>改之前先看 <code>landing_page_tag_label</code> 指标，估算进入 Bot Control 的请求量会怎么变</li></ul>
+<hr>
+<h2 id="issue-20" class="sev-medium">Issue 20 (Medium): Always-on Challenge 只覆盖 chat，token 免疫时间是默认 300 秒 ⏳</h2>
+<p><strong>Rules</strong>: AWS-AWSManagedRulesBotControlRuleSet (priority 25), chat_challengeable-request_bot_control_2 (priority 12)<br><strong>Current state</strong>: 起到 always-on Challenge 作用的只有 Bot Control 的 <code>TGT_TokenAbsent</code>（Challenge），范围只到 <code>chat.example.com</code>；Web ACL 没有配置 <code>challenge_config</code></p>
+<p><strong>Problem</strong>:</p>
+<ul><li><code>example.com</code>、<code>www.example.com</code> 和 <code>platform.example.com</code> 的 landing page 没有 always-on Challenge。这些主机上只有限速规则会发 Challenge，要等超过阈值，再加上 20 到 30 秒的检测延迟才生效。AntiDDoS AMR 的 <code>ChallengeAllDuringEvent</code> 又是 Count（Issue 10），事件期间也没有兜底</li><li>chat 上的这层 Challenge 在 priority 25。<code>probe_service_pass_2</code>、<code>APP-BYPASS_2</code> 这些 Allow 规则放行的请求到不了这里，带业务 cookie 的请求也进不来（Issue 19）</li><li>用 TARGETED Bot Control 来做 always-on Challenge，进入范围的每个请求都按 TARGETED 计费（每百万请求 10 美元），比一条普通的 Challenge 规则贵</li><li>token 免疫时间是默认的 300 秒，用户每 5 分钟就要重新过一次 JS 验证</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>⏳ 请确认 <code>example.com</code>、<code>www.example.com</code>、<code>platform.example.com</code> 上哪些 URI 是浏览器访问的 landing page。对这些 URI 按附录 C 加两条规则（Count+Label，再 Challenge），放在限速规则之后、Bot Control 之前。先加 Issue 14 的爬虫标记规则，再在 Challenge 规则里排除 <code>crawler:verified</code></li><li>把 token 免疫时间调到至少 14400 秒（Web ACL 级别的 challenge 配置）</li><li>chat 可以沿用现在的 Bot Control 做法，也可以换成同样的两条规则，把 Bot Control 留给需要会话级检测的请求</li></ul>
+<hr>
+<h2 id="issue-21" class="sev-medium">Issue 21 (Medium): 支付接口可能在 PCI DSS 范围内，动态防护和 Count 规则要和 QSA 确认 ⏳</h2>
+<p><strong>Rules</strong>: platform_create_payment_bot_control (priority 13), platform-all-ratelimit_2 (priority 10), AWS-AWSManagedRulesBotControlRuleSet (priority 25), AWS-AWSManagedRulesAntiDDoSRuleSet (priority 0)<br><strong>Current state</strong>: <code>platform.example.com</code> 上有 <code>POST /api/v1/payments</code>；这个主机有每分钟 20 次的限速 Challenge、支付接口 Challenge 和 TARGETED Bot Control；没有 CRS 和 KnownBadInputs；日志状态未知</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>如果这个支付接口会接收、处理或传输卡数据，它背后的系统就在 PCI DSS 范围内。ASV 扫描（Requirement 11.3.2，每季度一次，重大变更后也要做）不能被随流量变化的防护干扰（ASV Program Guide section 5.6）。这里的限速 Challenge、支付接口 Challenge、Bot Control 和 AntiDDoS AMR 都可能让扫描器收到 202、CAPTCHA 或 Block。干扰没解决的话，扫描结果算不确定，最后按不通过处理（section 7.6）</li><li>Requirement 6.4.2 要求面向公网的 Web 应用有自动化方案检测并阻止 Web 攻击：要么拦截，要么告警并马上调查，还要保留审计日志。这个 Web ACL 没有 CRS 和 KnownBadInputs（Issue 9），<code>spec_43_JA4_DDoS</code> 一直是 Count 且不打标签（Issue 16），日志是否开启也无法确认（Issue 17）</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>⏳ 请确认 <code>platform.example.com</code> 的支付接口是否在 PCI DSS 范围内</li><li>如果在范围内，只在限速、Challenge、Bot Control 和 AntiDDoS AMR 这些动态防护上给 ASV 的扫描 IP 加例外（IP set 加 NOT 条件，或写进 scope-down），不要在 ACL 顶部加一条 Allow 规则</li><li>补上 Issue 9 的内容检测规则组，确认日志已开启并保留，给长期 Count 的规则配告警。是否满足 6.4.2 请和客户的 QSA 确认，不要直接下"不合规"的结论</li></ul>
+<hr>
+<h2 id="issue-22" class="sev-awareness">Issue 22 (Awareness): 各项修复之间的依赖和建议顺序</h2>
+<p><strong>Rule</strong>: N/A (Web ACL 全局配置)<br><strong>Current state</strong>: 本报告的多项修复会改变同一批流量经过的规则，部分修复必须一起上线或按顺序上线</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>Issue 1 和 Issue 2 改成 Count+Label 后，探针和原生 App 流量会继续经过限速（priority 7、10、11 都是 Challenge）、支付接口 Challenge（priority 13）和 Bot Control。探针不是浏览器，打到 <code>www.example.com</code> 时每分钟超过 10 次就会被 Challenge 拦下，监控会误报。App 的影响见 Issue 18</li><li>Issue 5 去掉 scope-down 之前必须先做 Issue 6，否则 <code>HostingProviderIPList</code> 的 Allow 会从首页扩大到所有路径。去掉 scope-down 后，<code>AnonymousIPList</code> 的 Challenge 会作用到 API 和 POST 请求，用 VPN 的用户调接口会被拦</li><li>Issue 3 给豁免正则加 <code>^</code> 以后，原来被豁免的路径（比如 <code>/v1/models</code> 这种前缀下的路径）会拿到 <code>challengeable-request</code> 标签。在 chat 上，这些请求会被 <code>chat_challengeable-request_bot_control_2</code> 打上 <code>challenge:landingpage</code>，进入 Bot Control 后被 <code>TGT_TokenAbsent</code> Challenge，API 调用就会被拦</li><li>Issue 10 打开 <code>ChallengeAllDuringEvent</code> 或改成双 AMR 实例之前，要先有 Issue 14 的爬虫标记规则。改成双实例时，两个实例都要排在 priority 12 之前，并确认 chat 的 GET 请求仍然带 <code>challengeable-request</code> 标签，否则 Issue 19、Issue 20 依赖的标签会断</li><li>Issue 9 新增的 CRS 和 KnownBadInputs 如果放在 <code>APP-BYPASS_2</code>（priority 8）后面，而 Issue 1、Issue 2 还没修，被放行的请求不会被检查</li><li>Issue 7、Issue 11、Issue 13、Issue 15 可以单独做。删掉 priority 23、24 的副本不会断标签：priority 12、13 仍在 Bot Control 前面产生同样的 <code>challenge:landingpage</code> 和 <code>challenge:spec</code></li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>第一批：Issue 7、Issue 11、Issue 13、Issue 15、Issue 12，互相没有依赖</li><li>第二批：先 Issue 6，再 Issue 5。匿名 IP 只在面向终端用户的主机上检查，机器对机器调用的主机不用</li><li>第三批：Issue 1、Issue 2 和 Issue 18 的排除规则一起上线。探针优先改成 IP set 条件，并和 header 条件一起用</li><li>第四批：先 Issue 14，再 Issue 10 和 Issue 20</li><li>第五批：Issue 3、Issue 19。先用日志核对真实的 API 路径，看 <code>landing_page_tag_label</code> 指标的变化</li><li>Issue 8 和 Issue 9 先用 Count 跑一段时间，对比指标后再切换动作</li><li>每一批改完，看 CloudWatch 里各规则的 Challenge 和 Block 指标，确认没有异常再做下一批</li></ul>
+<hr>
+<h2 id="issue-23" class="sev-low">Issue 23 (Low): 限速规则没有覆盖 api 主机，平台限速的 Challenge 对 API 等同于 Block ⏳</h2>
+<p><strong>Rules</strong>: example-com_ratelimit_challenge_2 (priority 7), platform-all-ratelimit_2 (priority 10), chat-all-ratelimit_2 (priority 11)<br><strong>Current state</strong>: 三条限速规则都按 IP 计数，窗口 60 秒，动作都是 Challenge：<code>example.com</code> 和 <code>www.example.com</code> 每分钟 10 次，<code>platform.example.com</code> 每分钟 20 次，<code>chat.example.com</code> 每分钟 150 次</p>
+<p><strong>Problem</strong>:</p>
+<ul><li>token domain 里有 <code>api.example.com</code> 和 <code>api-docs.example.com</code>，但没有任何限速规则覆盖这两个主机。如果它们也挂在这个 Web ACL 上，接口被刷时只能靠 AntiDDoS AMR</li><li><code>platform-all-ratelimit_2</code> 覆盖整个 <code>platform.example.com</code>，包括 <code>/api/v1/payments</code> 这类 API。超过阈值后，没有有效 token 的 API 请求收到 202，效果等同于 Block。公司出口、运营商 NAT 这类共享 IP 更容易超过每分钟 20 次</li><li><code>example.com</code> 和 <code>www.example.com</code> 每分钟 10 次的阈值很低。限速按所有请求计数，包括 CSS、JS、图片，快速浏览几个页面就可能超过。浏览器页面请求能过 Challenge，但还没拿到 token 的静态资源和 XHR 请求会失败</li><li><code>APP-BYPASS_2</code>（priority 8）排在 platform 和 chat 的限速前面，UA 以 <code>example</code> 开头的请求完全不受这两条限速约束（Issue 2）</li></ul>
+<p><strong>Recommendation</strong>:</p>
+<ul><li>⏳ 请确认 <code>api.example.com</code> 是否由这个 Web ACL 保护。如果是，给它加一条限速规则。调用方是 API 客户端，动作用 Block，不要用 Challenge</li><li>用 CloudWatch 指标和日志看各主机单个 IP 的正常峰值，再定阈值。platform 的 API 路径可以单独设一条阈值更高、动作为 Block 的限速</li><li>把 <code>www.example.com</code> 的限速 scope-down 改成只统计页面请求（排除静态资源后缀），或者提高阈值</li></ul>
+<hr>
+<h2>附录：规则执行流程</h2>
+<section class="flow" data-flow><div class="fnode start">请求</div>
+<div class="frow"><div class="fnode act-managed_default" id="rule-0"><div class="fhead"><span class="fprio">P0</span>AWS-AWSManagedRulesAntiDDoSRuleSet<span class="fact">Managed</span></div><div class="fdet"><div>AWS/AWSManagedRulesAntiDDoSRuleSet Version_1.0</div><div>Override: ChallengeAllDuringEvent→Count</div></div><div class="fiss">相关问题: <a href="#issue-3">#3</a><a href="#issue-10">#10</a><a href="#issue-21">#21</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-count" id="rule-1"><div class="fhead"><span class="fprio">P1</span>spec_43_JA4_DDoS<span class="fact">Count</span></div><div class="fdet"><div><code>AND(single_header:host EXACTLY &#x27;chat.example.com&#x27;, OR(43 byte_match matches))</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-16">#16</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-challenge" id="rule-2"><div class="fhead"><span class="fprio">P2</span>challenge-all-reasonable-specific_path_2<span class="fact">Challenge</span></div><div class="fdet"><div><code>uri_path EXACTLY &#x27;/api/event_logging/batch&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-4">#4</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-block" id="rule-3"><div class="fhead"><span class="fprio">P3</span>chat_platform_deny_options_method_2<span class="fact">Block</span></div><div class="fdet"><div><code>AND(method EXACTLY &#x27;OPTIONS&#x27;, OR(single_header:host EXACTLY &#x27;chat.example.com&#x27;, single_header:host EXACTLY &#x27;platform.example.com&#x27;))</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>🚫 拦截</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-allow" id="rule-4"><div class="fhead"><span class="fprio">P4</span>probe_service_pass_2<span class="fact">Allow</span></div><div class="fdet"><div><code>single_header:x-detect-header EXACTLY &#x27;cloud-detect-16TNBPz9L00rabcdefgh&#x27;</code></div><div>添加标签: <code>probe_service</code></div></div><div class="fiss">相关问题: <a href="#issue-1">#1</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>✅ 放行</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-managed_default" id="rule-5"><div class="fhead"><span class="fprio">P5</span>AWS-AWSManagedRulesAmazonIpReputationList<span class="fact">Managed</span></div><div class="fdet"><div>AWS/AWSManagedRulesAmazonIpReputationList DEFAULT_VERSION</div><div>Override: AWSManagedReconnaissanceList→Challenge, AWSManagedIPDDoSList→Challenge, AWSManagedIPReputationList→Challenge</div><div>Scope-down: <code>uri_path EXACTLY &#x27;/&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-5">#5</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-managed_default" id="rule-6"><div class="fhead"><span class="fprio">P6</span>AWS-AWSManagedRulesAnonymousIpList<span class="fact">Managed</span></div><div class="fdet"><div>AWS/AWSManagedRulesAnonymousIpList DEFAULT_VERSION</div><div>Override: AnonymousIPList→Challenge, HostingProviderIPList→Allow</div><div>Scope-down: <code>uri_path EXACTLY &#x27;/&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-5">#5</a><a href="#issue-6">#6</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-challenge" id="rule-7"><div class="fhead"><span class="fprio">P7</span>example-com_ratelimit_challenge_2<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=10, window=60s)</code></div><div>Scope-down: <code>OR(single_header:host EXACTLY &#x27;www.example.com&#x27;, single_header:host EXACTLY &#x27;example.com&#x27;)</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-23">#23</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-allow" id="rule-8"><div class="fhead"><span class="fprio">P8</span>APP-BYPASS_2<span class="fact">Allow</span></div><div class="fdet"><div><code>single_header:user-agent STARTS_WITH &#x27;example&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-2">#2</a><a href="#issue-11">#11</a><a href="#issue-18">#18</a></div></div><div class="fexit">→ <b>✅ 放行</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-block" id="rule-9"><div class="fhead"><span class="fprio">P9</span>ban_chat_ipv6_2<span class="fact">Block</span></div><div class="fdet"><div><code>AND(ip_set &#x27;&lt;ARN_IPSET_7&gt;&#x27;, single_header:host EXACTLY &#x27;chat.example.com&#x27;)</code></div><div>添加标签: <code>ban-ipv6:chat</code></div></div><div class="fiss">相关问题: <a href="#issue-7">#7</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>🚫 拦截</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-challenge" id="rule-10"><div class="fhead"><span class="fprio">P10</span>platform-all-ratelimit_2<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=20, window=60s)</code></div><div>Scope-down: <code>single_header:host EXACTLY &#x27;platform.example.com&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-21">#21</a><a href="#issue-23">#23</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-challenge" id="rule-11"><div class="fhead"><span class="fprio">P11</span>chat-all-ratelimit_2<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=150, window=60s)</code></div><div>Scope-down: <code>single_header:host EXACTLY &#x27;chat.example.com&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-23">#23</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-count" id="rule-12"><div class="fhead"><span class="fprio">P12</span>chat_challengeable-request_bot_control_2<span class="fact">Count</span></div><div class="fdet"><div><code>AND(label_match &#x27;awswaf:managed:aws:anti-ddos:challengeable-request&#x27; (scope=LABEL), single_header:host EXACTLY &#x27;chat.example.com&#x27;, NOT(cookies[scope=KEY, included=ab_session_id, oversize=MATCH] CONTAINS &#x27;ab_session_id&#x27;), NOT(cookies[scope=KEY, included=smidV2, oversize=MATCH] CONTAINS &#x27;smidV2&#x27;))</code></div><div>添加标签: <code>challenge:landingpage</code></div><div>使用标签 <code>awswaf:managed:aws:anti-ddos:challengeable-request</code> 来自 <a href="#rule-0">P0</a></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-18">#18</a><a href="#issue-19">#19</a><a href="#issue-20">#20</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-challenge" id="rule-13"><div class="fhead"><span class="fprio">P13</span>platform_create_payment_bot_control<span class="fact">Challenge</span></div><div class="fdet"><div><code>AND(single_header:host EXACTLY &#x27;platform.example.com&#x27;, method EXACTLY &#x27;POST&#x27;, uri_path EXACTLY &#x27;/api/v1/payments&#x27;)</code></div><div>添加标签: <code>challenge:spec</code></div></div><div class="fiss">相关问题: <a href="#issue-4">#4</a><a href="#issue-11">#11</a><a href="#issue-18">#18</a><a href="#issue-21">#21</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-count" id="rule-14"><div class="fhead"><span class="fprio">P14</span>spec_43_JA4_DDoS_2<span class="fact">Count</span></div><div class="fdet"><div><code>AND(single_header:host EXACTLY &#x27;chat.example.com&#x27;, OR(43 byte_match matches))</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-16">#16</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-challenge" id="rule-15"><div class="fhead"><span class="fprio">P15</span>challenge-all-reasonable-specific_path<span class="fact">Challenge</span></div><div class="fdet"><div><code>uri_path EXACTLY &#x27;/api/event_logging/batch&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-4">#4</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-block" id="rule-16"><div class="fhead"><span class="fprio">P16</span>chat_platform_deny_options_method<span class="fact">Block</span></div><div class="fdet"><div><code>AND(method EXACTLY &#x27;OPTIONS&#x27;, OR(single_header:host EXACTLY &#x27;chat.example.com&#x27;, single_header:host EXACTLY &#x27;platform.example.com&#x27;))</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>🚫 拦截</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-allow" id="rule-17"><div class="fhead"><span class="fprio">P17</span>probe_service_pass<span class="fact">Allow</span></div><div class="fdet"><div><code>single_header:x-detect-header EXACTLY &#x27;cloud-detect-16TNBPz9L00rabcdefgh&#x27;</code></div><div>添加标签: <code>probe_service</code></div></div><div class="fiss">相关问题: <a href="#issue-1">#1</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>✅ 放行</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-challenge" id="rule-18"><div class="fhead"><span class="fprio">P18</span>example-com_ratelimit_challenge<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=10, window=60s)</code></div><div>Scope-down: <code>OR(single_header:host EXACTLY &#x27;www.example.com&#x27;, single_header:host EXACTLY &#x27;example.com&#x27;)</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-allow" id="rule-19"><div class="fhead"><span class="fprio">P19</span>APP-BYPASS<span class="fact">Allow</span></div><div class="fdet"><div><code>single_header:user-agent STARTS_WITH &#x27;example&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-2">#2</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>✅ 放行</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-block" id="rule-20"><div class="fhead"><span class="fprio">P20</span>ban_chat_ipv6<span class="fact">Block</span></div><div class="fdet"><div><code>AND(ip_set &#x27;&lt;ARN_IPSET_7&gt;&#x27;, single_header:host EXACTLY &#x27;chat.example.com&#x27;)</code></div><div>添加标签: <code>ban-ipv6:chat</code></div></div><div class="fiss">相关问题: <a href="#issue-7">#7</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>🚫 拦截</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="frow"><div class="fnode act-challenge" id="rule-21"><div class="fhead"><span class="fprio">P21</span>platform-all-ratelimit<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=20, window=60s)</code></div><div>Scope-down: <code>single_header:host EXACTLY &#x27;platform.example.com&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-challenge" id="rule-22"><div class="fhead"><span class="fprio">P22</span>chat-all-ratelimit<span class="fact">Challenge</span></div><div class="fdet"><div><code>rate_based(limit=150, window=60s)</code></div><div>Scope-down: <code>single_header:host EXACTLY &#x27;chat.example.com&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-count" id="rule-23"><div class="fhead"><span class="fprio">P23</span>chat_challengeable-request_bot_control<span class="fact">Count</span></div><div class="fdet"><div><code>AND(label_match &#x27;awswaf:managed:aws:anti-ddos:challengeable-request&#x27; (scope=LABEL), single_header:host EXACTLY &#x27;chat.example.com&#x27;, NOT(cookies[scope=KEY, included=ab_session_id, oversize=MATCH] CONTAINS &#x27;ab_session_id&#x27;), NOT(cookies[scope=KEY, included=smidV2, oversize=MATCH] CONTAINS &#x27;smidV2&#x27;))</code></div><div>添加标签: <code>challenge:landingpage</code></div><div>使用标签 <code>awswaf:managed:aws:anti-ddos:challengeable-request</code> 来自 <a href="#rule-0">P0</a></div></div><div class="fiss">相关问题: <a href="#issue-11">#11</a><a href="#issue-19">#19</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-challenge" id="rule-24"><div class="fhead"><span class="fprio">P24</span>platform_create_payment_bot_control_2<span class="fact">Challenge</span></div><div class="fdet"><div><code>AND(single_header:host EXACTLY &#x27;platform.example.com&#x27;, method EXACTLY &#x27;POST&#x27;, uri_path EXACTLY &#x27;/api/v1/payments&#x27;)</code></div><div>添加标签: <code>challenge:spec</code></div></div><div class="fiss">相关问题: <a href="#issue-4">#4</a><a href="#issue-11">#11</a></div></div><div class="fexit">→ <b>非浏览器 → 等于拦截</b></div></div>
+<div class="farrow">token 有效 / 未匹配</div>
+<div class="frow"><div class="fnode act-managed_default" id="rule-25"><div class="fhead"><span class="fprio">P25</span>AWS-AWSManagedRulesBotControlRuleSet<span class="fact">Managed</span></div><div class="fdet"><div>AWS/AWSManagedRulesBotControlRuleSet Version_4.0</div><div>Override: TGT_TokenReuseIpLow→CAPTCHA, TGT_TokenAbsent→Challenge, CategorySearchEngine→Allow, CategorySeo→Allow</div><div>Scope-down: <code>OR(label_match &#x27;challenge:spec&#x27; (scope=LABEL), label_match &#x27;challenge:landingpage&#x27; (scope=LABEL))</code></div><div>使用标签 <code>challenge:spec</code> 来自 <a href="#rule-13">P13</a></div><div>使用标签 <code>challenge:spec</code> 来自 <a href="#rule-24">P24</a></div><div>使用标签 <code>challenge:landingpage</code> 来自 <a href="#rule-12">P12</a></div><div>使用标签 <code>challenge:landingpage</code> 来自 <a href="#rule-23">P23</a></div></div><div class="fiss">相关问题: <a href="#issue-8">#8</a><a href="#issue-12">#12</a><a href="#issue-18">#18</a><a href="#issue-19">#19</a><a href="#issue-20">#20</a><a href="#issue-21">#21</a></div></div></div>
+<div class="farrow"></div>
+<div class="frow"><div class="fnode act-allow" id="rule-26"><div class="fhead"><span class="fprio">P26</span>allow_all<span class="fact">Allow</span></div><div class="fdet"><div><code>uri_path STARTS_WITH &#x27;/&#x27;</code></div></div><div class="fiss">相关问题: <a href="#issue-13">#13</a></div></div><div class="fexit">→ <b>✅ 放行</b></div></div>
+<div class="farrow">未匹配</div>
+<div class="fnode end">默认动作: allow ✅ 放行</div></section>
+<hr>
+<h1>附录</h1>
+<h2>附录 A：ASN + UA 爬虫标记规则</h2>
+<p>这条规则放在 AntiDDoS AMR 和 Always-on Challenge <strong>之前</strong>。它给验证过的搜索引擎爬虫打上标签，后面的规则可以用 scope-down 把它们排除掉。</p>
+<pre><code class="language-json">{
+  &quot;Name&quot;: &quot;label-verified-crawlers&quot;,
+  &quot;Priority&quot;: &quot;&lt;place before AntiDDoS AMR&gt;&quot;,
+  &quot;Action&quot;: {
+    &quot;Count&quot;: {}
+  },
+  &quot;RuleLabels&quot;: [
+    { &quot;Name&quot;: &quot;crawler:verified&quot; }
+  ],
+  &quot;VisibilityConfig&quot;: {
+    &quot;SampledRequestsEnabled&quot;: true,
+    &quot;CloudWatchMetricsEnabled&quot;: true,
+    &quot;MetricName&quot;: &quot;label-verified-crawlers&quot;
+  },
+  &quot;Statement&quot;: {
+    &quot;OrStatement&quot;: {
+      &quot;Statements&quot;: [
+        {
+          &quot;AndStatement&quot;: {
+            &quot;Statements&quot;: [
+              {
+                &quot;ByteMatchStatement&quot;: {
+                  &quot;SearchString&quot;: &quot;googlebot&quot;,
+                  &quot;FieldToMatch&quot;: { &quot;SingleHeader&quot;: { &quot;Name&quot;: &quot;user-agent&quot; } },
+                  &quot;TextTransformations&quot;: [{ &quot;Priority&quot;: 0, &quot;Type&quot;: &quot;LOWERCASE&quot; }],
+                  &quot;PositionalConstraint&quot;: &quot;CONTAINS&quot;
+                }
+              },
+              { &quot;AsnMatchStatement&quot;: { &quot;AsnList&quot;: [15169] } }
+            ]
+          }
+        },
+        {
+          &quot;AndStatement&quot;: {
+            &quot;Statements&quot;: [
+              {
+                &quot;ByteMatchStatement&quot;: {
+                  &quot;SearchString&quot;: &quot;bingbot&quot;,
+                  &quot;FieldToMatch&quot;: { &quot;SingleHeader&quot;: { &quot;Name&quot;: &quot;user-agent&quot; } },
+                  &quot;TextTransformations&quot;: [{ &quot;Priority&quot;: 0, &quot;Type&quot;: &quot;LOWERCASE&quot; }],
+                  &quot;PositionalConstraint&quot;: &quot;CONTAINS&quot;
+                }
+              },
+              { &quot;AsnMatchStatement&quot;: { &quot;AsnList&quot;: [8075] } }
+            ]
+          }
+        },
+        {
+          &quot;AndStatement&quot;: {
+            &quot;Statements&quot;: [
+              {
+                &quot;ByteMatchStatement&quot;: {
+                  &quot;SearchString&quot;: &quot;yandexbot&quot;,
+                  &quot;FieldToMatch&quot;: { &quot;SingleHeader&quot;: { &quot;Name&quot;: &quot;user-agent&quot; } },
+                  &quot;TextTransformations&quot;: [{ &quot;Priority&quot;: 0, &quot;Type&quot;: &quot;LOWERCASE&quot; }],
+                  &quot;PositionalConstraint&quot;: &quot;CONTAINS&quot;
+                }
+              },
+              { &quot;AsnMatchStatement&quot;: { &quot;AsnList&quot;: [13238, 208722] } }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}</code></pre>
+<p>已确认的 ASN：Google 15169，Bing 8075，Yandex 13238 和 208722。其他搜索引擎（百度、Yahoo Japan 等）请先查它们官方文档里的最新 ASN 再添加。</p>
+<hr>
+<h2>附录 B：双 AntiDDoS AMR 实例</h2>
+<p>浏览器流量和原生 App 流量需要不同的 AntiDDoS 策略时使用：</p>
+<ol><li><strong>在两个 AMR 实例之前加一条 Count+Label 规则</strong>，给原生 App 流量打标签（如 <code>native-app:identified</code>）。这条规则的 priority 数字要比两个 AMR 实例都小。</li><li><strong>AMR 实例 1（浏览器流量）</strong>：scope-down 排除原生 App 标签。启用 <code>ChallengeAllDuringEvent</code>，Block 灵敏度 LOW（默认值）。</li><li><strong>AMR 实例 2（原生 App 流量）</strong>：scope-down 只匹配原生 App 标签。关闭 <code>ChallengeAllDuringEvent</code>，Block 灵敏度 MEDIUM（这类流量用不了 Challenge，要靠提高 Block 灵敏度补上）。</li><li><strong>操作方法</strong>：AWS 控制台不允许把同一个托管规则组加两次。先复制现有 AMR 规则的 JSON，在 Web ACL 里新建一条<strong>自定义规则</strong>，打开 <strong>JSON 编辑器</strong>，粘贴复制的 JSON，把 <code>Name</code> 和 <code>MetricName</code> 改成不重复的值（如 <code>AntiDDoS-NativeApp</code>），再保存。</li></ol>
+<p>排除爬虫的 scope-down（如果 AMR 已经有 scope-down，用 <code>AndStatement</code> 合并进去）：</p>
+<pre><code class="language-json">{
+  &quot;NotStatement&quot;: {
+    &quot;Statement&quot;: {
+      &quot;LabelMatchStatement&quot;: {
+        &quot;Scope&quot;: &quot;LABEL&quot;,
+        &quot;Key&quot;: &quot;crawler:verified&quot;
+      }
+    }
+  }
+}</code></pre>
+<hr>
+<h2>附录 C：Landing page 的 Always-on Challenge</h2>
+<p>在 landing page 上主动防 DDoS，用两条规则：</p>
+<ol><li><strong>标签规则</strong>（Count+Label）：匹配 landing page 的 URI（如 <code>/</code>、<code>/login</code>、<code>/signup</code>），加标签 <code>custom:landing-page</code>。动作是 Count，请求继续往下走。</li><li><strong>Challenge 规则</strong>：匹配 <code>custom:landing-page</code> 标签，动作是 Challenge。再加一个针对 <code>crawler:verified</code> 标签的 <code>NotStatement</code>，把验证过的爬虫排除掉。</li></ol>
+<p>landing page 的 URI 列表要按自己的应用来定。</p>
+<p>token 免疫时间建议至少 4 小时（14400 秒）。真实用户完成一次 JS 验证后，整个免疫期内都不会再被打断。</p>
+<hr>
+<h2>附录 D：规则顺序参考</h2>
+<table><thead><tr><th>位置</th><th>规则类型</th><th>原因</th></tr></thead><tbody><tr><td>1</td><td>IP 白名单（Allow）</td><td>可信 IP 跳过所有规则</td></tr><tr><td>2</td><td>IP 黑名单（Block）</td><td>已知恶意 IP 直接拦截</td></tr><tr><td>3</td><td>Count+Label 规则</td><td>给流量打标签，供后面的规则做 scope-down</td></tr><tr><td>4</td><td>AntiDDoS AMR</td><td>要看到全部流量才能建准基线</td></tr><tr><td>5</td><td>IP 信誉规则组</td><td>WCU 低，先过滤已知恶意 IP</td></tr><tr><td>6</td><td>匿名 IP 规则组</td><td>过滤匿名 IP 和云主机 IP</td></tr><tr><td>7</td><td>限速规则</td><td>放在 Challenge 之前</td></tr><tr><td>8</td><td>Always-on Challenge</td><td>landing page 的主动 DDoS 防护</td></tr><tr><td>9</td><td>自定义规则</td><td>业务相关的逻辑</td></tr><tr><td>10</td><td>应用层规则组（CRS、KnownBadInputs）</td><td>OWASP Top 10 防护</td></tr><tr><td>11</td><td>Bot Control / ATP / ACFP</td><td>按请求数收费，放在最后</td></tr></tbody></table>
+<p>原则：产生标签的规则放在使用标签的规则前面，AntiDDoS AMR 尽量靠前，便宜的规则放在贵的前面。</p>
+<hr>
+<h2>附录 E：WCU 容量</h2>
+<p>当前 WCU：<strong>435</strong> / 5000。</p>
+<p>按建议改完规则后，确认新的 WCU 总量没有超过 5000。查看位置：AWS 控制台 → WAF → Web ACLs → 选中这个 Web ACL，概览页里有容量。</p>
+<hr>
+<h2>附录 F：常见的 override 建议</h2>
+<p>添加或检查托管规则组时，可以参考这些常见的 override：</p>
+<p><strong>AWSManagedRulesCommonRuleSet (CRS)：</strong></p>
+<ul><li>把 <code>SizeRestrictions_BODY</code> 设为 <strong>Count</strong>。这条规则会拦截超过 8KB 的请求体，在文件上传、大 payload 的 API 和内容较多的表单提交上经常误报。</li></ul>
+<p><strong>AWSManagedRulesBotControlRuleSet（Bot Control COMMON 级别）：</strong></p>
+<ul><li>把 <code>SignalNonBrowserUserAgent</code> 设为 <strong>Count</strong>。默认 Block 会拦掉正常的非浏览器客户端（用 okhttp、gohttp 的原生 App，API 客户端，监控工具）。</li><li>把 <code>CategoryHttpLibrary</code> 设为 <strong>Count</strong>。原因同上，原生 App 和 API 客户端用的 HTTP 库也会被拦。</li></ul>
+<p><strong>AWSManagedRulesAnonymousIpList：</strong></p>
+<ul><li>仔细评估 <code>HostingProviderIPList</code>。默认 Block 会拦截来自云平台和主机托管商的请求。如果你的客户端可能从云上发起（例如经过云代理的企业用户、SaaS 集成），把它设为 <strong>Count</strong>。不要设为 Allow，那样会让云上的攻击流量跳过后面所有规则。</li></ul>
+</main>
+</body>
+</html>

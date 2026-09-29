@@ -116,6 +116,29 @@ def _check_summary_detail_match(report: str) -> dict:
     return {"status": "PASS", "mismatches": []}
 
 
+SEVERITIES = {"Critical", "Medium", "Low", "Awareness"}
+
+
+def _check_issue_format(report: str) -> dict:
+    """The parts of the Issue format the other scripts parse (AGENTS.md)."""
+    problems = []
+    for m in re.finditer(r'^##\s+Issue\s+(\d+)\s*\(([^)]*)\)[^\n]*\n(.*?)(?=^## |\Z)',
+                         report, re.MULTILINE | re.DOTALL):
+        n, sev, body = m.group(1), m.group(2).strip(), m.group(3)
+        if sev not in SEVERITIES:
+            problems.append(f"Issue {n}: severity '{sev}' must be one of {', '.join(sorted(SEVERITIES))}; "
+                            "put ⏳ at the end of the title")
+        rule = re.search(r'^\*\*Rule\*\*\s*:\s*(.*)$', body, re.MULTILINE)
+        if rule and rule.group(1).count("(priority") > 1:
+            problems.append(f"Issue {n}: several rules under **Rule**:, use **Rules**:")
+        prob = re.search(r'^\*\*Problem\*\*[ \t]*:[ \t]*([^\n]*)\n\s*(\S[^\n]*)', body, re.MULTILINE)
+        if prob and (prob.group(1).strip() or not prob.group(2).startswith("- ")):
+            problems.append(f"Issue {n}: **Problem**: must be followed by '- ' bullets on the next lines")
+    if problems:
+        return {"status": "FAIL", "problems": problems}
+    return {"status": "PASS", "problems": []}
+
+
 def _check_rule_references(report: str, summary: dict) -> dict:
     """Check that rule names and priorities in findings exist in waf-summary.json."""
     refs = _extract_rule_refs(report)
@@ -212,6 +235,7 @@ def main():
     checks = {
         "summary_issue_count": _check_summary_issue_count(report),
         "summary_detail_match": _check_summary_detail_match(report),
+        "issue_format": _check_issue_format(report),
         "rule_references": _check_rule_references(report, summary),
         "mermaid_completeness": _check_mermaid_completeness(metadata),
     }

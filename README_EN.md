@@ -104,10 +104,11 @@ The report comes as two files: `waf-review-report.html` to read and share, and `
 
 v0.4 moves ~80% of findings from LLM analysis to deterministic script generation, significantly reducing LLM output volume and reference context reads.
 
-| Rule Count | LLM Analysis Thinking Time | Script Steps | Total (estimated) |
-|-----------|---------------------------|-------------|-------------------|
-| 27 rules (measured) | ~4 min | < 1 min | ~10 min |
-| 100+ rules (estimated) | ~8 min | < 1 min | ~15 min |
+| Rule Count | LLM Analysis (Step 4) | Self-review (Step 7) | All Script Steps | Total |
+|-----------|----------------------|---------------------|-----------------|-------|
+| 27 rules (measured, v0.7.1) | ~7.7 min | ~1.4 min | < 10 s | ~9.6 min |
+
+Measured with Claude Code and Claude Opus 5.5 on `examples/web-acl-example.json`.
 
 > Compared to v0.3, total time has not decreased significantly, but user experience is noticeably better: only Step 4 (LLM analysis) has a thinking wait period. All other steps produce continuous output. Additionally, scripted findings support bilingual output (en/zh) and provide richer report details.
 
@@ -116,10 +117,10 @@ v0.4 moves ~80% of findings from LLM analysis to deterministic script generation
 The `examples/` directory contains a complete input/output example:
 
 - `web-acl-example.json`: assembled 27-rule WAF configuration (covers AntiDDoS AMR, Bot Control, rate-based, custom rules, and other typical scenarios)
-- `waf-review/waf-review-report.md`: actual review report output (Chinese)
-- `waf-review/` other files: script-generated intermediate files (summary, pre-checks, Mermaid diagrams, etc.)
+- `waf-review/waf-review-report.html` and `waf-review/waf-review-report.md`: actual review report output (Chinese)
+- `waf-review/work/`: script-generated intermediate files (summary, pre-checks, Mermaid diagrams, etc.)
 
-Generated using Claude Sonnet 4.6.
+Generated with Claude Code and Claude Opus 5.5.
 
 ## Checklist Coverage
 

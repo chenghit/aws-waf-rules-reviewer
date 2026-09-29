@@ -22,9 +22,23 @@
     },
     "managed_versions": {
       "status": "FAIL",
-      "finding": "AWS-AWSManagedRulesBotControlRuleSet: BotControlRuleSet version Version_4.0 < 5.0 (recommend upgrading)",
-      "details": [
-        "AWS-AWSManagedRulesBotControlRuleSet: BotControlRuleSet version Version_4.0 < 5.0 (recommend upgrading)"
+      "finding": "AWS-AWSManagedRulesBotControlRuleSet: AWSManagedRulesBotControlRuleSet pinned to Version_4.0",
+      "unpinned": [],
+      "outdated": [
+        {
+          "name": "AWS-AWSManagedRulesBotControlRuleSet",
+          "priority": 25,
+          "group": "AWSManagedRulesBotControlRuleSet",
+          "version": "Version_4.0"
+        }
+      ],
+      "rules": [
+        {
+          "name": "AWS-AWSManagedRulesBotControlRuleSet",
+          "priority": 25,
+          "group": "AWSManagedRulesBotControlRuleSet",
+          "version": "Version_4.0"
+        }
       ]
     },
     "default_action_redundancy": {
@@ -35,7 +49,7 @@
     },
     "count_without_labels": {
       "status": "FAIL",
-      "finding": "Custom Count rules without labels (metric-only): spec_43_JA4_DDoS, spec_43_JA4_DDoS_2",
+      "finding": "Count rules without labels (metric-only): spec_43_JA4_DDoS, spec_43_JA4_DDoS_2",
       "rules": [
         {
           "name": "spec_43_JA4_DDoS",
@@ -87,7 +101,203 @@
       "status": "FAIL",
       "finding": "HostingProviderIPList overridden to Allow in AWS-AWSManagedRulesAnonymousIpList (priority 6). Cloud-hosted attack traffic bypasses all subsequent rules. Override to Count instead.",
       "rule": "AWS-AWSManagedRulesAnonymousIpList",
-      "priority": 6
+      "priority": 6,
+      "scope_down": "uri_path EXACTLY '/'",
+      "path_scoped": true
+    },
+    "uri_fragment_fallback": {
+      "status": "PASS",
+      "finding": null
+    },
+    "uri_path_pitfalls": {
+      "status": "PASS",
+      "finding": null
+    },
+    "path_block_decoding": {
+      "status": "PASS",
+      "finding": null
+    },
+    "managed_count": {
+      "status": "PASS",
+      "finding": null
+    },
+    "bot_control_config": {
+      "status": "PASS",
+      "finding": null
+    },
+    "order_issues": {
+      "status": "FAIL",
+      "issues": [
+        {
+          "kind": "blocklist_after_allow",
+          "rule": {
+            "name": "ban_chat_ipv6_2",
+            "priority": 9
+          },
+          "allows": [
+            {
+              "name": "probe_service_pass_2",
+              "priority": 4
+            },
+            {
+              "name": "APP-BYPASS_2",
+              "priority": 8
+            }
+          ]
+        },
+        {
+          "kind": "blocklist_after_allow",
+          "rule": {
+            "name": "ban_chat_ipv6",
+            "priority": 20
+          },
+          "allows": [
+            {
+              "name": "probe_service_pass_2",
+              "priority": 4
+            },
+            {
+              "name": "APP-BYPASS_2",
+              "priority": 8
+            },
+            {
+              "name": "probe_service_pass",
+              "priority": 17
+            },
+            {
+              "name": "APP-BYPASS",
+              "priority": 19
+            }
+          ]
+        }
+      ],
+      "rules": [
+        {
+          "name": "ban_chat_ipv6_2",
+          "priority": 9
+        },
+        {
+          "name": "ban_chat_ipv6",
+          "priority": 20
+        }
+      ],
+      "finding": "2 ordering issues: blocklist_after_allow"
+    },
+    "duplicate_rules": {
+      "status": "FAIL",
+      "groups": [
+        [
+          {
+            "name": "spec_43_JA4_DDoS",
+            "priority": 1
+          },
+          {
+            "name": "spec_43_JA4_DDoS_2",
+            "priority": 14
+          }
+        ],
+        [
+          {
+            "name": "challenge-all-reasonable-specific_path_2",
+            "priority": 2
+          },
+          {
+            "name": "challenge-all-reasonable-specific_path",
+            "priority": 15
+          }
+        ],
+        [
+          {
+            "name": "chat_platform_deny_options_method_2",
+            "priority": 3
+          },
+          {
+            "name": "chat_platform_deny_options_method",
+            "priority": 16
+          }
+        ],
+        [
+          {
+            "name": "probe_service_pass_2",
+            "priority": 4
+          },
+          {
+            "name": "probe_service_pass",
+            "priority": 17
+          }
+        ],
+        [
+          {
+            "name": "example-com_ratelimit_challenge_2",
+            "priority": 7
+          },
+          {
+            "name": "example-com_ratelimit_challenge",
+            "priority": 18
+          }
+        ],
+        [
+          {
+            "name": "APP-BYPASS_2",
+            "priority": 8
+          },
+          {
+            "name": "APP-BYPASS",
+            "priority": 19
+          }
+        ],
+        [
+          {
+            "name": "ban_chat_ipv6_2",
+            "priority": 9
+          },
+          {
+            "name": "ban_chat_ipv6",
+            "priority": 20
+          }
+        ],
+        [
+          {
+            "name": "platform-all-ratelimit_2",
+            "priority": 10
+          },
+          {
+            "name": "platform-all-ratelimit",
+            "priority": 21
+          }
+        ],
+        [
+          {
+            "name": "chat-all-ratelimit_2",
+            "priority": 11
+          },
+          {
+            "name": "chat-all-ratelimit",
+            "priority": 22
+          }
+        ],
+        [
+          {
+            "name": "chat_challengeable-request_bot_control_2",
+            "priority": 12
+          },
+          {
+            "name": "chat_challengeable-request_bot_control",
+            "priority": 23
+          }
+        ],
+        [
+          {
+            "name": "platform_create_payment_bot_control",
+            "priority": 13
+          },
+          {
+            "name": "platform_create_payment_bot_control_2",
+            "priority": 24
+          }
+        ]
+      ],
+      "finding": "11 groups of identical rules: spec_43_JA4_DDoS / spec_43_JA4_DDoS_2; challenge-all-reasonable-specific_path_2 / challenge-all-reasonable-specific_path; chat_platform_deny_options_method_2 / chat_platform_deny_options_method; probe_service_pass_2 / probe_service_pass; example-com_ratelimit_challenge_2 / example-com_ratelimit_challenge; APP-BYPASS_2 / APP-BYPASS; ban_chat_ipv6_2 / ban_chat_ipv6; platform-all-ratelimit_2 / platform-all-ratelimit; chat-all-ratelimit_2 / chat-all-ratelimit; chat_challengeable-request_bot_control_2 / chat_challengeable-request_bot_control; platform_create_payment_bot_control / platform_create_payment_bot_control_2"
     }
   },
   "flags": {
