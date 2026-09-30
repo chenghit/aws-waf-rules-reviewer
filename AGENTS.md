@@ -250,7 +250,7 @@ You write only Issue sections. `waf-generate-report-header.py` generates the hea
 - This file is the only workflow definition. There is no SKILL.md or install script. Change the workflow here.
 - Scripts use the Python standard library only and follow the `---RESULT---` contract (`SPEC`, `STATUS`, and on failure `ACTION` and `CONTEXT`). `scripts/waf_utils.py` has the shared `fatal()`.
 - Finding text lives in `scripts/waf_finding_templates.py`, and short per-item lines live in `LINES` in `scripts/waf-generate-findings.py`. Every key needs both an English and a Chinese version.
-- Pre-checks read the structured `leaves` that `waf-preprocess.py` records for each statement (field, match type, value, text transformations, fallback, negation), not the summary string. `SearchString` values are base64-decoded there.
+- Pre-checks read the structured `leaves` that `waf-preprocess.py` records for each statement (field, match type, value, text transformations, fallback, negation), not the summary string. `branches` holds the statement's AND/OR/NOT logic in disjunctive normal form over those leaves; use it when a check depends on how conditions combine, such as whether one forgeable OR branch is enough to trigger an Allow. `SearchString` values are base64-decoded there.
 - Test changes on real `get-web-acl` output as well as `examples/`: the example file is plain text in snake_case, while real exports are PascalCase with base64 `SearchString` values.
 - `waf-render-html.py` handles the Markdown the reports use. If findings start using other syntax, extend it and compare its output with a CommonMark renderer on real reports.
 - Keep `README.md` (Chinese) and `README_EN.md` in sync.

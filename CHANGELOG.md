@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.7.3 (2026-09-30)
+
+Fixes from reviewing a real Web ACL whose priority 0 Allow was `OR(ip_set, ip_set, cookie, User-Agent regex)`. The scripts missed it.
+
+### Fixed
+- `waf-preprocess.py` reads the inline `regex_pattern_statement` in snake_case exports. It was recorded as `UNKNOWN`, so a User-Agent regex in an Allow rule was invisible to every check and `ua_allow_found` stayed false.
+- An Allow rule is forgeable when any one OR branch can be met by any client: every condition in the branch is forgeable or negated, and at least one is forgeable. Before, an IP set anywhere in the rule made the whole rule unforgeable. `NOT ip_set AND header` is now caught too.
+- Blast radius, and whether a `HostingProviderIPList` Allow is path-scoped, are decided per branch. One branch without a URI condition makes the rule global.
+
+### Added
+- `waf-summary.json` records `branches` for each statement and scope-down: the AND/OR/NOT logic in disjunctive normal form over `leaves`, or `null` past 256 branches. AGENTS.md describes it.
+- When a forgeable Allow also has an IP set in a separate OR branch, the finding says so, and its first recommendation is to keep only the IP set conditions.
+
 ## v0.7.2 (2026-09-29)
 
 ### Fixed
