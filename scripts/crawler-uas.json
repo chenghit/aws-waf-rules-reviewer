@@ -1,0 +1,89 @@
+{
+  "_comment": "User-Agents that crawler operators publish, used only to catch rule patterns that can never match (e.g. bingbot.html). robots_only: names the operator says never appear in the User-Agent. A pattern is judged only when some UA below contains the name it uses. Add only strings from the operator's own documentation. Search engine crawlers only (Google, Bing, Yandex, the ones Appendix A can verify by ASN); AI crawlers and agents don't affect SEO and aren't listed.",
+  "google": {
+    "tokens": [
+      "googlebot",
+      "googlebot-image",
+      "googlebot-video",
+      "storebot-google",
+      "google-inspectiontool",
+      "googleother",
+      "googleother-image",
+      "googleother-video",
+      "adsbot-google",
+      "adsbot-google-mobile",
+      "mediapartners-google",
+      "apis-google"
+    ],
+    "robots_only": [
+      "googlebot-news"
+    ],
+    "uas": [
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Googlebot/2.1; +http://www.google.com/bot.html) Chrome/W.X.Y.Z Safari/537.36",
+      "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+      "Googlebot/2.1 (+http://www.google.com/bot.html)",
+      "Googlebot-Image/1.0",
+      "Googlebot-Video/1.0",
+      "Mozilla/5.0 (X11; Linux x86_64; Storebot-Google/1.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Safari/537.36",
+      "Mozilla/5.0 (Linux; Android 8.0; Pixel 2 Build/OPD3.170816.012; Storebot-Google/1.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36",
+      "Mozilla/5.0 (compatible; Google-InspectionTool/1.0)",
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; Google-InspectionTool/1.0)",
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; GoogleOther)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GoogleOther) Chrome/W.X.Y.Z Safari/537.36",
+      "GoogleOther-Image/1.0",
+      "GoogleOther-Video/1.0",
+      "APIs-Google (+https://developers.google.com/webmasters/APIs-Google.html)",
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; AdsBot-Google-Mobile; +http://www.google.com/mobile/adsbot.html)",
+      "AdsBot-Google (+http://www.google.com/adsbot.html)",
+      "Mediapartners-Google",
+      "(Various mobile device types) (compatible; Mediapartners-Google/2.1; +http://www.google.com/bot.html)"
+    ],
+    "source": "https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers",
+    "note": "APIs-Google, AdsBot-Google, AdsBot-Google-Mobile and Mediapartners-Google come from https://developers.google.com/crawling/docs/crawlers-fetchers/google-special-case-crawlers (the old developers.google.com/search/docs/crawling-indexing/* URLs 301 here). Chrome/W.X.Y.Z is Google's placeholder for the current Chromium version. Googlebot-News has no UA of its own; Google says it crawls with the various Googlebot UA strings. The Mediapartners-Google mobile entry keeps Google's '(Various mobile device types)' placeholder as written. The AdsBot-Google-Mobile UA also contains the substring 'AdsBot-Google'. Retired and not included: AdsBot-Google-Mobile iPhone UA, DuplexWeb-Google, Google Favicon, AdsBot-Google-Mobile-Apps, googleweblight. Also on Google's pages but not in scope: Google-Safety (special-case) and user-triggered fetchers (Google-CWS, FeedFetcher-Google, Google-GeminiNotebook, Google-Agent, GoogleMessages, Google-Pinpoint, GoogleProducer, Google-Read-Aloud, Google-Site-Verification)."
+  },
+  "bing": {
+    "tokens": [
+      "bingbot",
+      "adidxbot",
+      "microsoftpreview"
+    ],
+    "robots_only": [],
+    "uas": [
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm) Chrome/W.X.Y.Z Safari/537.36",
+      "Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 (compatible; adidxbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 7_0 like Mac OS X) AppleWebKit/537.51.1 (KHTML, like Gecko) Version/7.0 Mobile/11A465 Safari/9537.53 (compatible; adidxbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 (Windows Phone 8.1; ARM; Trident/7.0; Touch; rv:11.0; IEMobile/11.0; NOKIA; Lumia 530) like Gecko (compatible; adidxbot/2.0; +http://www.bing.com/bingbot.htm)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; MicrosoftPreview/2.0; +https://aka.ms/MicrosoftPreview) Chrome/W.X.Y.Z Safari/537.36",
+      "Mozilla/5.0 (Linux; Android 6.0.1; Nexus 5X Build/MMB29P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/W.X.Y.Z Mobile Safari/537.36 (compatible; MicrosoftPreview/2.0; +https://aka.ms/MicrosoftPreview)"
+    ],
+    "source": "https://www.bing.com/webmasters/help/which-crawlers-does-bing-use-8c184ec0",
+    "note": "W.X.Y.Z is Bing's placeholder for the current Microsoft Edge version. The page's current BingPreview row lists only the two bingbot/2.0 UA strings (desktop Chrome and mobile), so the token 'BingPreview' does not appear in its published UA; the string is a crawler name, not a separate UA token. Older BingPreview UAs carrying 'BingPreview/' are no longer on the page and are not included. The published bingbot 'compatible' entry has a stray line 'W.X.Y.Z Safari/537.36' after it (page formatting); it is recorded here as the classic short string. The page's mobile strings contain a double space before '(compatible;', normalized to one space here. Also on the page but not in scope: BingVideoPreview/1.0 (desktop, compatible and mobile variants, +https://aka.ms/microsoftbots)."
+  },
+  "yandex": {
+    "tokens": [
+      "yandex",
+      "yandexbot",
+      "yandeximages",
+      "yandexmobilebot",
+      "yandexmedia",
+      "yandexfavicons",
+      "yandexrenderresourcesbot"
+    ],
+    "robots_only": [],
+    "uas": [
+      "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)",
+      "Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.268",
+      "Mozilla/5.0 (compatible; YandexBot/3.0; MirrorDetector; +http://yandex.com/bots)",
+      "Mozilla/5.0 (compatible; YandexImages/3.0; +http://yandex.com/bots)",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 8_1 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Version/8.0 Mobile/12B411 Safari/600.1.4 (compatible; YandexMobileBot/3.0; +http://yandex.com/bots)",
+      "Mozilla/5.0 (compatible; YandexMedia/3.0; +http://yandex.com/bots)",
+      "Mozilla/5.0 (compatible; YandexFavicons/1.0; +http://yandex.com/bots)",
+      "Mozilla/5.0 (compatible; YandexRenderResourcesBot/1.0; +http://yandex.com/bots)"
+    ],
+    "source": "https://yandex.com/support/webmaster/en/robot-workings/check-yandex-robots",
+    "note": "Search-related robots only; ads, Metrica, calendar, and other service robots on the page are left out."
+  }
+}

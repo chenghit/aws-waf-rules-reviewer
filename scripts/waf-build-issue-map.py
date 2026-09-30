@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""WAF Build Issue Map: Merge scripted + LLM findings into issue-rule-mapping.json.
+"""WAF Build Issue Map: Map rules to the issues that cite them in waf-review-report.md.
 
 Usage: python3 waf-build-issue-map.py <output_dir>
-  output_dir: directory containing findings-metadata.json and waf-review-report.md
+  output_dir: directory containing waf-review-report.md and work/waf-summary.json
+
+The report is the source of truth: scripted findings may have been removed or
+renumbered in Step 4, so every issue's **Rule**:/**Rules**: line is read.
 
 Outputs: {output_dir}/issue-rule-mapping.json
 """
@@ -16,15 +19,14 @@ from waf_utils import fatal, work_path
 
 
 
-def _extract_llm_rule_refs(report: str, min_issue: int, valid_rules: set) -> dict:
-    """Parse **Rule**:/**Rules**: lines from LLM-written Issue sections."""
+def _extract_rule_refs(report: str, valid_rules: set) -> dict:
+    """Parse the **Rule**:/**Rules**: lines of every Issue section."""
     mapping = {}
     current_issue = None
     for line in report.split("\n"):
         m = re.match(r'^## Issue (\d+)\s', line)
         if m:
-            num = int(m.group(1))
-            current_issue = num if num >= min_issue else None
+            current_issue = int(m.group(1))
             continue
         if current_issue is None:
             continue
@@ -48,36 +50,20 @@ def main():
         fatal("Usage: waf-build-issue-map.py <output_dir>")
 
     output_dir = sys.argv[1]
-    meta_path = work_path(output_dir, "findings-metadata.json")
     report_path = os.path.join(output_dir, "waf-review-report.md")
     summary_path = work_path(output_dir, "waf-summary.json")
 
-    for p in (meta_path, report_path, summary_path):
+    for p in (report_path, summary_path):
         if not os.path.isfile(p):
             fatal(f"{os.path.basename(p)} not found in {output_dir}")
 
-    metadata = json.loads(Path(meta_path).read_text(encoding="utf-8"))
     report = Path(report_path).read_text(encoding="utf-8")
     summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
 
     # Build set of valid rule names
     valid_rules = {r["name"] for r in summary.get("rules", [])}
 
-    # Start with scripted mappings
-    mapping = dict(metadata.get("issue_rule_mapping", {}))
-
-    # Add LLM-written findings
-    next_issue = metadata.get("next_issue_number", 1)
-    llm_refs = _extract_llm_rule_refs(report, next_issue, valid_rules)
-    for rule_name, annotation in llm_refs.items():
-        if rule_name not in valid_rules:
-            continue
-        if rule_name in mapping:
-            existing = mapping[rule_name]
-            new_issues = annotation.replace("⚠️ Issue ", "")
-            mapping[rule_name] = f"{existing}, {new_issues}"
-        else:
-            mapping[rule_name] = annotation
+    mapping = _extract_rule_refs(report, valid_rules)
 
     # Write output
     output = {"annotations": mapping}

@@ -21,6 +21,7 @@ from waf_utils import fatal, work_path
 
 ALWAYS_LLM_SECTIONS = {5, 8, 17}
 APPENDIX_ONLY_SECTIONS = {10}
+RETIRED_SECTIONS = {14}  # hashed search_string: now judged by forgeability in section 1
 
 SEVERITY_ORDER = {"Critical": 0, "Medium": 1, "Low": 2, "Awareness": 3}
 
@@ -46,11 +47,15 @@ LINES = {
         "label_before_producer": "- {rules} matches label `{label}`, but every rule that adds it runs later: {others}. The condition never matches",
         "blocklist_after_allow": "- IP block list(s) {rules} run after Allow rules {others}. Requests those rules allow are never checked against the block list, so a listed IP that also matches them gets through",
         "inspection_after_allow": "- {group} rule group {rules} runs after Allow rules {others}. The default action is Block, so it only inspects traffic that would be blocked anyway. Traffic those Allow rules let through is never inspected",
-        "bot_control_not_last": "- Bot Control {rules} runs before blocking rules {others}. Bot Control is charged per inspected request, so requests those rules block are paid for first. Cost only, no security impact",
+        "bot_control_not_last": "- Bot Control {rules} runs before rules that block or challenge requests on their own: {others}. Bot Control is charged per inspected request, so requests those rules stop are paid for first. Cost only, no security impact",
+        "label_no_producer": "- {rules} matches label `{label}`, but no rule in this Web ACL adds it. The condition never matches",
+        "unreachable": "- {rules} never sees a request: every request it matches has already been ended by {others} ({actions})",
         "rec_label_before_producer": "- Move the rule that adds the label ahead of the rule that matches it",
         "rec_blocklist_after_allow": "- Move IP block lists ahead of all Allow rules",
-        "rec_inspection_after_allow": "- Move content inspection rule groups ahead of the Allow rules so allowed traffic is inspected first. Start in Count: partner payloads may trigger false positives",
-        "rec_bot_control_not_last": "- Place Bot Control after rules that block requests on their own",
+        "rec_inspection_after_allow": "- Move content inspection rule groups ahead of the Allow rules so allowed traffic is inspected first. Start in Count and check for false positives before switching to the default actions",
+        "rec_bot_control_not_last": "- Place Bot Control after rules that block or challenge requests on their own",
+        "rec_label_no_producer": "- Check the label name. If the rule that added it was removed, remove or rewrite this condition",
+        "rec_unreachable": "- Decide which rule should handle this traffic: narrow the earlier rule's condition, or remove the later rule",
         "order_title": "{count} issue(s)",
         "rec_literal_wildcard": "- For wildcard intent, use a regex, or drop the `*` and keep `STARTS_WITH`",
         "rec_query_in_path": "- To match query parameters, use `QueryString` or `SingleQueryArgument` as the field to match",
@@ -78,24 +83,92 @@ LINES = {
         "missing_iprep": "- No Amazon IP reputation list: IPs on AWS threat intelligence lists, including ones doing reconnaissance and scanning, are not blocked (Medium)",
         "missing_anon": "- No anonymous IP list: traffic from VPNs, Tor, proxies, and non-AWS cloud hosts is not flagged. Many scanners run on cloud hosts (Low)",
         "missing_bot": "- No Bot Control: if this Web ACL serves browser pages, self-identifying bots and non-browser clients are not classified (Low)",
-        "rec_amr": "- Anti-DDoS: add `AWSManagedRulesAntiDDoSRuleSet` at the top of the Web ACL, after IP allow lists. Don't scope it down. Exempt API and machine-to-machine paths from Challenge with the exempt URI regex",
+        "rec_amr": "- Anti-DDoS: add `AWSManagedRulesAntiDDoSRuleSet` at the top of the Web ACL, after Allow rules that match only IP sets and after the crawler labeling rule (Appendix A). Don't scope it down to a few paths: it needs all traffic for its baseline (the two-instance split in Appendix B is the exception). Exempt API and machine-to-machine paths from Challenge with the exempt URI regex",
         "rec_iprep": "- IP reputation: add `AWSManagedRulesAmazonIpReputationList` after Anti-DDoS, before rate-based and custom rules",
         "rec_anon": "- Anonymous IP: add `AWSManagedRulesAnonymousIpList` next to the IP reputation list, starting in Count. Scope it down to hosts or paths whose callers are end users: `HostingProviderIPList` blocks non-AWS cloud IPs and can block partners hosted there",
         "rec_bot": "- Bot Control: add it last in the Web ACL, pinned to the latest static version, scoped down to browser-facing hosts or paths",
         "placement_block": "- This Web ACL blocks by default: put the rule groups ahead of the Allow rules, or they never inspect the traffic those rules let through. Scope them down to paths that need inspection and start in Count",
         "placement_allow": "- Place them after IP reputation and rate-based rules",
-        "example_ua": "the matching User-Agent header",
-        "example_header": "the matching custom header",
-        "example_other": "the matching condition",
+        "example_ua": "the matching User-Agent",
+        "example_header": "the matching header",
+        "example_cookie": "the matching cookie",
+        "example_query": "the matching query argument",
+        "example_other": "the matching value",
+        "sum_managed": "- {k} rule(s) across {g} managed rule group(s) are in Count: they label but don't block{whole}",
+        "sum_whole": ". {names} block nothing at all",
+        "sum_order": "- {n} ordering problem(s) that change what gets inspected or blocked: {kinds}",
+        "kind_label_before_producer": "a label used before it's added",
+        "kind_label_no_producer": "a label nothing adds",
+        "kind_blocklist_after_allow": "a block list after Allow rules",
+        "kind_inspection_after_allow": "content inspection after Allow rules",
+        "kind_unreachable": "{c} rule(s) no request reaches",
+        "kind_after_last_allow": "{c} rule(s) that can't change the outcome",
+        "kind_bot_control_not_last": "Bot Control billed before blocking rules",
+        "sum_exempt": "- {n} rule(s) skip requests that carry a value any client can send ({fields})",
+        "sum_dead": "- {n} pattern(s) in {r} rule(s) can never match, so those conditions don't do what they were written for",
+        "sum_noop": "- {n} override(s) set a rule to the action it already has, and change nothing",
+        "sum_rate_challenge": "- {n} rate limit(s) act with Challenge or CAPTCHA, so a client with a valid token isn't limited",
+        "sum_rate_shared": "- {n} rate limit(s) put every matching client in one count, so forged requests can use it up",
+        "sum_unused": "- {n} rule(s) add labels that no rule uses",
+        "sum_uri": "- {n} URI path condition(s) can never match as written",
+        "or_join": " or ",
+        "f_header": "the `{name}` header",
+        "f_cookie": "the `{name}` cookie",
+        "f_cookies": "cookies",
+        "f_query_arg": "the `{name}` query argument",
+        "f_query": "the query string",
+        "f_body": "the request body",
         "or_note": "- The rule ORs these conditions with {safe}. Any one branch is enough to match, so the {safe} condition doesn't limit the forgeable ones\n",
-        "or_rec": "- Keep only the {safe} conditions in this Allow rule and remove the forgeable branches. If that traffic still needs to be identified, use the Count+Label rule below\n",
+        "or_rec": "- Keep only the {safe} conditions in this Allow rule and remove the forgeable branches\n",
+        "path_note": "- Branches limited to {paths} also let forged requests through on those paths\n",
+        "path_open": "- Branches limited to {paths} let every request to those paths through, forged or not\n",
+        "skipped": ", including every rule that could stop the request ({rules})",
+        "skipped_more": "{total} of them: {rules}, and {k} more",
+        "skipped_default": ". The default action is Block, so this rule is also the way in: anyone who sends the value gets through",
+        "rec_count_label": "- If the traffic needs to be identified, use a Count+Label rule (e.g., `custom:native-app` or `custom:probe`) instead of Allow. It doesn't need to bypass the WAF entirely\n",
+        "rec_unforgeable": "- For internal probes, monitoring, or testers, use an unforgeable condition instead, such as an IP set\n",
+        "rec_default_block": "- This Web ACL blocks by default, so a Count+Label rule wouldn't let this traffic in. Give access by source IP instead: an IP set, reached through the office network or a VPN. A WAF token doesn't work as access control, since any browser can get one\n",
+        "rec_crawler": "- For search engine crawlers, use the ASN + User-Agent labeling rule in Appendix A and exclude its `crawler:verified` label where needed, instead of allowing a User-Agent\n",
+        "exemption": "- `{rule}` (priority {p}): requests where {field} {match} `{value}` skip {what}",
+        "what_managed_rule_group": "the whole rule group",
+        "what_rate_based": "the rate limit",
+        "what_custom": "this rule",
+        "case_dead": "- `{rule}` (priority {p}): after {transform}, {field} can't contain {dead}{whole}{neg}",
+        "case_whole": ". The condition never matches",
+        "case_neg": ". It sits under a NOT, so the exclusion never applies",
+        "case_neg_part": ". It sits under a NOT, so these requests aren't excluded",
+        "case_rec": "- Write these patterns in the case the transform produces, e.g. `adsbot-google` after LOWERCASE",
+        "case_rec_allow": "- `{rule}` is a forgeable Allow: don't fix the pattern there, since that widens the Allow. Removing the forgeable branch fixes both",
+        "case_why": "- WAF applies text transformations before matching, so after LOWERCASE the input has no uppercase letters left (and the reverse for UPPERCASE)",
+        "crawler_dead_ua": "- `{rule}` (priority {p}): {dead} matches none of the User-Agents {family} publishes{whole}{neg}",
+        "crawler_dead_robots": "- `{rule}` (priority {p}): {dead} is a robots.txt name only; {family} says it never appears in the User-Agent, so the branch does nothing{whole}{neg}",
+        "dead_rec_ua": "- These are crawler conditions on the User-Agent, which any client can send even once the pattern is right. Identify crawlers with the `crawler:verified` label from the ASN + User-Agent rule in Appendix A instead. If you keep the User-Agent condition for now, write each name the way the crawler sends it: lowercase after LOWERCASE, and `bingbot` rather than `bingbot.html`",
+        "exempt_count": " (the rule is in Count today; this matters once it switches to its intended action)",
+        "exempt_label": " (it's a Count+Label rule: those requests don't get its label, so the rules acting on that label skip them too)",
+        "exempt_default_block": " (the Web ACL blocks by default and no later rule allows, so skipping it doesn't change the outcome today)",
+        "exempt_browser": " (a prefetch can't solve a Challenge, so this exemption is usually deliberate)",
+        "exempt_browser_rec": "- For browser prefetch exemptions, limit them to GET requests for the pages that are prefetched, and keep a rate limit that doesn't exempt them\n",
+        "still_blocking": "; only {names} still blocks, and only if the running version has it",
+        "still_blocking_now": "; only {names} still blocks",
+        "all_counted": "; every rule of the group is in Count, so it only labels",
+        "noop": "- `{rule}` (priority {p}, {group}): {names}, each the rule's default action",
+        "rate_challenge": "- `{rule}` (priority {p}): {action} at {limit} requests. A client with a valid token passes however fast it sends, for {immunity} seconds after each solve",
+        "rate_shared": "- `{rule}` (priority {p}): counted by `{key}`, {limit} requests per {window} seconds. Every client that matches adds to the same count, so one client can push everyone sharing that value over the limit",
+        "unused_label": "- `{rule}` (priority {p}, {action}): adds {labels}, which no rule matches",
+        "rate_rec_shared": "- Add the IP to the aggregation keys, or confirm that one shared budget for everyone with that value is what you want\n",
+        "rate_shared_crawler": "- `{rule}` (priority {p}): one budget of {limit} requests per {window} seconds for everything with this User-Agent (`{key}`), which search engine crawlers also send. Anyone can send that User-Agent, so forged requests use up the budget and the real crawler gets blocked with them",
+        "rate_rec_crawler": "- Keep the budget, but count only the real search engine crawler: add the `crawler:verified` label from the ASN + User-Agent rule in Appendix A to the scope-down. Leave forged User-Agents to a per-IP limit\n",
+        "no_ip_counted": "- {rules} would limit per IP, but it's in Count\n",
+        "rule_na_global": "**Rule**: N/A (Web ACL global configuration)",
+        "traversal_note": "- The path branches use `STARTS_WITH` without `NORMALIZE_PATH`. `/prefix/../admin` also starts with the prefix; if CloudFront or the origin resolves `..`, the request reaches a path the rule never meant to allow\n",
+        "traversal_rec": "- Add `NORMALIZE_PATH` (after `URL_DECODE`) to the path conditions of this Allow rule\n",
+        "rec_other_crawlers": "- AI crawlers and agents don't affect search ranking, so they need no Allow: remove their names from this rule\n",
+        "after_last_allow": "- These rules run after the last Allow rule: {others}. The default action is Block, so every request that reaches them ends in Block anyway. They can't change the outcome, only the response code",
+        "rec_after_last_allow": "- Move rules that should act on allowed traffic ahead of the Allow rules, or remove the ones that have no purpose here",
+        "exempt_crawler": "- For search engine crawlers, exempt the `crawler:verified` label from the ASN + User-Agent rule in Appendix A instead of User-Agent strings\n",
         "hosting_scope_state": ", rule group scope-down `{scope}`",
         "hosting_scope": "- The rule group's scope-down is `{scope}`. Only requests that match it enter the rule group, so the bypass covers cloud-hosted requests that match the scope-down\n",
         "hosting_scope_widen": "- Before removing or widening that scope-down, change this override. Otherwise the bypass widens with it\n",
-        "opaque_risk_allow": "Since this rule's action is Allow, a leaked value means full WAF bypass for anyone who knows it",
-        "opaque_rec_allow": "If this is a shared secret for probe/monitoring access, switch to an unforgeable condition (IP Set or WAF Token)",
-        "opaque_risk_other": "This value may be a shared secret or redacted content",
-        "opaque_rec_other": "Verify whether this value is a secret that should be protected from exposure",
         "allow_override": "`{rule}` overridden to Allow",
         "levels": lambda lv: {1: "{}", 2: "{} and {}"}.get(len(lv), "{}, {}, and {}").format(*lv),
         "challenge_rules_any": "the Challenge rules",
@@ -112,11 +185,15 @@ LINES = {
         "label_before_producer": "- {rules}匹配标签 `{label}`，但产生这个标签的规则都排在它后面：{others}。这个条件永远不会成立",
         "blocklist_after_allow": "- IP 黑名单 {rules}排在 Allow 规则 {others} 后面。被这些规则放行的请求不会再经过黑名单，已经拉黑的 IP 只要同时命中这些 Allow 规则，就会被放行",
         "inspection_after_allow": "- {group} 规则组 {rules}排在 Allow 规则 {others} 后面。默认动作是 Block，它只检查到本来就会被拦的流量，被这些 Allow 规则放行的流量完全没有经过内容检测",
-        "bot_control_not_last": "- Bot Control {rules}排在会拦截请求的规则 {others} 前面。Bot Control 按检查的请求数收费，这些规则拦下的请求已经先计过费了。这一条只影响费用，不影响安全",
+        "bot_control_not_last": "- Bot Control {rules}排在自己会拦截或 Challenge 请求的规则 {others} 前面。Bot Control 按检查的请求数收费，这些规则拦下的请求已经先计过费了。这一条只影响费用，不影响安全",
+        "label_no_producer": "- {rules}匹配标签 `{label}`，但这个 Web ACL 里没有任何规则会加这个标签。这个条件永远不会成立",
+        "unreachable": "- {rules}永远收不到请求：它能匹配的请求，在前面已经被 {others}（{actions}）结束了",
         "rec_label_before_producer": "- 把产生标签的规则调到匹配该标签的规则前面",
         "rec_blocklist_after_allow": "- 把 IP 黑名单调到所有 Allow 规则前面",
-        "rec_inspection_after_allow": "- 把内容检测规则组调到 Allow 规则前面，放行之前先检查。先用 Count 观察，合作方的回调 payload 可能会误报",
-        "rec_bot_control_not_last": "- 把 Bot Control 放到这些拦截规则后面",
+        "rec_inspection_after_allow": "- 把内容检测规则组调到 Allow 规则前面，放行之前先检查。先用 Count 观察误报，再切回默认动作",
+        "rec_bot_control_not_last": "- 把 Bot Control 放到这些会拦截或 Challenge 的规则后面",
+        "rec_label_no_producer": "- 核对标签名。如果产生这个标签的规则已经删掉，这个条件也要删掉或改写",
+        "rec_unreachable": "- 想清楚这部分流量该由哪条规则处理：收窄前面那条规则的条件，或者删掉后面这条",
         "order_title": "发现 {count} 处",
         "rec_literal_wildcard": "- 想做通配匹配，改用正则，或者去掉 `*` 保留 `STARTS_WITH`",
         "rec_query_in_path": "- 想匹配查询参数，把匹配字段改成 `QueryString` 或 `SingleQueryArgument`",
@@ -143,24 +220,92 @@ LINES = {
         "missing_iprep": "- 没有部署 Amazon IP 信誉列表：AWS 威胁情报名单上的 IP，包括正在做侦察和扫描的 IP，都不会被拦（Medium）",
         "missing_anon": "- 没有部署匿名 IP 列表：来自 VPN、Tor、代理和非 AWS 云主机的流量不会被标记。很多扫描器跑在云主机上（Low）",
         "missing_bot": "- 没有部署 Bot Control：如果这个 ACL 承载浏览器页面，自报身份的 bot 和非浏览器客户端都不会被分类（Low）",
-        "rec_amr": "- Anti-DDoS：在 ACL 最前面（IP 白名单之后）加 `AWSManagedRulesAntiDDoSRuleSet`，不要加 scope-down。API 和机器调用的路径用豁免正则排除在 Challenge 之外",
+        "rec_amr": "- Anti-DDoS：在 ACL 最前面加 `AWSManagedRulesAntiDDoSRuleSet`，放在只按 IP set 放行的白名单和爬虫标记规则（附录 A）之后，不要用 scope-down 把它限定在少数路径上，它要看到全部流量才能建立基线（附录 B 的双实例拆分例外）。API 和机器调用的路径用豁免正则排除在 Challenge 之外",
         "rec_iprep": "- IP 信誉：`AWSManagedRulesAmazonIpReputationList` 放在 Anti-DDoS 之后、限速和自定义规则之前",
         "rec_anon": "- 匿名 IP：`AWSManagedRulesAnonymousIpList` 放在 IP 信誉列表旁边，先用 Count。用 scope-down 限定在调用方是最终用户的 host 或路径上：`HostingProviderIPList` 会拦非 AWS 的云主机 IP，可能误伤部署在其他云上的合作方",
         "rec_bot": "- Bot Control：放在 ACL 最后，固定到最新的静态版本，用 scope-down 限定在浏览器访问的 host 或路径上",
         "placement_block": "- 这个 ACL 默认 Block：规则组要放在 Allow 规则前面，否则检查不到被放行的流量。用 scope-down 限定在需要检查的路径上，先用 Count 观察",
         "placement_allow": "- 放在 IP 信誉和限速规则之后",
-        "example_ua": "匹配的 User-Agent 头",
-        "example_header": "匹配的自定义请求头",
-        "example_other": "匹配的条件",
+        "example_ua": "匹配的 User-Agent",
+        "example_header": "匹配的请求头",
+        "example_cookie": "匹配的 cookie",
+        "example_query": "匹配的查询参数",
+        "example_other": "匹配的值",
+        "sum_managed": "- {g} 个托管规则组里共有 {k} 条规则处于 Count，只打标签不拦截{whole}",
+        "sum_whole": "；{names} 整组什么都不拦",
+        "sum_order": "- 发现 {n} 处会影响检查或拦截的顺序问题：{kinds}",
+        "kind_label_before_producer": "标签在产生之前就被使用",
+        "kind_label_no_producer": "用了没有规则产生的标签",
+        "kind_blocklist_after_allow": "黑名单排在 Allow 后面",
+        "kind_inspection_after_allow": "内容检测排在 Allow 后面",
+        "kind_unreachable": "{c} 条规则永远收不到请求",
+        "kind_after_last_allow": "{c} 条规则改变不了结果",
+        "kind_bot_control_not_last": "Bot Control 在拦截规则之前就计费",
+        "sum_exempt": "- {n} 条规则会跳过带特定值的请求，这些值任何客户端都能发（{fields}）",
+        "sum_dead": "- {r} 条规则里有 {n} 个模式永远匹配不上，这些条件没有起到本来的作用",
+        "sum_noop": "- {n} 个 override 设成了规则本来的动作，什么也没改",
+        "sum_rate_challenge": "- {n} 条限速的动作是 Challenge 或 CAPTCHA，客户端拿到有效 token 后就不再受限",
+        "sum_rate_shared": "- {n} 条限速让所有匹配的客户端共用一个计数，伪造同样的值就能把额度用完",
+        "sum_unused": "- {n} 条规则加的标签没有任何规则使用",
+        "sum_uri": "- {n} 个 URI 路径条件按现在的写法永远匹配不上",
+        "or_join": " 或",
+        "f_header": "请求头 `{name}`",
+        "f_cookie": "cookie `{name}`",
+        "f_cookies": "cookie",
+        "f_query_arg": "查询参数 `{name}`",
+        "f_query": "查询串",
+        "f_body": "请求体",
         "or_note": "- 这些条件和 {safe} 是 OR 关系，命中任意一个分支就放行，{safe} 条件管不住可伪造的分支\n",
-        "or_rec": "- 这条 Allow 规则只保留 {safe} 条件，删掉可伪造的分支。还需要识别这部分流量的话，按下一条另建 Count+Label 规则\n",
+        "or_rec": "- 这条 Allow 规则只保留 {safe} 条件，删掉可伪造的分支\n",
+        "path_note": "- 限定在 {paths} 上的分支，同样能用伪造的请求在这些路径上放行\n",
+        "path_open": "- 限定在 {paths} 上的分支，访问这些路径的请求不用伪造任何东西就会被放行\n",
+        "skipped": "，包括所有可能拦下这个请求的规则（{rules}）",
+        "skipped_more": "共 {total} 条：{rules} 等",
+        "skipped_default": "。这个 ACL 默认 Block，这条规则也是进来的入口：带上这个值的请求就能进来",
+        "rec_count_label": "- 需要识别这部分流量的话，用 Count+Label 规则（如 `custom:native-app` 或 `custom:probe`）代替 Allow，这些流量不需要绕过 WAF\n",
+        "rec_unforgeable": "- 如果是给内部探针、监控或测试人员用的，改用不可伪造的条件，比如 IP set\n",
+        "rec_default_block": "- 这个 ACL 默认 Block，改成 Count+Label 的话这些请求就进不来了。改按来源 IP 放行：用 IP set，测试人员走办公网出口或 VPN。WAF token 不能当访问凭据，任何浏览器都拿得到\n",
+        "rec_crawler": "- 搜索引擎爬虫用附录 A 的 ASN + User-Agent 标记规则识别，需要时排除 `crawler:verified` 标签，不要按 User-Agent 放行\n",
+        "exemption": "- `{rule}`（priority {p}）：{field} {match} `{value}` 的请求会跳过{what}",
+        "what_managed_rule_group": "整个规则组",
+        "what_rate_based": "限速",
+        "what_custom": "这条规则",
+        "case_dead": "- `{rule}`（priority {p}）：做了 {transform} 之后，{field} 里不可能出现 {dead}{whole}{neg}",
+        "case_whole": "，这个条件永远不会命中",
+        "case_neg": "。它在 NOT 里面，所以这项排除永远不起作用",
+        "case_neg_part": "。它在 NOT 里面，所以这些请求不会被排除",
+        "case_rec": "- 按转换后的大小写来写这些模式，比如 LOWERCASE 之后写 `adsbot-google`",
+        "case_rec_allow": "- `{rule}` 是可伪造的 Allow，不要在那里修这个模式，改对了放行范围反而更大。删掉可伪造的分支，这个问题也就没了",
+        "case_why": "- WAF 先做文本转换再匹配，做完 LOWERCASE 之后输入里就没有大写字母了（UPPERCASE 反过来）",
+        "crawler_dead_ua": "- `{rule}`（priority {p}）：{dead} 匹配不上 {family} 官方公布的任何一个 User-Agent{whole}{neg}",
+        "crawler_dead_robots": "- `{rule}`（priority {p}）：{dead} 只是 robots.txt 里用的名字，{family} 说明它不会出现在 User-Agent 里，这个分支不起作用{whole}{neg}",
+        "dead_rec_ua": "- 这些是按 User-Agent 识别爬虫的条件，模式写对了，任何客户端照样能发。改用附录 A 的 ASN + User-Agent 规则打的 `crawler:verified` 标签来识别爬虫。暂时还要保留 User-Agent 条件的话，按爬虫实际发送的写法来写：LOWERCASE 之后用小写，写 `bingbot` 而不是 `bingbot.html`",
+        "exempt_count": "（这条规则现在是 Count，切到它原本要的动作后才会起作用）",
+        "exempt_label": "（这是一条 Count+Label 规则：这些请求拿不到它的标签，后面按这个标签处理的规则也就跳过了它们）",
+        "exempt_default_block": "（这个 ACL 默认 Block，后面也没有规则会放行，所以现在跳过它不影响结果）",
+        "exempt_browser": "（预取请求完成不了 Challenge，这种排除通常是有意的）",
+        "exempt_browser_rec": "- 浏览器预取的排除，只限定在会被预取的页面的 GET 请求上，并保留一条不排除它们的限速\n",
+        "still_blocking": "；只剩 {names} 还会拦，而且要看当前运行的版本里有没有这条规则",
+        "still_blocking_now": "；只剩 {names} 还会拦",
+        "all_counted": "；组里所有规则都是 Count，整个规则组只打标签",
+        "noop": "- `{rule}`（priority {p}，{group}）：{names}，都是这些规则本来的默认动作",
+        "rate_challenge": "- `{rule}`（priority {p}）：超过 {limit} 次后执行 {action}。拿到有效 token 的客户端，每次通过后的 {immunity} 秒内发多快都不会被限",
+        "rate_shared": "- `{rule}`（priority {p}）：按 `{key}` 计数，{window} 秒 {limit} 次。所有匹配的客户端算在同一个计数里，一个客户端就能让共用这个值的所有请求一起超限",
+        "unused_label": "- `{rule}`（priority {p}，{action}）：加了 {labels}，但没有规则匹配它",
+        "rate_rec_shared": "- 把 IP 加进聚合键；或者确认让共用这个值的所有请求共享一份额度，就是你想要的效果\n",
+        "rate_shared_crawler": "- `{rule}`（priority {p}）：带这个 User-Agent 的所有请求共用一份额度，{window} 秒 {limit} 次（`{key}`），搜索引擎爬虫也会带这个 User-Agent。这个 User-Agent 谁都能发，伪造的请求会把额度用完，真正的爬虫也跟着被拦",
+        "rate_rec_crawler": "- 额度可以保留，但只算真正的搜索引擎爬虫：在 scope-down 里加上附录 A 的 ASN + User-Agent 规则打的 `crawler:verified` 标签。伪造 User-Agent 的请求交给按 IP 的限速\n",
+        "no_ip_counted": "- {rules} 本来会按 IP 限速，但它是 Count\n",
+        "rule_na_global": "**Rule**: N/A (Web ACL 全局配置)",
+        "traversal_note": "- 这些路径分支用的是 `STARTS_WITH`，没有 `NORMALIZE_PATH`。`/prefix/../admin` 也以这个前缀开头，如果 CloudFront 或源站会解析 `..`，请求就会到达规则本来没打算放行的路径\n",
+        "traversal_rec": "- 给这条 Allow 规则的路径条件加上 `NORMALIZE_PATH`（放在 `URL_DECODE` 之后）\n",
+        "rec_other_crawlers": "- AI 爬虫和 agent 不影响搜索排名，不需要放行，直接从这条规则里删掉它们的名字\n",
+        "after_last_allow": "- 这些规则排在最后一条 Allow 之后：{others}。默认动作是 Block，走到这里的请求最后都会被 Block，这些规则改变不了结果，最多改变响应码",
+        "rec_after_last_allow": "- 需要作用于放行流量的规则，挪到 Allow 规则前面；在这里没有用处的规则可以删掉",
+        "exempt_crawler": "- 搜索引擎爬虫改为排除附录 A 的 ASN + User-Agent 规则打上的 `crawler:verified` 标签，不要按 User-Agent 字符串排除\n",
         "hosting_scope_state": "，规则组的 scope-down 为 `{scope}`",
         "hosting_scope": "- 规则组的 scope-down 是 `{scope}`，只有匹配它的请求才会进入规则组。所以被放行的是匹配这个 scope-down 的云主机请求\n",
         "hosting_scope_widen": "- 要去掉或放宽这个 scope-down，先改掉这个 override，否则放行范围会跟着扩大\n",
-        "opaque_risk_allow": "这条规则的动作是 Allow，这个值一旦泄露，知道它的人就能完全绕过 WAF",
-        "opaque_rec_allow": "如果这是给探针或监控用的共享密钥，改用不可伪造的条件（IP Set 或 WAF Token）",
-        "opaque_risk_other": "这个值可能是共享密钥，也可能是脱敏后的内容",
-        "opaque_rec_other": "确认这个值是不是需要保密的密钥",
         "allow_override": "`{rule}` 被覆盖为 Allow",
         "levels": lambda lv: "、".join({"low": "低", "medium": "中", "high": "高"}[x] for x in lv),
         "challenge_rules_any": "Challenge 规则",
@@ -231,39 +376,23 @@ AMBIGUOUS = "AMBIGUOUS"
 
 
 
-def _has_opaque_value(value: str) -> str:
-    """Check if a string looks like a hash/secret. Returns 'yes', 'maybe', or 'no'."""
-    if len(value) < 16:
-        return "no"
-    # Exclude common non-secret patterns
-    if value.startswith("/"):  # URI paths
-        return "no"
-    if re.match(r'^[\w.-]+\.\w{2,}$', value):  # hostnames like example.com
-        return "no"
-    if value in ("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"):
-        return "no"
-    classes = 0
-    if re.search(r'[a-z]', value):
-        classes += 1
-    if re.search(r'[A-Z]', value):
-        classes += 1
-    if re.search(r'[0-9]', value):
-        classes += 1
-    if re.search(r'[^a-zA-Z0-9]', value):
-        classes += 1
-    if classes >= 3:
-        return "yes"
-    if classes >= 2 and len(value) >= 24:
-        return "maybe"
-    return "no"
+def _short_arns(text: str) -> str:
+    """IP and regex set ARNs shortened to their names for Current state lines."""
+    return re.sub(r"arn:aws:wafv2:[^'\s]*?/(?:ipset|regexpatternset)/([^/'\s]+)/[^'\s]+", r"\1", text)
 
 
-def _extract_exactly_values(summary: str) -> list[tuple[str, str]]:
-    """Extract (field, value) pairs from EXACTLY matches in statement summary."""
-    results = []
-    for m in re.finditer(r"([\w:.-]+)\s+EXACTLY\s+'([^']*)'", summary):
-        results.append((m.group(1), m.group(2)))
-    return results
+def _field_label(field: str, L: dict) -> str:
+    """A leaf's field in plain words: `cookies[scope=ALL, included=a]` → the `a` cookie."""
+    base, _, rest = field.partition(":")
+    if base == "single_header":
+        return "User-Agent" if rest == "user-agent" else L["f_header"].format(name=rest)
+    if base == "single_query_argument":
+        return L["f_query_arg"].format(name=rest)
+    m = re.match(r"cookies\[.*?included=([^,\]]+)", field)
+    if m:
+        return L["f_cookie"].format(name=m.group(1))
+    return {"query_string": L["f_query"], "body": L["f_body"]}.get(base) or (
+        L["f_cookies"] if base.startswith("cookies") else field)
 
 
 def _payment_indicators(summary: dict) -> list:
@@ -305,6 +434,8 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
         return AMBIGUOUS
 
     L = LINES[lang]
+    default_block = summary.get("web_acl", {}).get("default_action") == "block"
+    sep = "、" if lang == "zh" else ", "
     # Group by forgeable_conditions content
     groups = defaultdict(list)
     for a in candidates:
@@ -318,43 +449,54 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
         rule_line = _rule_line(group)
 
         fc = group[0]["forgeable_conditions"]
-        forgeable_fields = ", ".join(fc)
-        is_are = "is" if len(fc) == 1 else "are"
-        if any("user-agent" in c for c in fc):
-            forgeable_example = L["example_ua"]
-        elif any("header" in c for c in fc):
-            forgeable_example = L["example_header"]
-        else:
-            forgeable_example = L["example_other"]
+        forgeable_fields = sep.join(dict.fromkeys(_field_label(c, L) for c in fc))
+        is_are = "is" if len(set(forgeable_fields.split(sep))) == 1 else "are"
+        ua = any("user-agent" in c for c in fc)
+        kinds = []
+        for c in fc:
+            k = ("example_ua" if "user-agent" in c else "example_cookie" if c.startswith("cookie")
+                 else "example_query" if "query" in c else "example_header" if "header" in c else "example_other")
+            if k not in kinds:
+                kinds.append(k)
+        forgeable_example = L["or_join"].join(L[k] for k in kinds)
 
-        # Check for opaque/secret values in the statement (fix #1)
-        opaque_note = ""
-        opaque_rec = ""
-        for a in group:
-            for field, value in _extract_exactly_values(a.get("statement_summary", "")):
-                if _has_opaque_value(value) == "yes":
-                    truncated = value[:30] + "..." if len(value) > 30 else value
-                    if lang == "zh":
-                        opaque_note = f"- 匹配值 `{truncated}` 存储在 WAF 配置中，任何能读取 Web ACL 配置的人都能拿到，一旦泄露就能完全绕过 WAF\n"
-                        opaque_rec = "- 定期轮换密钥值，并审计 WAF 配置的 IAM 访问权限\n"
-                    else:
-                        opaque_note = f"- The match value `{truncated}` is stored in the WAF configuration. Anyone with read access to the Web ACL can obtain it, and a leaked value means full WAF bypass\n"
-                        opaque_rec = "- Periodically rotate the secret value and audit IAM access to WAF configuration\n"
-                    break
-            if opaque_note:
-                break
+        # The later rules a matching request skips
+        first = min(a["priority"] for a in group)
+        later = [r for r in summary.get("rules", []) if r["priority"] > first and r["action"] != "count"
+                 and r["name"] not in names and not (r["type"] == "custom" and r["action"] == "allow")]
+        shown = sep.join(f"`{r['name']}`" for r in later[:5])
+        if len(later) > 5:
+            shown = L["skipped_more"].format(rules=shown, k=len(later) - 5, total=len(later))
+        skipped = L["skipped"].format(rules=shown) if later else ""
+        if default_block:
+            skipped += L["skipped_default"]
 
         safe = ", ".join(group[0].get("safe_conditions", []))
-        or_rec = L["or_rec"].format(safe=safe) if safe else ""
-        if safe:
-            opaque_note = L["or_note"].format(safe=safe) + opaque_note
+        notes = L["or_note"].format(safe=safe) if safe else ""
+        for forged, key in ((True, "path_note"), (False, "path_open")):
+            paths = [p for a in group for b in a.get("path_branches", []) if b["forged"] == forged for p in b["paths"]]
+            if paths:
+                notes += L[key].format(paths=sep.join(f"`{p}`" for p in dict.fromkeys(paths)))
+        recs = L["or_rec"].format(safe=safe) if safe else ""
+        crawler = ua and re.search(r"bot|spider|crawl|slurp", group[0]["statement_summary"], re.I)
+        if crawler:
+            recs += L["rec_crawler"]
+            if re.search(r"gpt|claude|openai|anthropic|meta-|facebook|bytespider|perplexity|chatgpt",
+                         group[0]["statement_summary"], re.I):
+                recs += L["rec_other_crawlers"]
+        if any(a.get("prefix_unnormalized") for a in group):
+            notes += L["traversal_note"]
+            recs += L["traversal_rec"]
+        if default_block:
+            recs += L["rec_default_block"]
+        else:  # Count+Label fits native apps and probes, not crawlers
+            recs += ("" if crawler else L["rec_count_label"]) + L["rec_unforgeable"]
 
         md = T["forgeable_allow"].format(
             n="{n}", rule_names=rule_names, rule_line=rule_line,
-            stmt_summary=group[0]["statement_summary"],
+            stmt_summary=_short_arns(group[0]["statement_summary"]),
             forgeable_fields=forgeable_fields, is_are=is_are,
-            forgeable_example=forgeable_example,
-            opaque_note=opaque_note, opaque_rec=opaque_rec, or_rec=or_rec)
+            forgeable_example=forgeable_example, skipped=skipped, notes=notes, recs=recs)
         results.append((md, {"severity": "Critical", "title_key": "forgeable_allow",
                              "rules": names, "sections": [1]}))
     return results if results else NOT_APPLICABLE
@@ -687,7 +829,8 @@ def _gen_missing_always_on_challenge(summary, pre_checks, flags, T, lang):
     rules = summary.get("rules", [])
     has_amr = any("AntiDDoS" in r.get("managed", {}).get("group_name", "") for r in rules)
     if not has_amr:
-        return NOT_APPLICABLE
+        # Without AMR the DDoS objective is unknown; an internet-facing ACL goes to the LLM
+        return AMBIGUOUS if summary.get("web_acl", {}).get("default_action") == "allow" else NOT_APPLICABLE
     # Check for always-on challenge pattern
     # Pattern 1: Challenge rule consuming a label
     label_producers = {}
@@ -726,7 +869,7 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
     # Merge issues of the same kind that share the same counterpart rules
     merged = {}
     for i in check["issues"]:
-        others = i.get("producers") or i.get("allows") or i.get("later") or []
+        others = i.get("producers") or i.get("allows") or i.get("later") or i.get("stoppers") or []
         key = (i["kind"], i.get("label", ""), i.get("group", ""), tuple(o["name"] for o in others))
         merged.setdefault(key, {"issue": i, "others": others, "subjects": []})["subjects"].append(i["rule"])
     fmt = "`{}`（priority {}）" if lang == "zh" else "`{}` (priority {})"
@@ -735,14 +878,24 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
     for (kind, label, group, _), m in merged.items():
         problems.append(L[kind].format(
             rules=sep.join(fmt.format(r["name"], r["priority"]) for r in m["subjects"]),
-            label=label, group=group, others=_ticks(m["others"], lang)))
+            label=label, group=group, others=_ticks(m["others"], lang),
+            actions="/".join(a.capitalize() for a in m["issue"].get("actions", []))))
         if kind not in kinds:
             kinds.append(kind)
     recs = "\n".join(L["rec_" + k] for k in kinds)
-    # Cost-only findings are Low; anything that changes what gets inspected is Medium
-    severity = "Low" if kinds == ["bot_control_not_last"] else "Medium"
+    counts = {k: sum(1 for i in check["issues"] if i["kind"] == k) for k in kinds}
+    n_problems = len(problems)
+    problems.insert(0, L["sum_order"].format(
+        n=n_problems, kinds=sep.join(L["kind_" + k].format(c=counts[k]) for k in kinds)))
+    # Medium when it changes what gets inspected or blocked: a protection that
+    # never runs because an Allow ends the request first. Cost and dead code are Low.
+    medium = any(i["kind"] in ("label_before_producer", "label_no_producer", "blocklist_after_allow",
+                               "inspection_after_allow")
+                 or (i["kind"] == "unreachable" and "allow" in i["actions"] and i.get("rule_action") != "count")
+                 for i in check["issues"])
+    severity = "Medium" if medium else "Low"
     md = T["order_issues"].format(
-        n="{n}", severity=severity, summary=L["order_title"].format(count=len(problems)),
+        n="{n}", severity=severity, summary=L["order_title"].format(count=n_problems),
         rule_line=_rule_line(check["rules"]), problems="\n".join(problems), recs=recs)
     return [(md, {"severity": severity, "title_key": "order_issues",
                   "rules": [r["name"] for r in check["rules"]], "sections": [18]})]
@@ -803,6 +956,7 @@ def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
         for pb in r["problems"]:
             key = "wildcard" if pb["kind"] == "literal_wildcard" else "query_in_path"
             details.append(L[key].format(rule=r["name"], p=r["priority"], value=pb["value"]))
+    details.insert(0, L["sum_uri"].format(n=len(details)))
     kinds = {pb["kind"] for r in check["rules"] for pb in r["problems"]}
     recs = [L["rec_" + k] for k in ("literal_wildcard", "query_in_path") if k in kinds]
     md = T["uri_path_pitfalls"].format(
@@ -836,9 +990,12 @@ def _gen_path_only_allow(summary, pre_checks, flags, T, lang):
         return NOT_APPLICABLE
     default_block = summary.get("web_acl", {}).get("default_action") == "block"
     severity = "Critical" if default_block else "Medium"
+    L = LINES[lang]
+    trav = any(r.get("prefix_unnormalized") for r in rules)
     md = T["path_only_allow"].format(
         n="{n}", severity=severity, rule_line=_rule_line(rules), rule_names=_ticks(rules, lang),
-        acl_note=LINES[lang]["default_block_note"] if default_block else "")
+        acl_note=(L["default_block_note"] if default_block else "") + (L["traversal_note"] if trav else ""),
+        trav_rec=L["traversal_rec"] if trav else "")
     return [(md, {"severity": severity, "title_key": "path_only_allow",
                   "rules": [r["name"] for r in rules], "sections": [1]})]
 
@@ -852,7 +1009,17 @@ def _gen_managed_count(summary, pre_checks, flags, T, lang):
                for g in check.get("groups", [])]
     details += [L["rule_count"].format(rule=o["name"], p=o["priority"], group=o["group"],
                                        names=", ".join(f"`{x}`" for x in o["overridden"]))
+                + ("" if o.get("still_blocking") is None else L["all_counted"] if not o["still_blocking"]
+                   else L["still_blocking" if o.get("group_versioned") else "still_blocking_now"].format(
+                       names=", ".join(f"`{x}`" for x in o["still_blocking"])))
                 for o in check.get("overrides", [])]
+    sep = "、" if lang == "zh" else ", "
+    whole = [g["group"] for g in check.get("groups", [])] + [
+        o["group"] for o in check.get("overrides", []) if o.get("still_blocking") == []]
+    k = sum(len(o["overridden"]) for o in check.get("overrides", []))
+    details.insert(0, L["sum_managed"].format(
+        k=k, g=len(check["rules"]),
+        whole=L["sum_whole"].format(names=sep.join(f"`{x}`" for x in whole)) if whole else ""))
     md = T["managed_count"].format(
         n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
     return [(md, {"severity": "Medium", "title_key": "managed_count",
@@ -871,40 +1038,144 @@ def _gen_bot_control_config(summary, pre_checks, flags, T, lang):
                   "rules": [check["rule"]], "sections": [5]})]
 
 
-def _gen_opaque_search_string(summary, pre_checks, flags, T, lang):
-    rules = summary.get("rules", [])
-    # Skip rules already flagged as forgeable Allow (they get their own Critical finding)
-    forgeable_allow_names = set()
-    for a in flags.get("allow_rules", []):
-        if a.get("all_forgeable") and a.get("blast_radius") == "global":
-            forgeable_allow_names.add(a["name"])
-    results = []
-    seen_values = set()
-    for r in rules:
-        if r.get("type") != "custom":
-            continue
-        if r["name"] in forgeable_allow_names:
-            continue
-        stmt_summary = r.get("statement", {}).get("summary", "")
-        for field, value in _extract_exactly_values(stmt_summary):
-            if value in seen_values:
-                continue
-            opacity = _has_opaque_value(value)
-            if opacity == "no":
-                continue
-            if opacity == "maybe":
-                return AMBIGUOUS
-            seen_values.add(value)
-            kind = "allow" if r.get("action") == "allow" else "other"
-            risk_note = LINES[lang]["opaque_risk_" + kind]
-            rec_note = LINES[lang]["opaque_rec_" + kind]
-            md = T["opaque_search_string"].format(
-                n="{n}", rule_name=r["name"], priority=r["priority"],
-                stmt_summary=stmt_summary[:100], value=value[:30] + "..." if len(value) > 30 else value,
-                risk_note=risk_note, rec_note=rec_note)
-            results.append((md, {"severity": "Awareness", "title_key": "opaque_search_string",
-                                 "rules": [r["name"]], "sections": [14]}))
-    return results if results else NOT_APPLICABLE
+def _gen_forgeable_exemptions(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("forgeable_exemptions", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    notes = {"count": L["exempt_count"], "default_block": L["exempt_default_block"],
+             "browser_signal": L["exempt_browser"], "label": L["exempt_label"], "bypass": ""}
+    details = []
+    for r in check["rules"]:
+        for e in r["exemptions"]:
+            v = str(e["value"])
+            details.append(L["exemption"].format(
+                rule=r["name"], p=r["priority"], field=_field_label(e["field"], L), match=e["match"] or "",
+                value=v[:77] + "..." if len(v) > 80 else v, what=L["what_" + r["type"]])
+                + notes[r.get("impact", "bypass")])
+    sep = "、" if lang == "zh" else ", "
+    details.insert(0, L["sum_exempt"].format(n=len(check["rules"]), fields=sep.join(dict.fromkeys(
+        _field_label(e["field"], L) for r in check["rules"] for e in r["exemptions"]))))
+    ua = any("user-agent" in e["field"] for r in check["rules"] for e in r["exemptions"])
+    recs = (L["exempt_crawler"] if ua else "") + (
+        L["exempt_browser_rec"] if any(r.get("impact") == "browser_signal" for r in check["rules"]) else "")
+    # Medium only where skipping the protection lets an attack through today
+    severity = "Medium" if any(r.get("impact", "bypass") in ("bypass", "label") for r in check["rules"]) else "Low"
+    md = T["forgeable_exemptions"].format(n="{n}", severity=severity, rule_line=_rule_line(check["rules"]),
+                                          details="\n".join(details), crawler_rec=recs)
+    return [(md, {"severity": severity, "title_key": "forgeable_exemptions",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [2]})]
+
+
+def _gen_dead_patterns(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("dead_patterns", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    sep = "、" if lang == "zh" else ", "
+    details = []
+    for f in check["rules"]:
+        neg = (L["case_neg"] if f["whole"] else L["case_neg_part"]) if f["negated"] else ""
+        whole = L["case_whole"] if f["whole"] else ""
+        if f["dead"]:
+            details.append(L["case_dead"].format(rule=f["name"], p=f["priority"], transform=f["transform"],
+                                                 field=_field_label(f["field"], L), dead=sep.join(f"`{d}`" for d in f["dead"]),
+                                                 whole=whole, neg=neg))
+        for c in f["crawler"]:
+            # A robots.txt-only name is redundant, not harmful: those requests carry another UA
+            details.append(L["crawler_dead_" + c["kind"]].format(rule=f["name"], p=f["priority"],
+                                                                 dead=f"`{c['pattern']}`", family=c["family"].capitalize(),
+                                                                 whole=whole, neg="" if c["kind"] == "robots" else neg))
+    rules = list({f["name"]: f for f in check["rules"]}.values())
+    details.insert(0, L["sum_dead"].format(
+        n=sum(len(f["dead"]) + len(f["crawler"]) for f in check["rules"]), r=len(rules)))
+    if any(f["dead"] for f in check["rules"]):
+        details.append(L["case_why"])
+    forged = {a["name"] for a in flags.get("allow_rules", []) if a.get("all_forgeable")}
+    recs = [L["case_rec_allow"].format(rule=n) for n in dict.fromkeys(f["name"] for f in check["rules"])
+            if n in forged]
+    rest = [f for f in check["rules"] if f["name"] not in forged]
+    # A crawler condition on the User-Agent stays forgeable even when written right
+    if any(f["field"] == "single_header:user-agent" for f in rest):
+        recs.append(L["dead_rec_ua"])
+    if any(f["field"] != "single_header:user-agent" for f in rest):
+        recs.append(L["case_rec"])
+    md = T["dead_patterns"].format(n="{n}", rule_line=_rule_line(rules), details="\n".join(details),
+                                   recs="\n".join(recs))
+    return [(md, {"severity": "Low", "title_key": "dead_patterns",
+                  "rules": [f["name"] for f in rules], "sections": [19]})]
+
+
+def _gen_noop_overrides(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("noop_overrides", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    names = {"block": "Block", "count": "Count", "challenge": "Challenge", "captcha": "CAPTCHA"}
+    details = [L["noop"].format(rule=f["name"], p=f["priority"], group=f["group"],
+                                names=", ".join(f"`{x}` → {names[a]}" for x, a in zip(f["overrides"], f["actions"])))
+               for f in check["rules"]]
+    details.insert(0, L["sum_noop"].format(n=sum(len(f["overrides"]) for f in check["rules"])))
+    md = T["noop_overrides"].format(n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Awareness", "title_key": "noop_overrides",
+                  "rules": [f["name"] for f in check["rules"]], "sections": [20]})]
+
+
+def _gen_rate_limits(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("rate_limits", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    names = {"challenge": "Challenge", "captcha": "CAPTCHA"}
+    out = []
+    if check.get("no_ip_limit"):
+        counted = check.get("counted_ip", [])
+        md = T["no_ip_rate_limit"].format(
+            n="{n}", rule_line=_rule_line(counted) if counted else LINES[lang]["rule_na_global"],
+            counted=L["no_ip_counted"].format(rules=_ticks(counted, lang)) if counted else "")
+        out.append((md, {"severity": "Medium", "title_key": "no_ip_rate_limit",
+                         "rules": [f["name"] for f in counted], "sections": [6]}))
+    if check["challenge"]:
+        details = [L["rate_challenge"].format(rule=f["name"], p=f["priority"], action=names[f["action"]],
+                                              limit=f["limit"], immunity=f["immunity"]) for f in check["challenge"]]
+        details.insert(0, L["sum_rate_challenge"].format(n=len(check["challenge"])))
+        md = T["rate_challenge"].format(n="{n}", rule_line=_rule_line(check["challenge"]), details="\n".join(details))
+        out.append((md, {"severity": "Low", "title_key": "rate_challenge",
+                         "rules": [f["name"] for f in check["challenge"]], "sections": [6]}))
+    if check["shared"]:
+        details = [L["rate_shared_crawler" if f.get("crawler_budget") else "rate_shared"].format(
+            rule=f["name"], p=f["priority"], key=f["key"], limit=f["limit"], window=f["window"])
+            for f in check["shared"]]
+        recs = (L["rate_rec_crawler"] if any(f.get("crawler_budget") for f in check["shared"]) else "") + (
+            L["rate_rec_shared"] if any(not f.get("crawler_budget") for f in check["shared"]) else "")
+        details.insert(0, L["sum_rate_shared"].format(n=len(check["shared"])))
+        md = T["rate_shared"].format(n="{n}", rule_line=_rule_line(check["shared"]),
+                                     details="\n".join(details), recs=recs)
+        out.append((md, {"severity": "Low", "title_key": "rate_shared",
+                         "rules": [f["name"] for f in check["shared"]], "sections": [6]}))
+    return out
+
+
+def _gen_unused_labels(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("unused_labels", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    details = [L["unused_label"].format(rule=f["name"], p=f["priority"], action=f["action"].capitalize(),
+                                        labels=", ".join(f"`{x}`" for x in f["labels"])) for f in check["rules"]]
+    details.insert(0, L["sum_unused"].format(n=len(check["rules"])))
+    md = T["unused_labels"].format(n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Awareness", "title_key": "unused_labels",
+                  "rules": [f["name"] for f in check["rules"]], "sections": [17]})]
+
+
+def _gen_security_automations(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("security_automations", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    md = T["security_automations"].format(n="{n}", rule_line=_rule_line(check["rules"]))
+    return [(md, {"severity": "Awareness", "title_key": "security_automations",
+                  "rules": [f["name"] for f in check["rules"]], "sections": [7]})]
 
 
 def _gen_managed_allow_override(summary, pre_checks, flags, T, lang):
@@ -934,6 +1205,7 @@ ALL_GENERATORS = [
     (_gen_forgeable_allow, [1], True),
     (_gen_managed_allow_override, [1], True),
     (_gen_scope_down_too_narrow, [2], True),
+    (_gen_forgeable_exemptions, [2], True),
     (_gen_challenge_all_during_event, [3], True),
     (_gen_unanchored_exempt_regex, [3], True),
     (_gen_missing_crawler_labeling, [3], True),
@@ -945,7 +1217,6 @@ ALL_GENERATORS = [
     (_gen_token_domain, [11], True),
     (_gen_managed_versions, [12], True),
     (_gen_no_logging, [13], True),
-    (_gen_opaque_search_string, [14], True),
     (_gen_default_action_redundancy, [15], True),
     (_gen_missing_always_on_challenge, [16], True),
     (_gen_count_without_labels, [17], True),  # Covers 17a only; 17 is always-LLM
@@ -955,7 +1226,12 @@ ALL_GENERATORS = [
     (_gen_path_only_allow, [1], True),
     (_gen_uri_path_pitfalls, [19], True),
     (_gen_path_block_decoding, [19], True),
+    (_gen_dead_patterns, [19], True),
     (_gen_managed_count, [20], True),
+    (_gen_noop_overrides, [20], True),
+    (_gen_rate_limits, [6], False),  # Section 6 needs the LLM when rate rules exist
+    (_gen_unused_labels, [17], True),
+    (_gen_security_automations, [7], False),
     (_gen_bot_control_config, [5], False),
 ]
 
@@ -1047,7 +1323,7 @@ def main():
     # Compute llm_sections
     llm_sections = sorted(ALWAYS_LLM_SECTIONS)
     for s in range(1, 22):
-        if s in ALWAYS_LLM_SECTIONS or s in APPENDIX_ONLY_SECTIONS:
+        if s in ALWAYS_LLM_SECTIONS or s in APPENDIX_ONLY_SECTIONS or s in RETIRED_SECTIONS:
             continue
         outcomes = section_outcomes.get(s, [])
         if not outcomes:
@@ -1063,6 +1339,17 @@ def main():
         if not fully_covering:
             # Only partial generators — section needs LLM
             llm_sections.append(s)
+    # Generators only cover part of these sections; the LLM reviews them whenever
+    # the Web ACL has the rules they're about
+    rules_ = summary.get("rules", [])
+    relevant = {
+        4: any(r["action"] in ("challenge", "captcha") or any(
+            o.get("action") in ("challenge", "captcha") for o in (r.get("managed") or {}).get("overrides", []))
+            for r in rules_),
+        6: any(r["type"] == "rate_based" for r in rules_),
+        7: any((r.get("managed") or {}).get("group_name") in IP_REPUTATION_GROUPS for r in rules_),
+    }
+    llm_sections += [sec for sec, yes in relevant.items() if yes]
     llm_sections = sorted(set(llm_sections))
 
     # Compute llm_context

@@ -57,10 +57,12 @@ def _to_snake(name: str) -> str:
     return result
 
 def _normalize_keys(obj):
-    """Recursively convert all dict keys to snake_case, skipping SKIP_KEYS."""
+    """Recursively convert all dict keys to snake_case, skipping SKIP_KEYS.
+    Null values are dropped: some exports list every statement type, unused
+    ones as null, and the parsers only test whether a key is present."""
     if isinstance(obj, dict):
         return {_to_snake(k): _normalize_keys(v) for k, v in obj.items()
-                if k not in SKIP_KEYS and _to_snake(k) not in SKIP_KEYS}
+                if v is not None and k not in SKIP_KEYS and _to_snake(k) not in SKIP_KEYS}
     if isinstance(obj, list):
         return [_normalize_keys(i) for i in obj]
     return obj
@@ -309,9 +311,10 @@ def _summarize_node(stmt: dict) -> dict:
     if "sqli_match_statement" in stmt:
         sm = stmt["sqli_match_statement"]
         ftm = _field_to_match_str(sm.get("field_to_match", {}))
-        return {"summary": f"sqli_match({ftm})", "leaf_count": 1,
+        sens = sm.get("sensitivity_level")  # API default LOW
+        return {"summary": f"sqli_match({ftm}{', sensitivity=' + sens if sens else ''})", "leaf_count": 1,
                 "leaf_types": {"sqli_match"}, "samples": None,
-                "leaves": [_leaf("sqli_match", sm, ftm)]}
+                "leaves": [_leaf("sqli_match", sm, ftm, sens)]}
 
     # Leaf: xss_match_statement
     if "xss_match_statement" in stmt:
@@ -365,9 +368,12 @@ def _summarize_node(stmt: dict) -> dict:
                 "leaf_types": {"regex_match"}, "samples": None,
                 "leaves": [_leaf("regex_match", rm, ftm, "REGEX", regex)]}
 
-    # Leaf: regex_pattern_set_reference_statement
-    if "regex_pattern_set_reference_statement" in stmt:
-        rp = stmt["regex_pattern_set_reference_statement"]
+    # Leaf: regex_pattern_set_reference_statement (regex_pattern_reference_statement
+    # in snake_case exports)
+    rkey = next((k for k in ("regex_pattern_set_reference_statement",
+                             "regex_pattern_reference_statement") if k in stmt), None)
+    if rkey:
+        rp = stmt[rkey]
         ftm = _field_to_match_str(rp.get("field_to_match", {}))
         arn = rp.get("regex_pattern_set_arn", rp.get("arn", "?"))
         return {"summary": f"regex_set({ftm}, '{arn}')", "leaf_count": 1,
@@ -573,6 +579,10 @@ def _extract_managed_group_name(mg: dict, rule_name: str) -> tuple[str, str]:
     if "/" in arn and not arn.startswith("<"):
         parts = arn.split("/")
         if len(parts) >= 3:
+            # snake_case exports: .../global/managedruleset/<name>/<id>, where
+            # "managedruleset" is the resource type, not the vendor
+            if parts[-3] == "managedruleset":
+                return ("AWS" if parts[-2].startswith("AWSManagedRules") else vendor), parts[-2]
             return parts[-3], parts[-2]  # vendor, name
         return vendor, parts[-1]
     # Last resort: use rule name — strip common prefixes like "AWS-"
@@ -580,6 +590,30 @@ def _extract_managed_group_name(mg: dict, rule_name: str) -> tuple[str, str]:
     if gn.startswith("AWS-"):
         gn = gn[4:]
     return vendor, gn
+
+def _custom_key_str(key: dict) -> str:
+    """One rate-based custom aggregation key, e.g. `header:user-agent[LOWERCASE]`."""
+    kind, val = next(iter(key.items()), ("?", {}))
+    val = val if isinstance(val, dict) else {}
+    name = val.get("name") or val.get("namespace")
+    tts = [t.get("type", "NONE") for t in sorted(val.get("text_transformations", []),
+                                                  key=lambda t: t.get("priority", 0))]
+    return kind + (f":{name}" if name else "") + (f"[{'+'.join(tts)}]" if tts else "")
+
+def _action_handling(rule: dict) -> dict | None:
+    """Custom response code and inserted request headers on the rule action."""
+    act = rule.get("rule_action") or rule.get("action") or {}
+    body = next(iter(act.values()), None) if isinstance(act, dict) else None
+    if not isinstance(body, dict):
+        return None
+    out = {}
+    code = (body.get("custom_response") or {}).get("response_code")
+    if code:
+        out["response_code"] = code
+    headers = (body.get("custom_request_handling") or {}).get("insert_headers") or []
+    if headers:
+        out["insert_headers"] = [f"{h.get('name')}: {h.get('value')}" for h in headers]
+    return out or None
 
 def _extract_scope_down(container: dict) -> dict | None:
     sd = container.get("scope_down_statement")
@@ -612,6 +646,8 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
     if mg:
         vendor, group_name = _extract_managed_group_name(mg, name)
         version = mg.get("managed_rule_set_version", mg.get("version", ""))
+        if version == "DEFAULT_VERSION":  # snake_case exports' name for "not pinned"
+            version = ""
         managed_info = {
             "vendor": vendor,
             "group_name": group_name,
@@ -631,6 +667,8 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
             "evaluation_window_sec": rb.get("time_window", rb.get("evaluation_window_sec")),
             "aggregate_key_type": rb.get("aggregate_key_type", "IP"),
         }
+        if rb.get("custom_keys"):
+            rate_info["custom_keys"] = [_custom_key_str(k) for k in rb["custom_keys"]]
         scope_down = _extract_scope_down(rb)
 
     # Statement summary
@@ -698,6 +736,9 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
         result["rate_based"] = rate_info
     if challenge_cfg:
         result["challenge_config"] = challenge_cfg
+    handling = _action_handling(rule)
+    if handling:
+        result["action_handling"] = handling
 
     return result
 
@@ -774,6 +815,7 @@ def main():
 
     token_domains = web_acl.get("token_domains", [])
     capacity = web_acl.get("capacity")
+    acl_arn = web_acl.get("arn", web_acl.get("resource_arn", ""))
 
     challenge_config = None
     cc = web_acl.get("challenge_config", {})
@@ -796,11 +838,14 @@ def main():
         "web_acl": {
             "name": web_acl.get("name", "unknown"),
             "id": web_acl.get("id", ""),
-            "arn": web_acl.get("arn", web_acl.get("resource_arn", "")),
+            "arn": acl_arn,
+            "scope": ("CLOUDFRONT" if ":global/" in acl_arn else "REGIONAL") if acl_arn else "unknown",
             "description": web_acl.get("description", ""),
             "default_action": default_action,
             "default_action_custom_handling": has_custom_handling,
             "capacity": capacity,
+            # Only in snake_case exports; not part of the GetWebACL API
+            **({"actual_capacity": web_acl["actual_capacity"]} if "actual_capacity" in web_acl else {}),
             "token_domains": token_domains,
             "challenge_config": challenge_config,
             "captcha_config": captcha_config,

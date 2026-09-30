@@ -46,7 +46,24 @@
   "shared_token_labels": [
     "awswaf:managed:token:absent",
     "awswaf:managed:token:accepted",
-    "awswaf:managed:token:rejected"
+    "awswaf:managed:token:rejected",
+    "awswaf:managed:token:rejected:not_solved",
+    "awswaf:managed:token:rejected:expired",
+    "awswaf:managed:token:rejected:domain_mismatch",
+    "awswaf:managed:token:rejected:invalid",
+    "awswaf:managed:token:id:",
+    "awswaf:managed:token:fingerprint:",
+    "awswaf:managed:captcha:absent",
+    "awswaf:managed:captcha:accepted",
+    "awswaf:managed:captcha:rejected",
+    "awswaf:managed:captcha:rejected:not_solved",
+    "awswaf:managed:captcha:rejected:expired",
+    "awswaf:managed:captcha:rejected:domain_mismatch",
+    "awswaf:managed:captcha:rejected:invalid"
+  ],
+  "token_label_prefixes": [
+    "awswaf:managed:token:",
+    "awswaf:managed:captcha:"
   ],
   "token_label_producers": [
     "AWSManagedRulesAntiDDoSRuleSet",
@@ -78,5 +95,73 @@
       "ja3_fingerprint",
       "ja4_fingerprint"
     ]
+  },
+  "managed_rules": {
+    "_comment": "Rules in the latest static version per the AWS WAF Developer Guide (2026-09). Older versions may lack some. Every rule defaults to Block except those in default_count.",
+    "AWSManagedRulesCommonRuleSet": [
+      "NoUserAgent_HEADER",
+      "UserAgent_BadBots_HEADER",
+      "SizeRestrictions_QUERYSTRING",
+      "SizeRestrictions_Cookie_HEADER",
+      "SizeRestrictions_BODY",
+      "SizeRestrictions_URIPATH",
+      "EC2MetaDataSSRF_BODY",
+      "EC2MetaDataSSRF_COOKIE",
+      "EC2MetaDataSSRF_URIPATH",
+      "EC2MetaDataSSRF_QUERYARGUMENTS",
+      "GenericLFI_QUERYARGUMENTS",
+      "GenericLFI_URIPATH",
+      "GenericLFI_BODY",
+      "RestrictedExtensions_URIPATH",
+      "RestrictedExtensions_QUERYARGUMENTS",
+      "GenericRFI_QUERYARGUMENTS",
+      "GenericRFI_BODY",
+      "GenericRFI_URIPATH",
+      "CrossSiteScripting_COOKIE",
+      "CrossSiteScripting_QUERYARGUMENTS",
+      "CrossSiteScripting_BODY",
+      "CrossSiteScripting_URIPATH"
+    ],
+    "AWSManagedRulesKnownBadInputsRuleSet": [
+      "JavaDeserializationRCE_HEADER",
+      "JavaDeserializationRCE_BODY",
+      "JavaDeserializationRCE_URIPATH",
+      "JavaDeserializationRCE_QUERYSTRING",
+      "Host_localhost_HEADER",
+      "PROPFIND_METHOD",
+      "ExploitablePaths_URIPATH",
+      "Log4JRCE_HEADER",
+      "Log4JRCE_QUERYSTRING",
+      "Log4JRCE_BODY",
+      "Log4JRCE_URIPATH",
+      "ReactJSRCE_BODY"
+    ],
+    "AWSManagedRulesSQLiRuleSet": [
+      "SQLi_QUERYARGUMENTS",
+      "SQLiExtendedPatterns_QUERYARGUMENTS",
+      "SQLi_BODY",
+      "SQLiExtendedPatterns_BODY",
+      "SQLiExtendedPatterns_HEADER",
+      "SQLiExtendedPatterns_URIPATH",
+      "SQLi_COOKIE",
+      "SQLi_URIPATH"
+    ],
+    "AWSManagedRulesAmazonIpReputationList": [
+      "AWSManagedIPReputationList",
+      "AWSManagedReconnaissanceList",
+      "AWSManagedIPDDoSList"
+    ],
+    "AWSManagedRulesAnonymousIpList": [
+      "AnonymousIPList",
+      "HostingProviderIPList"
+    ],
+    "default_count": [
+      "AWSManagedIPDDoSList"
+    ],
+    "rule_defaults": {
+      "_comment": "Non-Block defaults (references/bot-control.md)",
+      "TGT_TokenAbsent": "count",
+      "TGT_VolumetricIpTokenAbsent": "challenge"
+    }
   }
 }

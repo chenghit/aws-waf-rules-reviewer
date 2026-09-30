@@ -28,12 +28,12 @@ TEXT = {
            "token": "valid token / no match", "allowed": "✅ Allowed", "blocked": "🚫 Blocked",
            "non_browser": "non-browser → Blocked", "default": "Default action",
            "scope": "Scope-down", "overrides": "Overrides", "labels": "Adds labels",
-           "uses": "Uses label", "from": "from", "issues": "Issues"},
+           "uses": "Uses label", "from": "from", "issues": "Issues", "match": "match"},
     "zh": {"flow": "规则执行流程", "request": "请求", "no_match": "未匹配",
            "token": "token 有效 / 未匹配", "allowed": "✅ 放行", "blocked": "🚫 拦截",
            "non_browser": "非浏览器 → 等于拦截", "default": "默认动作",
            "scope": "Scope-down", "overrides": "Override", "labels": "添加标签",
-           "uses": "使用标签", "from": "来自", "issues": "相关问题"},
+           "uses": "使用标签", "from": "来自", "issues": "相关问题", "match": "命中"},
 }
 
 ACTION_NAMES = {"managed_default": "Managed", "allow": "Allow", "block": "Block", "count": "Count",
@@ -320,6 +320,11 @@ def _flow(summary: dict, annotations: dict, deps: list, issues: set, T: dict) ->
         exit_ = {"allow": T["allowed"], "block": T["blocked"]}.get(act)
         if act in ("challenge", "captcha"):
             exit_ = T["non_browser"]
+        elif mg and act == "managed_default":
+            # Block by default, plus the terminating actions its overrides set
+            acts = ["Block"] + [ACTION_NAMES[a] for a in ("challenge", "captcha", "allow")
+                                if any(o["action"] == a for o in mg.get("overrides", []))]
+            exit_ = f'{T["match"]}: {" / ".join(acts)}'
         parts.append(f'<div class="frow">{node}'
                      + (f'<div class="fexit">→ <b>{exit_}</b></div>' if exit_ else "") + "</div>")
         parts.append(f'<div class="farrow">'

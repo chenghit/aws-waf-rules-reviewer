@@ -29,14 +29,27 @@ CONTENT_GROUPS = {
     "AWSManagedRulesPHPRuleSet", "AWSManagedRulesWordPressRuleSet",
     "AWSManagedRulesAdminProtectionRuleSet",
 }
-# Rule overrides to Count that are common, deliberate practice
-ACCEPTED_COUNT_OVERRIDES = {"SizeRestrictions_BODY"}
+# IP list groups whose default-Block rules shouldn't sit in Count either
+IP_LIST_GROUPS = {"AWSManagedRulesAmazonIpReputationList", "AWSManagedRulesAnonymousIpList"}
+# Rule overrides to Count that are common, deliberate practice, or the default
+ACCEPTED_COUNT_OVERRIDES = {"SizeRestrictions_BODY", "HostingProviderIPList", "AWSManagedIPDDoSList"}
 # AWS does not version the IP reputation groups
 UNVERSIONED_GROUPS = {"AWSManagedRulesAmazonIpReputationList", "AWSManagedRulesAnonymousIpList"}
 DECODE_TRANSFORMS = {"URL_DECODE", "URL_DECODE_UNI"}
+# Fields that pick which request is sent, not what it carries. Dropping a
+# condition on them means attacking a different target, not skipping a check.
+TARGET_FIELDS = {"uri_path", "single_header:host", "method"}
+# Browser signals a Challenge can't be solved for (prefetch), exempted on purpose
+BROWSER_SIGNAL_FIELDS = {"single_header:sec-purpose", "single_header:purpose", "single_header:x-purpose"}
+RATE_IP_KEYS = {"ip", "forwarded_ip"}
+REGEX_META = set(".^$*+?()[]{}|\\")
 CASE_TRANSFORMS = {"LOWERCASE", "UPPERCASE"}
 
 LABELS = json.loads((Path(__file__).parent / "managed-labels.json").read_text(encoding="utf-8"))
+# Official User-Agent strings of common crawlers, to catch name patterns they never send
+_UA_FILE = Path(__file__).parent / "crawler-uas.json"
+CRAWLERS = {k: v for k, v in json.loads(_UA_FILE.read_text(encoding="utf-8")).items()
+            if not k.startswith("_")} if _UA_FILE.exists() else {}
 
 
 def _leaves(rule: dict, include_scope_down: bool = False) -> list:
@@ -210,7 +223,7 @@ def _check_count_without_labels(rules: list) -> dict:
     flagged = []
     for r in rules:
         if (r["action"] == "count" and r["type"] in ("custom", "rate_based")
-                and not r.get("rule_labels")):
+                and not r.get("rule_labels") and not (r.get("action_handling") or {}).get("insert_headers")):
             flagged.append({"name": r["name"], "priority": r["priority"]})
 
     if flagged:
@@ -328,20 +341,284 @@ def _check_path_block_decoding(rules: list) -> dict:
     the raw path, so percent-encoded variants of a blocked path slip through."""
     flagged = []
     for r in rules:
-        if r["type"] != "custom" or r["action"] != "block":
+        # Block rules, and rate limits whose scope-down picks the paths they count
+        if not ((r["type"] == "custom" and r["action"] == "block")
+                or (r["type"] == "rate_based" and r["action"] != "count")):
             continue
-        path = [l for l in _leaves(r) if l["field"] == "uri_path" and not l["negated"]
+        path = [l for l in _leaves(r, include_scope_down=True) if l["field"] == "uri_path" and not l["negated"]
                 and l["type"] in ("byte_match", "regex_match", "regex_pattern_set")]
         no_decode = [l for l in path if not DECODE_TRANSFORMS & set(l["transforms"])]
         if not no_decode:
             continue
         transforms = sorted({"+".join(l["transforms"]) or "NONE" for l in no_decode})
         case_sensitive = any(not CASE_TRANSFORMS & set(l["transforms"]) for l in no_decode)
-        flagged.append(dict(_ref(r), transforms=transforms, case_sensitive=case_sensitive))
+        flagged.append(dict(_ref(r), transforms=transforms, case_sensitive=case_sensitive, type=r["type"]))
     if flagged:
         return {"status": "FAIL", "rules": flagged,
-                "finding": "Path Block rules without URL_DECODE: " +
+                "finding": "Path Block or rate rules without URL_DECODE: " +
                            ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _has_opaque_value(value: str) -> bool:
+    """A random-looking value (hash, UUID, token, key): an intended secret, not
+    an exemption. Token alphabet only, with both letters and digits."""
+    return (len(value) >= 16 and bool(re.fullmatch(r"[A-Za-z0-9+/=_-]+", value))
+            and bool(re.search(r"[0-9]", value)) and bool(re.search(r"[A-Za-z]", value)))
+
+
+def _allow_sources(rules: list) -> list:
+    """Rules that can end evaluation with Allow: Allow rules, and managed rule
+    groups with a rule overridden to Allow."""
+    return [r for r in rules if r["action"] == "allow" or any(
+        o.get("action") == "allow" for o in (r.get("managed") or {}).get("overrides", []))]
+
+
+def _check_forgeable_exemptions(web_acl: dict, rules: list) -> dict:
+    """Rules that skip requests carrying something any client can send, e.g. a
+    scope-down NOT(body CONTAINS 'x') or NOT(User-Agent matches crawler names).
+    Sending that value skips the protection on any path. On CloudFront the Host
+    header picks the distribution's site; behind an ALB any Host reaches the
+    default listener rule, so a Host exemption counts there."""
+    targets = TARGET_FIELDS if web_acl.get("scope") != "REGIONAL" else TARGET_FIELDS - {"single_header:host"}
+    default_block = web_acl.get("default_action") == "block"
+    allows = _allow_sources(rules)
+    copies = _duplicate_copies(rules)
+    flagged = []
+    for r in rules:
+        if (r["type"] == "custom" and r["action"] == "allow") or r["name"] in copies:
+            continue
+        cond = _match_condition(r)
+        branches = _branches(cond) if cond else None
+        if not branches:
+            continue
+        # The request escapes when it breaks every branch; a free escape breaks
+        # each branch through a negated condition the client can satisfy
+        escapes = []
+        for b in branches:
+            l = next((l for l in b if l["negated"] and _is_forgeable(l) and l["field"] not in targets
+                      and not _has_opaque_value(str(l["value"]))), None)
+            if not l:
+                break
+            if l not in escapes:
+                escapes.append(l)
+        else:
+            # What skipping it changes: nothing yet for a Count rule; nothing in a
+            # default-Block ACL unless a later rule can still Allow the request
+            if r["action"] == "count":
+                # A Count+Label rule acts through its label: skipping it skips its consumers
+                impact = "label" if r.get("rule_labels") else "count"
+            elif default_block and not any(a["priority"] > r["priority"] for a in allows):
+                impact = "default_block"
+            elif all(l["field"] in BROWSER_SIGNAL_FIELDS for l in escapes):
+                impact = "browser_signal"
+            else:
+                impact = "bypass"
+            flagged.append(dict(_ref(r), type=r["type"], action=r["action"], impact=impact,
+                                where="scope_down" if r["type"] != "custom" else "statement",
+                                exemptions=[{"field": l["field"], "match": l["match"], "value": l["value"]}
+                                            for l in escapes]))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Protections that skip requests carrying a forgeable value: " +
+                           ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_noop_overrides(rules: list) -> dict:
+    """Managed rule overrides that set a rule to its default action."""
+    known = LABELS["managed_rules"]
+    special = known["rule_defaults"]
+    flagged = []
+    for r in rules:
+        mg = r.get("managed") or {}
+        rules_known = known.get(mg.get("group_name"), [])
+        noop = [(o["rule_name"], o["action"]) for o in mg.get("overrides", [])
+                if (o["rule_name"] in rules_known and o.get("action") ==
+                    ("count" if o["rule_name"] in known["default_count"] else "block"))
+                or special.get(o["rule_name"]) == o.get("action")]
+        if noop:
+            flagged.append(dict(_ref(r), group=mg["group_name"], overrides=[n for n, _ in noop],
+                                actions=[a for _, a in noop]))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Overrides that set the default action: " + ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_rate_limits(web_acl: dict, rules: list) -> dict:
+    """Rate-based rules that act as Challenge/CAPTCHA (a client with a valid
+    token passes however fast it sends), and rules whose count is shared by
+    every client that matches: CONSTANT, or custom keys without the IP."""
+    immunity = (web_acl.get("challenge_config") or {}).get("immunity_time") or 300
+    copies = _duplicate_copies(rules)
+    challenge, shared = [], []
+    for r in rules:
+        rb = r.get("rate_based")
+        if not rb or r["action"] == "count" or r["name"] in copies:
+            continue
+        if r["action"] in ("challenge", "captcha"):
+            own = (r.get("challenge_config") or {}).get("immunity_time")
+            challenge.append(dict(_ref(r), action=r["action"], limit=rb["limit"],
+                                  immunity=own or immunity))
+        keys = rb.get("custom_keys") or []
+        if rb["aggregate_key_type"] == "CONSTANT" or (
+                rb["aggregate_key_type"] == "CUSTOM_KEYS" and not any(k.split(":")[0].split("[")[0] in RATE_IP_KEYS for k in keys)):
+            # Scoped to a User-Agent: a deliberate budget per bot. It matters when the
+            # bot is a search engine crawler, whose budget forged UAs can use up; for
+            # AI and other bots that's their own problem, not an SEO one
+            ua = any(l["field"] == "single_header:user-agent" and not l["negated"]
+                     for l in (r.get("scope_down") or {}).get("leaves", []))
+            search = _hits_search_crawler(r.get("scope_down"))
+            if ua and not search:
+                continue
+            shared.append(dict(_ref(r), key=rb["aggregate_key_type"] if not keys else ", ".join(keys),
+                               limit=rb["limit"], window=rb.get("evaluation_window_sec"), crawler_budget=ua))
+    # An internet-facing ACL with no rate limit that acts per client IP
+    per_ip = [r for r in rules if r.get("rate_based") and (
+        r["rate_based"]["aggregate_key_type"] in ("IP", "FORWARDED_IP") or any(
+            k.split(":")[0].split("[")[0] in RATE_IP_KEYS for k in r["rate_based"].get("custom_keys") or []))]
+    no_ip = web_acl.get("default_action") == "allow" and not any(r["action"] != "count" for r in per_ip)
+    counted_ip = [_ref(r) for r in per_ip if r["action"] == "count"]
+    if challenge or shared or no_ip:
+        return {"status": "FAIL", "challenge": challenge, "shared": shared, "no_ip_limit": no_ip,
+                "counted_ip": counted_ip, "rules": challenge + shared + counted_ip,
+                "finding": "Rate limits that token holders pass or that share one count: " +
+                           ", ".join(dict.fromkeys(x["name"] for x in challenge + shared))}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_unused_labels(rules: list) -> dict:
+    """Labels a rule adds that no rule matches: a Count+Label rule that ends in nothing."""
+    keys = [l for r in rules for l in _leaves(r, include_scope_down=True) if l["type"] == "label_match"]
+    copies = _duplicate_copies(rules)
+    flagged = []
+    for r in rules:
+        if r["name"] in copies:
+            continue
+        unused = [lbl for lbl in r.get("rule_labels", [])
+                  if not any(_produces(lbl, str(k["value"]), k["match"]) for k in keys)]
+        if unused:
+            flagged.append(dict(_ref(r), action=r["action"], labels=unused))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Labels no rule matches: " + ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_security_automations(rules: list) -> dict:
+    """Rules or IP sets from Security Automations for AWS WAF, which AWS retires in December 2026."""
+    flagged = [dict(_ref(r)) for r in rules if "SecurityAutomations" in r["name"] or any(
+        "SecurityAutomations" in str(l["value"]) for l in _leaves(r, include_scope_down=True)
+        if l["type"] in ("ip_set", "regex_pattern_set"))]
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Security Automations resources: " + ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _dead_patterns(leaf: dict) -> list:
+    """Patterns that can never match because a LOWERCASE/UPPERCASE transform
+    removed the letter case they spell out."""
+    case = next((t for t in reversed(leaf["transforms"]) if t in CASE_TRANSFORMS), None)
+    if not case or leaf["value"] is None or leaf["type"] not in ("byte_match", "regex_match"):
+        return []
+    wrong = r"[A-Z]" if case == "LOWERCASE" else r"[a-z]"
+    if leaf["type"] == "byte_match":
+        return [leaf["value"]] if re.search(wrong, str(leaf["value"])) else []
+    regex = str(leaf["value"])
+    if regex.startswith("(?i)"):
+        return []
+    dead = []
+    for part in _split_regex_branches(regex):
+        literal = re.sub(r"\\.|\[[^\]]*\]|\{[^}]*\}", "", part)  # escapes, classes, counts
+        if re.search(wrong, literal):
+            dead.append(part)
+    return dead
+
+
+def _apply_case(text: str, transforms: list) -> str:
+    case = next((t for t in reversed(transforms) if t in CASE_TRANSFORMS), None)
+    return text.lower() if case == "LOWERCASE" else text.upper() if case == "UPPERCASE" else text
+
+
+def _leaf_matches(leaf: dict, text: str) -> bool:
+    """Whether a byte or regex match leaf matches text, after its case transform."""
+    text, v = _apply_case(text, leaf["transforms"]), str(leaf["value"])
+    try:
+        if leaf["type"] == "regex_match":
+            return bool(re.search(v, text))
+    except re.error:
+        return False
+    return {"CONTAINS": v in text, "EXACTLY": v == text, "STARTS_WITH": text.startswith(v),
+            "ENDS_WITH": text.endswith(v)}.get(leaf["match"], False)
+
+
+def _hits_search_crawler(scope: dict | None) -> bool:
+    """A User-Agent scope-down that matches a search engine crawler's published UA."""
+    ua = [l for l in (scope or {}).get("leaves", []) if l["field"] == "single_header:user-agent"
+          and not l["negated"] and l["type"] in ("byte_match", "regex_match")]
+    return any(_leaf_matches(l, u) for l in ua for info in CRAWLERS.values() for u in info.get("uas", []))
+
+
+def _crawler_dead(leaf: dict, skip: list) -> list:
+    """User-Agent patterns that name a known crawler but match none of the
+    User-Agents it publishes, e.g. `bingbot.html` (Bingbot sends `bingbot.htm`),
+    or a robots.txt-only token such as `googlebot-news`. (pattern, family, kind)."""
+    if leaf["field"] != "single_header:user-agent" or leaf["value"] is None:
+        return []
+    if leaf["type"] == "regex_match":
+        parts = _split_regex_branches(str(leaf["value"]))
+    elif leaf["type"] == "byte_match" and leaf["match"] in ("CONTAINS", "EXACTLY", "STARTS_WITH", "ENDS_WITH"):
+        parts = [str(leaf["value"])]
+    else:
+        return []
+    out = []
+    for part in parts:
+        if part in skip:
+            continue
+        low = part.lower()
+        for fam, info in CRAWLERS.items():
+            robots = [t for t in info.get("robots_only", []) if t in low]
+            # Judge a name only if some published UA carries it; the operator may not publish every UA
+            named = [t for t in info.get("tokens", []) if t in low
+                     and any(t in u.lower() for u in info.get("uas", []))]
+            if not robots and not named:
+                continue
+            uas = [_apply_case(u, leaf["transforms"]) for u in info.get("uas", [])]
+            try:
+                if leaf["type"] == "regex_match":
+                    hit = any(re.search(part, u) for u in uas)
+                else:
+                    hit = any({"CONTAINS": part in u, "EXACTLY": part == u,
+                               "STARTS_WITH": u.startswith(part), "ENDS_WITH": u.endswith(part)}[leaf["match"]]
+                              for u in uas)
+            except re.error:
+                break
+            if not hit:
+                out.append((part, fam, "robots" if robots else "ua"))
+            break
+    return out
+
+
+def _check_dead_patterns(rules: list) -> dict:
+    """Patterns no request can match: a letter case a LOWERCASE/UPPERCASE
+    transform removed, or a crawler name the crawler doesn't send that way."""
+    flagged = []
+    for r in rules:
+        for l in _leaves(r, include_scope_down=True):
+            dead = _dead_patterns(l)
+            crawler = _crawler_dead(l, dead)
+            if not dead and not crawler:
+                continue
+            total = 1 if l["type"] == "byte_match" else len(_split_regex_branches(str(l["value"])))
+            flagged.append(dict(_ref(r), action=r["action"], field=l["field"], negated=l["negated"],
+                                transform=next((t for t in reversed(l["transforms"]) if t in CASE_TRANSFORMS), None),
+                                dead=dead, crawler=[{"pattern": p, "family": f, "kind": k} for p, f, k in crawler],
+                                whole=len(dead) + len(crawler) >= total))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Patterns that can never match: " + ", ".join(dict.fromkeys(f["name"] for f in flagged))}
     return {"status": "PASS", "finding": None}
 
 
@@ -357,13 +634,20 @@ def _check_managed_count(rules: list) -> dict:
         if r["action"] == "count":
             groups.append(dict(_ref(r), group=gn))
             continue
-        if gn not in CONTENT_GROUPS:
+        if gn not in CONTENT_GROUPS | IP_LIST_GROUPS:
             continue
         counted = [o["rule_name"] for o in mg.get("overrides", [])
                    if o.get("action") == "count" and o["rule_name"] not in ACCEPTED_COUNT_OVERRIDES]
         counted += [e for e in mg.get("excluded_rules", []) if e not in ACCEPTED_COUNT_OVERRIDES]
         if counted:
-            overrides.append(dict(_ref(r), group=gn, overridden=counted))
+            # Rules of the latest version still blocking; empty means the group only labels
+            known = LABELS["managed_rules"].get(gn, [])
+            over = {o["rule_name"]: o.get("action") for o in mg.get("overrides", [])}
+            over.update({e: "count" for e in mg.get("excluded_rules", [])})
+            left = [x for x in known if over.get(
+                x, "count" if x in LABELS["managed_rules"]["default_count"] else "block") in ("block", "challenge", "captcha")]
+            overrides.append(dict(_ref(r), group=gn, overridden=counted, group_versioned=gn not in UNVERSIONED_GROUPS,
+                                  still_blocking=left if known and len(left) <= 2 else None))
     if groups or overrides:
         return {"status": "FAIL", "groups": groups, "overrides": overrides,
                 "rules": groups + overrides,
@@ -401,9 +685,11 @@ def _label_producers(rules: list) -> list:
             gn = mg.get("group_name", "")
             producers += [(pfx, r) for pfx, g in prefixes.items() if g == gn]
             if gn in token_groups:
-                producers.append(("awswaf:managed:token:", r))
+                producers += [(pfx, r) for pfx in LABELS["token_label_prefixes"]]
+        # AWS documents token labels only for the groups above; a Challenge or
+        # CAPTCHA action may add them too, so don't call such labels unreachable
         if r["action"] in ("challenge", "captcha"):
-            producers.append(("awswaf:managed:token:", r))
+            producers += [(pfx, r) for pfx in LABELS["token_label_prefixes"]]
     return producers
 
 
@@ -413,6 +699,70 @@ def _produces(label: str, key: str, scope: str) -> bool:
     if label.endswith(":"):  # managed namespace prefix
         return key.startswith(label)
     return key == label or key.endswith(":" + label)
+
+
+def _duplicate_copies(rules: list) -> set:
+    """Names of the later copies of identical rules, reported by the duplicate check."""
+    return {x["name"] for g in _check_duplicate_rules(rules).get("groups", []) for x in g[1:]}
+
+
+def _label_may_come_from_elsewhere(key: str, rules: list) -> bool:
+    """True if a label nobody in this ACL adds could still come from a source
+    the scripts can't see: a referenced rule group, or a managed group whose
+    label namespace isn't in managed-labels.json."""
+    known = set(LABELS["managed_label_prefixes"].values()) | set(LABELS["token_label_producers"])
+    for r in rules:
+        if r.get("statement", {}).get("summary", "").startswith("rule_group"):
+            return True
+        mg = r.get("managed")
+        if mg and key.startswith("awswaf:managed:") and mg.get("group_name") not in known:
+            return True
+    return False
+
+
+def _match_condition(rule: dict) -> dict | None:
+    """The condition a request must meet for the rule to act on it: the
+    scope-down for rate-based and managed rules, the statement otherwise."""
+    if rule["type"] in ("rate_based", "managed_rule_group"):
+        return rule.get("scope_down")
+    return rule.get("statement")
+
+
+def _contains_literals(leaf: dict, partial: bool = False) -> list | None:
+    """Substrings of which the leaf matches any one, for a CONTAINS byte match
+    or an unanchored regex of plain alternatives; None for anything else.
+    partial: keep just the plain alternatives of a regex that also has others.
+    Containing one of those still means the regex matches."""
+    if leaf["type"] == "byte_match" and leaf["match"] == "CONTAINS":
+        return [str(leaf["value"])]
+    if leaf["type"] == "regex_match":
+        parts = _split_regex_branches(str(leaf["value"]))
+        plain = [p for p in parts if p and not (set(p) & REGEX_META)]
+        if len(plain) == len(parts) or (partial and plain):
+            return plain
+    return None
+
+
+def _leaf_implies(b: dict, a: dict) -> bool:
+    """Every request matching leaf b also matches leaf a."""
+    if (b["field"], b["transforms"], b["negated"]) != (a["field"], a["transforms"], a["negated"]):
+        return False
+    if (b["type"], b["match"], b["value"]) == (a["type"], a["match"], a["value"]):
+        return True
+    if b["negated"]:
+        return False
+    need = _contains_literals(a, partial=True)
+    if need is None:
+        return False
+    have = _contains_literals(b)
+    if have is None and b["type"] == "byte_match" and b["match"] in ("EXACTLY", "STARTS_WITH", "ENDS_WITH"):
+        have = [str(b["value"])]
+    return have is not None and all(any(n in h for n in need) for h in have)
+
+
+def _branch_implies(b: list, a: list) -> bool:
+    """Every request meeting all of branch b also meets all of branch a."""
+    return bool(a) and all(any(_leaf_implies(lb, la) for lb in b) for la in a)
 
 
 def _check_order_issues(web_acl: dict, rules: list) -> dict:
@@ -431,6 +781,31 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
             if makers and all(p["priority"] > r["priority"] for p in makers):
                 issues.append({"kind": "label_before_producer", "rule": _ref(r),
                                "label": l["value"], "producers": [_ref(p) for p in makers]})
+            elif not makers and not _label_may_come_from_elsewhere(l["value"], ordered):
+                issues.append({"kind": "label_no_producer", "rule": _ref(r), "label": l["value"]})
+
+    # Rules that no request reaches: an earlier Allow or Block ends every match.
+    # Later copies of identical rules are the duplicate check's finding.
+    copies = _duplicate_copies(rules)
+    for i, r in enumerate(ordered):
+        if r["name"] in copies:
+            continue
+        cond = _match_condition(r)
+        branches = _branches(cond) if cond else None
+        if not branches or any(not b for b in branches):
+            continue
+        earlier = [a for a in ordered[:i] if a["type"] == "custom" and a["action"] in ("allow", "block")]
+        stoppers = []
+        for b in branches:
+            a = next((a for a in earlier if any(_branch_implies(b, ab) for ab in _branches(a["statement"]) or [])), None)
+            if not a:
+                break
+            if a not in stoppers:
+                stoppers.append(a)
+        else:
+            issues.append({"kind": "unreachable", "rule": _ref(r), "rule_action": r["action"],
+                           "stoppers": [_ref(a) for a in stoppers],
+                           "actions": sorted({a["action"] for a in stoppers})})
 
     # IP block list evaluated after Allow rules
     # Anything that can end evaluation with Allow: Allow rules, and managed
@@ -469,6 +844,14 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
                 issues.append({"kind": "inspection_after_allow", "rule": _ref(r),
                                "group": mg["group_name"], "allows": [_ref(a) for a in before]})
 
+    # Default-Block ACL: after the last Allow, every request ends in Block anyway
+    if web_acl.get("default_action") == "block" and allows:
+        last = max(a["priority"] for a in allows)
+        inert = [r for r in ordered if r["priority"] > last and not (
+            (r.get("managed") or {}).get("group_name") in CONTENT_GROUPS and r["action"] != "count")]
+        for x in inert:
+            issues.append({"kind": "after_last_allow", "rule": _ref(x), "later": [_ref(y) for y in inert]})
+
     # Bot Control charges per inspected request; later blocking rules waste that
     bot = next((r for r in ordered if "BotControl" in (r.get("managed") or {}).get("group_name", "")), None)
     if bot:
@@ -502,7 +885,7 @@ def _flag_allow_rules(rules: list) -> list:
         leaves = _leaves(r)
         forgeable, unforgeable = _classify_leaves(leaves)
         attack = _attacker_branches(r["statement"])
-        safe = []
+        safe, path_branches = [], []
         if attack is None:
             all_forgeable = len(unforgeable) == 0 and len(forgeable) > 0
             blast_radius = "path_scoped" if _has_uri_constraint(leaves) else "global"
@@ -510,7 +893,17 @@ def _flag_allow_rules(rules: list) -> list:
             # One forgeable branch of an OR is enough, whatever the other branches check
             all_forgeable = bool(attack)
             if attack:
-                forgeable = _classify_leaves([l for b in attack for l in b])[0]
+                # Fields an attacker sets on any path; path-scoped branches are listed apart
+                wide = [b for b in attack if not _has_uri_constraint(b)] or attack
+                forgeable = [f for f in _classify_leaves([l for b in wide for l in b])[0] if f not in TARGET_FIELDS] \
+                    or _classify_leaves([l for b in wide for l in b])[0]
+                # Path-only branches let every request to the path through; others need forged content
+                path_branches = [{"paths": [l["value"] for l in b if l["field"] == "uri_path" and not l["negated"]],
+                                  "forged": any(_is_forgeable(l) and l["field"] not in TARGET_FIELDS for l in b),
+                                  "prefix_unnormalized": any(
+                                      l["field"] == "uri_path" and l["match"] == "STARTS_WITH"
+                                      and "NORMALIZE_PATH" not in l["transforms"] for l in b)}
+                                 for b in attack if _has_uri_constraint(b)] if wide is not attack else []
                 # Unforgeable conditions in the branches an attacker can't satisfy
                 safe = _classify_leaves([l for b in _branches(r["statement"]) if b not in attack
                                          for l in b if not l["negated"]])[1]
@@ -523,6 +916,11 @@ def _flag_allow_rules(rules: list) -> list:
             "forgeable_conditions": forgeable,
             "unforgeable_conditions": unforgeable,
             "safe_conditions": safe,
+            "path_branches": path_branches,
+            # STARTS_WITH path branches without NORMALIZE_PATH also match /prefix/../elsewhere
+            "prefix_unnormalized": any(l["field"] == "uri_path" and l["match"] == "STARTS_WITH"
+                                       and "NORMALIZE_PATH" not in l["transforms"]
+                                       for b in (attack or []) for l in b),
             "all_forgeable": all_forgeable,
             "blast_radius": blast_radius,
         })
@@ -642,6 +1040,12 @@ def main():
         "bot_control_config": _check_bot_control_config(rules),
         "order_issues": _check_order_issues(web_acl, rules),
         "duplicate_rules": _check_duplicate_rules(rules),
+        "forgeable_exemptions": _check_forgeable_exemptions(web_acl, rules),
+        "dead_patterns": _check_dead_patterns(rules),
+        "noop_overrides": _check_noop_overrides(rules),
+        "rate_limits": _check_rate_limits(web_acl, rules),
+        "unused_labels": _check_unused_labels(rules),
+        "security_automations": _check_security_automations(rules),
     }
 
     # Build flags

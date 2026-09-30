@@ -69,10 +69,12 @@ def _extract_impact(report: str, issue_number: int) -> str:
     if not lines:
         return ""
     impact = re.sub(r'^[-•*]\s*', '', lines[0]).replace("|", "\\|")
+    impact = re.sub(r'\s*[（(](?:Critical|Medium|Low|Awareness)[)）]$', '', impact)  # per-item severity tag
     if len(impact) > 80:
         impact = impact[:77]
-        if impact.count("`") % 2:  # don't leave a code span open
-            impact += "`"
+        if impact.count("`") % 2:  # cut before a code span the limit would split
+            impact = impact[:impact.rindex("`")].rstrip()
+        impact = re.sub(r"[（(]?https?://\S*$", "", impact).rstrip()  # and before a URL
         impact += "..."
     return impact
 

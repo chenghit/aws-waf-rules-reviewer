@@ -10,7 +10,7 @@ Reads issue-rule-mapping.json (written by LLM in Step 4):
 
 Outputs:
   {output_dir}/mermaid-final.md — annotated diagram
-  Appends "## Appendix: Rule Execution Flow" (Chinese heading for --lang zh) to waf-review-report.md
+  Appends "# Appendix" with "## Appendix: Rule Execution Flow" first (Chinese headings for --lang zh) to waf-review-report.md
 """
 import json
 import os
@@ -235,13 +235,14 @@ def _write_appendix(report_path: str, mermaid_text: str, output_dir: str):
         report = report[:start].rstrip() + "\n" + tail.lstrip("\n")
     meta_path = work_path(output_dir, "findings-metadata.json")
     zh = os.path.isfile(meta_path) and json.loads(Path(meta_path).read_text(encoding="utf-8")).get("lang") == "zh"
-    heading = "附录：规则执行流程" if zh else "Appendix: Rule Execution Flow"
+    top, heading = ("附录", "附录：规则执行流程") if zh else ("Appendix", "Appendix: Rule Execution Flow")
     # The last Issue already ends with ---; don't add a second rule
     sep = "" if report.rstrip().endswith("---") else "\n---\n"
-    block = f"{sep}\n## {heading}\n\n{mermaid_text}"
+    # One H1 for the whole appendix, the diagram first under it
+    block = f"{sep}\n# {top}\n\n## {heading}\n\n{mermaid_text}"
     appendix_path = work_path(output_dir, "appendix.md")
     if os.path.isfile(appendix_path):
-        block += Path(appendix_path).read_text(encoding="utf-8")
+        block += re.sub(r"^# .*\n\n?", "", Path(appendix_path).read_text(encoding="utf-8"), count=1, flags=re.M)
     report = report.rstrip() + f"\n\n{APPENDIX_START}{block}\n{APPENDIX_END}\n"
     Path(report_path).write_text(report, encoding="utf-8")
 

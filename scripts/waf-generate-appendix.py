@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Generate fixed appendix content for WAF review reports.
 
-All appendix sections are always written. The LLM decides which to reference.
-Only dynamic value: WCU capacity from waf-summary.json.
+The LLM decides which sections to reference. Dynamic parts: WCU capacity from
+waf-summary.json, and Appendix B/C (Anti-DDoS patterns) only for Web ACLs that
+have Anti-DDoS AMR or face the internet with a default Allow. Letters stay
+fixed so references don't shift.
 """
 
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from waf_utils import fatal, work_path
@@ -136,7 +139,7 @@ Recommended token immunity time: ≥ 4 hours (14400 seconds). Real users complet
 
 | Position | Rule Type | Rationale |
 |----------|-----------|-----------|
-| 1 | IP whitelist (Allow) | Trusted IPs bypass all rules |
+| 1 | IP whitelist (Allow, IP sets only) | Trusted IPs bypass all rules |
 | 2 | IP blacklist (Block) | Known malicious IPs blocked immediately |
 | 3 | Count+Label rules | Tag traffic types for downstream scope-down |
 | 4 | AntiDDoS AMR | Needs full traffic for accurate baseline |
@@ -149,6 +152,8 @@ Recommended token immunity time: ≥ 4 hours (14400 seconds). Real users complet
 | 11 | Bot Control / ATP / ACFP | Per-request pricing, place last |
 
 Key principles: label producers before consumers, AntiDDoS AMR as early as possible, cheaper rules before expensive ones.
+
+This order is for a Web ACL that allows by default. When the default action is Block, the Allow rules are the way in: put content inspection groups (position 10) ahead of them, or they only see traffic that is blocked anyway.
 
 ---
 
@@ -301,7 +306,7 @@ token 免疫时间建议至少 4 小时（14400 秒）。真实用户完成一�
 
 | 位置 | 规则类型 | 原因 |
 |------|----------|------|
-| 1 | IP 白名单（Allow） | 可信 IP 跳过所有规则 |
+| 1 | IP 白名单（Allow，只用 IP set） | 可信 IP 跳过所有规则 |
 | 2 | IP 黑名单（Block） | 已知恶意 IP 直接拦截 |
 | 3 | Count+Label 规则 | 给流量打标签，供后面的规则做 scope-down |
 | 4 | AntiDDoS AMR | 要看到全部流量才能建准基线 |
@@ -314,6 +319,8 @@ token 免疫时间建议至少 4 小时（14400 秒）。真实用户完成一�
 | 11 | Bot Control / ATP / ACFP | 按请求数收费，放在最后 |
 
 原则：产生标签的规则放在使用标签的规则前面，AntiDDoS AMR 尽量靠前，便宜的规则放在贵的前面。
+
+这个顺序针对默认 Allow 的 Web ACL。默认 Block 时，Allow 规则就是入口：内容检测规则组（第 10 位）要放到它们前面，否则只能检查到本来就会被拦的流量。
 
 ---
 
@@ -352,9 +359,13 @@ def main():
     # Read WCU from summary
     wcu_text = ("导出文件里没有 WCU 容量，添加规则前请在 AWS 控制台确认。" if zh else
                 "WCU capacity unknown (not in export JSON). Verify in AWS Console before adding rules.")
+    ddos = True
     if os.path.isfile(summary_path):
         try:
             summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+            ddos = summary.get("web_acl", {}).get("default_action") != "block" or any(
+                (r.get("managed") or {}).get("group_name") == "AWSManagedRulesAntiDDoSRuleSet"
+                for r in summary.get("rules", []))
             capacity = summary.get("web_acl", {}).get("capacity")
             if capacity is not None:
                 wcu_text = (f"当前 WCU：**{capacity}** / 5000。" if zh else
@@ -365,6 +376,10 @@ def main():
     # Template braces are escaped as {{ }} for readability; undo after substitution
     content = ((APPENDIX_SECTIONS_ZH if zh else APPENDIX_SECTIONS).replace("{wcu_text}", wcu_text)
                .replace("{{", "{").replace("}}", "}"))
+    if not ddos:
+        # Drop B and C with the rule that follows each
+        content = re.sub(r"^## (?:Appendix|附录) [BC][:：].*?(?=^## )", "", content, flags=re.M | re.S)
+    sections = len(re.findall(r"^## (?:Appendix|附录) [A-F]", content, re.M))
 
     output_file = work_path(output_dir, "appendix.md")
     try:
@@ -372,12 +387,12 @@ def main():
     except OSError as e:
         fatal(f"Failed to write {output_file}: {e}")
 
-    print("Generated appendix with 6 sections", file=sys.stderr)
+    print(f"Generated appendix with {sections} sections", file=sys.stderr)
     print("---RESULT---")
     print("SPEC: 1")
     print("STATUS: OK")
     print(f"OUTPUT_FILE: {output_file}")
-    print("SECTIONS: 6")
+    print(f"SECTIONS: {sections}")
 
 
 if __name__ == "__main__":

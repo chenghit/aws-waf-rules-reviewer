@@ -24,7 +24,7 @@ def _load_managed_labels() -> dict:
     p = SCRIPTS_DIR / "managed-labels.json"
     if not p.exists():
         return {"label_producers": {}, "managed_label_prefixes": {},
-                "shared_token_labels": [], "token_label_producers": []}
+                "token_label_prefixes": [], "token_label_producers": []}
     return json.loads(p.read_text(encoding="utf-8"))
 
 def _find_label_refs_in_statement(stmt_summary: str) -> list[str]:
@@ -67,15 +67,11 @@ def _resolve_label_producers(label: str, rules: list, managed_labels: dict) -> l
                     producers.append(r["name"])
     if producers:
         return producers
-    # Check shared token labels
-    for tl in managed_labels.get("shared_token_labels", []):
-        if label == tl or label.startswith(tl + ":"):
-            for producer_group in managed_labels.get("token_label_producers", []):
-                for r in rules:
-                    mg = r.get("managed", {})
-                    if mg.get("group_name") == producer_group:
-                        producers.append(r["name"])
-            break
+    # Token and CAPTCHA labels: only the intelligent threat mitigation groups
+    # are documented to add them, so the diagram draws only those
+    if any(label.startswith(p) for p in managed_labels.get("token_label_prefixes", [])):
+        groups = set(managed_labels.get("token_label_producers", []))
+        producers = [r["name"] for r in rules if r.get("managed", {}).get("group_name") in groups]
     return producers
 
 def _build_label_dependencies(rules: list, managed_labels: dict) -> list[dict]:
@@ -102,6 +98,41 @@ def _safe_id(priority: int) -> str:
 def _escape_mermaid(text: str) -> str:
     """Escape characters that break Mermaid syntax."""
     return text.replace('"', "'").replace("\n", "\\n")
+
+def _short_label(label: str) -> str:
+    """Last non-empty segment: a namespace like `...:bot-control:bot:` ends in ':'."""
+    short = next((p for p in reversed(label.split(":")) if p), label)
+    return short[:27] + "..." if len(short) > 30 else short
+
+def _managed_exit(rule: dict) -> str | None:
+    """Terminating actions a managed rule group can take on a match: Block by
+    default, plus whatever its overrides set. None when the group is in Count."""
+    mg = rule.get("managed")
+    if not mg or rule["action"] != "managed_default":
+        return None
+    acts = ["Block"] + [a for a in ("Challenge", "CAPTCHA", "Allow")
+                        if any(o["action"] == a.lower() for o in mg.get("overrides", []))]
+    return " / ".join(acts)
+
+def _exit_lines(rid: str, rule: dict) -> list:
+    if rule["action"] == "allow":
+        return [f'    {rid} -->|"Allow"| ALLOW_{rid}["✅ Allowed"]']
+    if rule["action"] == "block":
+        return [f'    {rid} -->|"Block"| BLOCK_{rid}["🚫 Blocked"]']
+    if rule["action"] in ("challenge", "captcha"):
+        act = "Challenge" if rule["action"] == "challenge" else "CAPTCHA"
+        return [f'    {rid} -->|"non-browser → {act} = Block"| BLOCK_{rid}["🚫 Blocked"]']
+    exit_ = _managed_exit(rule)
+    if exit_:
+        return [f'    {rid} -->|"match → {exit_}"| EXIT_{rid}["⛔ {exit_}"]']
+    return []
+
+def _next_label(rule: dict | None) -> str:
+    if rule and rule["action"] in ("allow", "block"):
+        return '|"no match"| '
+    if rule and rule["action"] in ("challenge", "captcha"):
+        return '|"valid token / no match"| '
+    return ""
 
 def _short_action(action: str) -> str:
     return {"managed_default": "Managed", "allow": "Allow", "block": "Block",
@@ -205,31 +236,16 @@ def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
         lines.append(f'    {rid}{ob}{label}{cb}')
 
         # Terminating action branches
-        if r["action"] == "allow":
-            lines.append(f'    {rid} -->|"Allow"| ALLOW_{rid}["✅ Allowed"]')
-        elif r["action"] == "block":
-            lines.append(f'    {rid} -->|"Block"| BLOCK_{rid}["🚫 Blocked"]')
-        elif r["action"] in ("challenge", "captcha"):
-            act = "Challenge" if r["action"] == "challenge" else "CAPTCHA"
-            lines.append(f'    {rid} -->|"non-browser → {act} = Block"| BLOCK_{rid}["🚫 Blocked"]')
+        lines += _exit_lines(rid, r)
 
-        # Flow to next rule
-        if i < len(rules) - 1:
-            next_rid = _safe_id(rules[i + 1]["priority"])
-            if r["action"] in ("allow", "block"):
-                lines.append(f'    {rid} -->|"no match"| {next_rid}')
-            elif r["action"] in ("challenge", "captcha"):
-                lines.append(f'    {rid} -->|"valid token / no match"| {next_rid}')
-            else:
-                lines.append(f'    {rid} --> {next_rid}')
+        # Flow to next rule; requests nothing stopped reach the default action
+        next_rid = _safe_id(rules[i + 1]["priority"]) if i < len(rules) - 1 else "DEFAULT_ACTION"
+        lines.append(f'    {rid} -->{_next_label(r)}{next_rid}')
         lines.append("")
 
     # Default action
-    last_rid = _safe_id(rules[-1]["priority"])
     da = "✅ Allowed" if default_action == "allow" else "🚫 Blocked"
     lines.append(f'    DEFAULT_ACTION["{da}\\nDefault Action: {default_action}"]')
-    if rules[-1]["action"] not in ("allow", "block"):
-        lines.append(f'    {last_rid} --> DEFAULT_ACTION')
 
     # Label dependency arrows (dashed)
     lines.append("")
@@ -237,10 +253,7 @@ def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
         prod_rule = next((r for r in rules if r["name"] == dep["producer"]), None)
         cons_rule = next((r for r in rules if r["name"] == dep["consumer"]), None)
         if prod_rule and cons_rule:
-            short_label = dep["label"].split(":")[-1] if ":" in dep["label"] else dep["label"]
-            if len(short_label) > 30:
-                short_label = short_label[:27] + "..."
-            lines.append(f'    {_safe_id(prod_rule["priority"])} -.->|"{short_label}"| {_safe_id(cons_rule["priority"])}')
+            lines.append(f'    {_safe_id(prod_rule["priority"])} -.->|"{_short_label(dep["label"])}"| {_safe_id(cons_rule["priority"])}')
 
     return "\n".join(lines)
 
@@ -278,13 +291,7 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
         lines.append(f'    {rid}{ob}{label}{cb}')
         node_order.append(rid)
 
-        if r["action"] == "allow":
-            lines.append(f'    {rid} -->|"Allow"| ALLOW_{rid}["✅ Allowed"]')
-        elif r["action"] == "block":
-            lines.append(f'    {rid} -->|"Block"| BLOCK_{rid}["🚫 Blocked"]')
-        elif r["action"] in ("challenge", "captcha"):
-            act = "Challenge" if r["action"] == "challenge" else "CAPTCHA"
-            lines.append(f'    {rid} -->|"non-browser → {act} = Block"| BLOCK_{rid}["🚫 Blocked"]')
+        lines += _exit_lines(rid, r)
 
         i += 1
         lines.append("")
@@ -294,21 +301,14 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
         curr = node_order[idx]
         nxt = node_order[idx + 1]
         # Determine link style based on current node's rule
-        curr_rule = _rule_for_node(curr, rules, fold_groups)
-        if curr_rule and curr_rule["action"] in ("allow", "block"):
-            lines.append(f'    {curr} -->|"no match"| {nxt}')
-        elif curr_rule and curr_rule["action"] in ("challenge", "captcha"):
-            lines.append(f'    {curr} -->|"valid token / no match"| {nxt}')
-        else:
-            lines.append(f'    {curr} --> {nxt}')
+        lines.append(f'    {curr} -->{_next_label(_rule_for_node(curr, rules, fold_groups))}{nxt}')
 
     # Default action
     da = "✅ Allowed" if default_action == "allow" else "🚫 Blocked"
     lines.append(f'    DEFAULT_ACTION["{da}\\nDefault Action: {default_action}"]')
     if node_order:
-        last_rule = _rule_for_node(node_order[-1], rules, fold_groups)
-        if not last_rule or last_rule["action"] not in ("allow", "block"):
-            lines.append(f'    {node_order[-1]} --> DEFAULT_ACTION')
+        last = node_order[-1]
+        lines.append(f'    {last} -->{_next_label(_rule_for_node(last, rules, fold_groups))}DEFAULT_ACTION')
 
     # Label deps
     lines.append("")
@@ -318,10 +318,7 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
         if prod_rule and cons_rule:
             prod_id = _node_id_for_rule(prod_rule, fold_groups)
             cons_id = _node_id_for_rule(cons_rule, fold_groups)
-            short_label = dep["label"].split(":")[-1] if ":" in dep["label"] else dep["label"]
-            if len(short_label) > 30:
-                short_label = short_label[:27] + "..."
-            lines.append(f'    {prod_id} -.->|"{short_label}"| {cons_id}')
+            lines.append(f'    {prod_id} -.->|"{_short_label(dep["label"])}"| {cons_id}')
 
     return "\n".join(lines)
 

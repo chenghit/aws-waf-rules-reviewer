@@ -9,13 +9,11 @@ TEMPLATES_EN = {
 **Current state**: {stmt_summary}, action Allow, no scope-down
 
 **Problem**:
-- {forgeable_fields} {is_are} fully forgeable. An attacker can add {forgeable_example} to bypass all subsequent rules (IP reputation, Bot Control, rate limiting, etc.)
+- {forgeable_fields} {is_are} fully forgeable. Any client that sends {forgeable_example} skips every later rule{skipped}
 - The blast radius is global: every path is affected, with no host or URI restriction
-{opaque_note}
+{notes}
 **Recommendation**:
-{or_rec}- Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow. The traffic doesn't need to bypass the WAF entirely
-- If the rule is for internal probes or monitoring, use an unforgeable condition (IP Set or WAF Token) instead
-{opaque_rec}
+{recs}
 ---
 """,
 "hosting_provider_allow": """## Issue {n} ({severity}): HostingProviderIPList overridden to Allow, so cloud-hosted traffic skips all later rules
@@ -255,19 +253,114 @@ TEMPLATES_EN = {
 
 ---
 """,
-"opaque_search_string": """## Issue {n} (Awareness): {rule_name} contains opaque/hash-like search_string value
+"forgeable_exemptions": """## Issue {n} ({severity}): Protections skip requests that carry a value any client can send
 
-**Rule**: {rule_name} (priority {priority})
-**Current state**: {stmt_summary}
+{rule_line}
+**Current state**: These rules leave out requests by a negated condition on request content
 
 **Problem**:
-- The match value `{value}` appears to be a shared secret, hash, or token
-- {risk_note}
-- Anyone with read access to the Web ACL configuration (including IAM users with overly broad permissions) can obtain this value
+{details}
+- The exemption doesn't depend on the path or host, so a client that adds the value skips the protection on any request
 
 **Recommendation**:
-- {rec_note}
-- Periodically rotate the value and audit IAM access to WAF configuration
+- Base the exemption on something the client can't set: an IP set, an ASN, or a label from an earlier rule that uses one
+{crawler_rec}- If it works around a false positive in a managed rule group, don't exempt in the scope-down. Override the misfiring rule to Count, then add a rule after the group that blocks its label on every path except the affected one
+- Otherwise, limit the exemption to the paths and hosts that need it
+
+---
+""",
+"dead_patterns": """## Issue {n} (Low): Patterns that can never match
+
+{rule_line}
+**Current state**: Conditions with patterns no request can match
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+
+---
+""",
+"noop_overrides": """## Issue {n} (Awareness): Rule overrides that set the default action
+
+{rule_line}
+**Current state**: Managed rules overridden to the action they already have
+
+**Problem**:
+{details}
+- These overrides change nothing. They can hide intent: a reader may think the rule was changed
+
+**Recommendation**:
+- Remove them, or note in the rule group description why they're there
+
+---
+""",
+"no_ip_rate_limit": """## Issue {n} (Medium): No rate limit acts per client IP
+
+{rule_line}
+**Current state**: This Web ACL allows by default, and no rate-based rule that counts per IP has an action other than Count
+
+**Problem**:
+- A single IP can send as many requests as it wants. Rate limits keyed by User-Agent or a constant only cover the clients they name
+{counted}
+**Recommendation**:
+- Add a per-IP rate limit on all traffic with Block, starting in Count to find the peak of real users (shared NAT and corporate egress IPs are the high end). Exempt verified crawlers with the `crawler:verified` label from Appendix A, not User-Agent strings
+
+---
+""",
+"rate_challenge": """## Issue {n} (Low): Rate limits that a Challenge token lets through
+
+{rule_line}
+**Current state**: Rate-based rules whose action is Challenge or CAPTCHA
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- Add a second rule on the same traffic with a higher limit and Block, so a client that solves the Challenge is still limited
+
+---
+""",
+"rate_shared": """## Issue {n} (Low): Rate limits where every matching client shares one count
+
+{rule_line}
+**Current state**: Rate-based rules that count by a constant or by keys without the client IP
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+---
+""",
+"unused_labels": """## Issue {n} (Awareness): Labels no rule uses
+
+{rule_line}
+**Current state**: Rules add labels that no later rule matches
+
+**Problem**:
+{details}
+- A label only matters when a later rule matches it. These show up in logs and metrics only
+
+**Recommendation**:
+- If a rule was meant to act on the label, add it after the producing rule. Otherwise the labels are fine for observation
+
+---
+""",
+"security_automations": """## Issue {n} (Awareness): Rules and IP sets from Security Automations for AWS WAF, which retires in December 2026
+
+{rule_line}
+**Current state**: These rules, or the IP sets they use, carry the Security Automations naming
+
+**Problem**:
+- AWS retires the Security Automations for AWS WAF solution in December 2026. Deployments keep running, but maintenance becomes yours
+- Deleting the solution's CloudFormation stack deletes the IP sets it created. While this Web ACL uses them, the delete is expected to fail
+- Source: https://docs.aws.amazon.com/solutions/latest/security-automations-for-aws-waf/solution-overview.html
+
+**Recommendation**:
+- Before retirement, create IP sets you manage, copy the addresses, and point these rules at them
+- Check what still updates these IP sets. Replace the solution's automation with native rate-based rules and managed rule groups
 
 ---
 """,
@@ -373,10 +466,10 @@ TEMPLATES_EN = {
 
 ---
 """,
-"path_block_decoding": """## Issue {n} (Medium): Path Block rules don't URL-decode, so encoded paths slip through
+"path_block_decoding": """## Issue {n} (Medium): Path Block or rate rules don't URL-decode, so encoded paths slip through
 
 {rule_line}
-**Current state**: Block rules match `UriPath` without `URL_DECODE`
+**Current state**: Block rules, or rate-based rules through their scope-down, match `UriPath` without `URL_DECODE`
 
 **Problem**:
 - WAF inspects the raw URI path as the client sent it. Without a decoding transformation, `/%69nternal/` doesn't match `/internal/`. If the origin decodes the path, the request reaches the path the rule meant to block
@@ -384,7 +477,7 @@ TEMPLATES_EN = {
 {details}
 
 **Recommendation**:
-- Use this transformation chain on path Block rules, in order: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `NORMALIZE_PATH`, `LOWERCASE`
+- Use this transformation chain on these path conditions, in order: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `NORMALIZE_PATH`, `LOWERCASE`
 - Test whether the origin decodes paths. If it doesn't, the practical risk is lower
 
 ---
@@ -401,7 +494,7 @@ TEMPLATES_EN = {
 - Add the sender's IP set where the sender publishes egress IPs
 - Otherwise the application must verify request signatures, and content inspection (CRS, KnownBadInputs) scoped to these paths should run before the Allow rules
 - Use `EXACTLY`, or a `STARTS_WITH` value as specific as possible
-
+{trav_rec}
 ---
 """,
 "managed_count": """## Issue {n} (Medium): Managed protections left in Count
@@ -411,7 +504,7 @@ TEMPLATES_EN = {
 
 **Problem**:
 {details}
-- Count only records metrics and labels, it doesn't block. `SizeRestrictions_BODY` in Count is a common deliberate choice and isn't listed here
+- Count only records metrics and labels, it doesn't block. `SizeRestrictions_BODY` and `HostingProviderIPList` in Count are common deliberate choices and aren't listed here
 
 **Recommendation**:
 - Review Count-period matches rule by rule, then switch rules to their default action
@@ -443,13 +536,11 @@ TEMPLATES_ZH = {
 **Current state**: {stmt_summary}，action 为 Allow，无 scope-down
 
 **Problem**:
-- {forgeable_fields} 是完全可伪造的，攻击者只需在请求中添加{forgeable_example}即可绕过所有后续规则（包括 IP 信誉、Bot Control、速率限制等）
+- {forgeable_fields} 是完全可伪造的，任何客户端只要带上{forgeable_example}，就能跳过后面所有规则{skipped}
 - 该规则的 blast radius 是全局的：所有路径都受影响，没有 host 或 URI 限制
-{opaque_note}
+{notes}
 **Recommendation**:
-{or_rec}- 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow，这些流量不需要绕过 WAF
-- 如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）
-{opaque_rec}
+{recs}
 ---
 """,
 "hosting_provider_allow": """## Issue {n} ({severity}): HostingProviderIPList 被覆盖为 Allow，云主机流量会跳过所有后续规则
@@ -689,19 +780,114 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"opaque_search_string": """## Issue {n} (Awareness): {rule_name} 包含不透明/哈希值的 search_string
+"forgeable_exemptions": """## Issue {n} ({severity}): 防护会跳过带某个值的请求，这个值任何客户端都能发
 
-**Rule**: {rule_name} (priority {priority})
-**Current state**: {stmt_summary}
+{rule_line}
+**Current state**: 这些规则用一个针对请求内容的 NOT 条件，把一部分请求排除在外
 
 **Problem**:
-- 匹配值 `{value}` 看起来是共享密钥、哈希或 token
-- {risk_note}
-- 任何能读取 Web ACL 配置的人（包括 IAM 权限过宽的内部人员）均可获取此值
+{details}
+- 这个排除条件跟路径和 host 无关，客户端只要带上这个值，任何请求都能跳过这项防护
 
 **Recommendation**:
-- {rec_note}
-- 定期轮换密钥值，并审计 WAF 配置的 IAM 访问权限
+- 排除条件改用客户端改不了的东西：IP set、ASN，或者由使用这些条件的前置规则打上的标签
+{crawler_rec}- 如果是为了绕开托管规则组的误报，不要在 scope-down 里排除。把误报的规则改成 Count，再在规则组后面加一条规则，除了受影响的路径，其他路径上命中它的标签就 Block
+- 其他情况，把排除条件限定在真正需要的路径和 host 上
+
+---
+""",
+"dead_patterns": """## Issue {n} (Low): 有些匹配模式永远匹配不上
+
+{rule_line}
+**Current state**: 有些条件里的模式，没有任何请求能匹配上
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+
+---
+""",
+"noop_overrides": """## Issue {n} (Awareness): 有些 override 设成了规则本来的默认动作
+
+{rule_line}
+**Current state**: 托管规则被 override 成它本来就有的动作
+
+**Problem**:
+{details}
+- 这些 override 什么也没改，反而容易让人以为这条规则被调整过
+
+**Recommendation**:
+- 删掉它们，或者在规则组的描述里写清楚为什么要保留
+
+---
+""",
+"no_ip_rate_limit": """## Issue {n} (Medium): 没有一条按客户端 IP 生效的限速
+
+{rule_line}
+**Current state**: 这个 ACL 默认放行，按 IP 计数的限速规则要么没有，要么都是 Count
+
+**Problem**:
+- 单个 IP 发多少请求都不会被限。按 User-Agent 或常量计数的限速，只管得到它们点名的客户端
+{counted}
+**Recommendation**:
+- 加一条覆盖所有流量、按 IP 计数、动作为 Block 的限速。先用 Count 看正常用户的峰值（共享 NAT 和公司出口 IP 最高）。验证过的爬虫用附录 A 的 `crawler:verified` 标签排除，不要按 User-Agent 字符串排除
+
+---
+""",
+"rate_challenge": """## Issue {n} (Low): 有些限速拿到 Challenge token 就能绕过
+
+{rule_line}
+**Current state**: 限速规则的动作是 Challenge 或 CAPTCHA
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- 在同一批流量上再加一条阈值更高、动作为 Block 的限速，让通过 Challenge 的客户端也会被限
+
+---
+""",
+"rate_shared": """## Issue {n} (Low): 有些限速让所有匹配的客户端共用一个计数
+
+{rule_line}
+**Current state**: 限速规则按常量，或按不含客户端 IP 的键计数
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+---
+""",
+"unused_labels": """## Issue {n} (Awareness): 有些标签没有规则在用
+
+{rule_line}
+**Current state**: 规则加了标签，但后面没有规则匹配它
+
+**Problem**:
+{details}
+- 只有后面的规则匹配标签时，标签才起作用。这些标签只会出现在日志和指标里
+
+**Recommendation**:
+- 如果本来想根据这个标签采取动作，在产生它的规则后面补上对应的规则；只是用来观察的话，保持现状就行
+
+---
+""",
+"security_automations": """## Issue {n} (Awareness): 这些规则和 IP set 来自 Security Automations for AWS WAF，这个方案 2026 年 12 月退役
+
+{rule_line}
+**Current state**: 这些规则或它们引用的 IP set 用的是 Security Automations 的命名
+
+**Problem**:
+- AWS 会在 2026 年 12 月退役 Security Automations for AWS WAF。已有部署会继续运行，但之后要自己维护
+- 删除这个方案的 CloudFormation 栈时，会删除它创建的 IP set。本 Web ACL 还在用这些 IP set，删除预计会失败
+- 来源：https://docs.aws.amazon.com/solutions/latest/security-automations-for-aws-waf/solution-overview.html
+
+**Recommendation**:
+- 退役前新建自己管理的 IP set，把名单复制过去，再把这些规则改成引用新的 IP set
+- 确认现在是谁在更新这些 IP set。方案里的自动化功能，改用原生的限速规则和托管规则组替代
 
 ---
 """,
@@ -807,10 +993,10 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"path_block_decoding": """## Issue {n} (Medium): 路径拦截规则没做 URL 解码，编码后的路径可以绕过
+"path_block_decoding": """## Issue {n} (Medium): 按路径拦截或限速的规则没做 URL 解码，编码后的路径可以绕过
 
 {rule_line}
-**Current state**: Block 规则匹配 `UriPath` 时没有 `URL_DECODE`
+**Current state**: Block 规则，或限速规则的 scope-down，匹配 `UriPath` 时没有 `URL_DECODE`
 
 **Problem**:
 - WAF 检查的是客户端发来的原始路径。没有解码转换时，`/%69nternal/` 匹配不上 `/internal/`。如果源站会解码，请求就会到达规则本来要拦的路径
@@ -818,7 +1004,7 @@ TEMPLATES_ZH = {
 {details}
 
 **Recommendation**:
-- 路径拦截规则按这个顺序加文本转换：`URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`NORMALIZE_PATH`、`LOWERCASE`
+- 这些路径条件按这个顺序加文本转换：`URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`NORMALIZE_PATH`、`LOWERCASE`
 - 测试一下源站会不会对路径做解码。如果不解码，实际风险会低一些
 
 ---
@@ -835,7 +1021,7 @@ TEMPLATES_ZH = {
 - 发送方公布了出口 IP 的，补上对应的 IP set 条件
 - 拿不到出口 IP 的，应用层必须校验请求签名，并在 Allow 规则前面加上限定在这些路径的内容检测（CRS、KnownBadInputs）
 - 路径尽量用 `EXACTLY`，或者把 `STARTS_WITH` 的值写得更具体
-
+{trav_rec}
 ---
 """,
 "managed_count": """## Issue {n} (Medium): 托管规则的防护处于 Count
@@ -845,7 +1031,7 @@ TEMPLATES_ZH = {
 
 **Problem**:
 {details}
-- Count 只记录指标和标签，不拦截。`SizeRestrictions_BODY` 保持 Count 是常见的合理做法，这里没有列出
+- Count 只记录指标和标签，不拦截。`SizeRestrictions_BODY` 和 `HostingProviderIPList` 保持 Count 是常见的合理做法，这里没有列出
 
 **Recommendation**:
 - 逐条查看 Count 期间的命中情况，再把规则切回默认动作
