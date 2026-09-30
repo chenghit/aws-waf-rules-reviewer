@@ -11,7 +11,7 @@
 - Detection usually takes about 20–30 seconds after the threshold is crossed
 - A `UriPath` aggregation key counts each IP + path pair separately; there is no way to count distinct paths per IP, so path enumeration can't be detected directly
 - WAF inspects requests only, not origin responses (ATP/ACFP excepted), so 404/403 counts can't be a rule condition
-- Log-driven 4xx auto-blocking (Athena/Lambda writing an IP set) acts after minutes and is costly to run, so it doesn't help against burst scanning. Security Automations for AWS WAF, which offers this, retires in December 2026
+- Log-driven 4xx auto-blocking (Athena/Lambda writing an IP set) acts after minutes and is costly to run, so it doesn't help against burst scanning. Security Automations for AWS WAF, which offers this, retires in December 2026 (https://docs.aws.amazon.com/solutions/latest/security-automations-for-aws-waf/solution-overview.html)
 
 ### Challenge action on rate-limit rules
 - For API paths: Challenge = Block (clients can't complete)

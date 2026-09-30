@@ -16,6 +16,8 @@ For every Allow rule:
 - [ ] Is the matching condition forgeable? (UA, cookie, header = forgeable; IP set, WAF token, ASN = unforgeable)
 - [ ] Does bypassing all subsequent rules create a security gap?
 - [ ] For managed rule group Allow overrides: does the default already handle the case?
+- [ ] Rule conditions combine as AND/OR/NOT. One forgeable OR branch is enough to trigger the Allow, even when another branch is an IP set (scripted)
+- [ ] Fixed values in rules (device IDs, test parameters, tokens) are there on purpose, and the Web ACL config isn't public. Judge them by whether a client can send them, not by where they're stored
 
 If a UA-based Allow rule is found, note `UA_ALLOW_FOUND` — referenced by section 5.
 
@@ -25,6 +27,8 @@ For every managed rule group with a scope-down:
 - [ ] Does the scope-down make the rule group ineffective? (e.g., `URI EXACTLY "/"` = only homepage checked)
 - [ ] Is the scope-down too broad?
 - [ ] Regex anchoring: unanchored patterns are `contains` matches
+- [ ] Forgeable exemptions (scripted): a scope-down or rule condition such as `NOT(body CONTAINS 'x')` or `NOT(User-Agent matches crawler names)` lets any client skip the protection by sending that value, on any path. Random-looking values (hashes, UUIDs) count as intended secrets and aren't flagged. Medium when it lets an attack through today; Low when the rule is in Count (unless it's a Count+Label rule whose label others act on), when the Web ACL blocks by default with no later Allow, or for browser prefetch signals
+- [ ] Host conditions: on CloudFront the Host header picks the distribution, and a Host that matches none is rejected, so a Host exemption means a different site. Check it anyway when several names on one distribution share an origin. Behind an ALB any Host reaches the default listener rule, so the scripts count a Host exemption as forgeable there. Don't use a Host match as the only trust boundary for an Allow
 
 ### 3. AntiDDoS AMR Configuration
 
@@ -52,6 +56,7 @@ For every Challenge or CAPTCHA rule:
 - [ ] Allow override on category rules → lets unverified bots bypass all subsequent rules
 - [ ] CategorySearchEngine/CategorySeo Allow → Low severity, limited blast radius. Correct approach: crawler labeling rule
 - [ ] SignalNonBrowserUserAgent and CategoryHttpLibrary → best practice: override to Count
+- [ ] Crawler names in UA conditions: the scripts check them against the official User-Agents in `scripts/crawler-uas.json`. For crawlers not in that file, check by hand
 
 If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - Short-term: scope-down Bot Control with unforgeable label (bypasses entire rule group)
@@ -67,6 +72,9 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - [ ] Overlapping scope-downs: only lowest threshold triggers for overlapping traffic
 - [ ] A rate rule with a scope-down blocks only requests that match the scope-down, not the whole IP. Detection takes about 20–30 seconds. WAF can't count distinct paths per IP and can't see response status codes (only ATP/ACFP inspect responses)
 - [ ] Don't recommend log-driven 4xx auto-blocking for burst scanning: it acts after minutes and costs a lot to run
+- [ ] No per-IP rate limit with an action other than Count on a default-Allow ACL (scripted, Medium)
+- [ ] Challenge or CAPTCHA as the rate-limit action (scripted): a client with a valid token passes however fast it sends. Add a Block tier with a higher limit
+- [ ] Shared counts (scripted): CONSTANT, or custom keys without the IP, put every matching client in one count. For a per-crawler budget scoped by User-Agent, forged UAs use the budget up. That's reported only when the scope matches a search engine crawler (Google, Bing, Yandex): count only the verified crawler with the Appendix A label. AI crawlers and agents don't affect SEO, so their budgets aren't a finding
 
 ### 7. IP Reputation and Anonymous IP Rules
 
@@ -74,6 +82,8 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - [ ] AWSManagedIPDDoSList at default Count: only adds label. If no downstream rule uses it → no protection (read ip-reputation.md)
 - [ ] HostingProviderIPList: default Block → override to Count. Override to Allow → dangerous.
 - [ ] Missing IP reputation or anonymous IP lists on a default-Allow ACL are scripted (recommended protections). Scope anonymous IP by who the caller is: end-user hosts yes, machine-to-machine hosts no
+- [ ] `AWSManagedIPReputationList`, `AWSManagedReconnaissanceList`, or `AnonymousIPList` in Count is scripted with section 20
+- [ ] Rules or IP sets named after Security Automations for AWS WAF are scripted (Awareness): the solution retires in December 2026
 
 ### 8. Landing Page and Cookie-based Logic
 
@@ -93,7 +103,7 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 
 ### 10. WCU Awareness
 
-Remind user to verify WCU ≤ 5000 after adding recommended rules.
+Remind user to verify WCU ≤ 5000 after adding recommended rules. Use `capacity`; an `actual_capacity` field in some exports isn't part of the WAF API.
 
 ### 11. Token Domain Configuration
 
@@ -104,7 +114,7 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules.
 
 Scripted. Unpinned groups follow the AWS default version, and default changes are announced only through each group's SNS topic.
 - [ ] Bot Control unpinned (default Version_1.0) or pinned below 5.0 → Medium. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures
-- [ ] Other unpinned groups → Low. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
+- [ ] Other unpinned groups → Low. `DEFAULT_VERSION` in snake_case exports means unpinned. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
 - IP reputation and anonymous IP lists are unversioned
 
 ### 13. Logging and Monitoring
@@ -113,10 +123,7 @@ Read `web_acl.logging.status` in waf-summary.json. `disabled` → logging is con
 
 ### 14. Hashed or Opaque search_string
 
-For byte_match rules with hash/random-token search_string:
-- [ ] Evaluate rule normally first (Allow audit, forgeability, etc.)
-- [ ] Emit Awareness: value may be shared secret or redacted. Warn about leakage risk.
-- [ ] Especially warn if action is Allow — leaked secret = full WAF bypass
+Retired in v0.7.4. A value stored in the Web ACL config isn't treated as leaked. Section 1 judges such values by forgeability.
 
 ### 15. Default Action
 
@@ -127,6 +134,7 @@ For byte_match rules with hash/random-token search_string:
 
 - [ ] Is there an always-on Challenge targeting landing page URIs? (read crawler-seo.md for implementation)
 - [ ] Bot Control at TARGETED with `TGT_TokenAbsent` overridden to Challenge also works as an always-on Challenge, but only for requests inside Bot Control's scope-down. Scripts hand this case to you: check whether that scope covers the landing pages, and whether the labels it relies on can be forged
+- [ ] A default-Allow Web ACL without Anti-DDoS AMR is handed to you here: decide whether it serves browser landing pages that need an always-on Challenge
 - [ ] If absent + DDoS protection objectives → Medium severity. Recommend two-rule pattern: Count+Label on landing page URIs → Challenge on label (exclude crawlers)
 - [ ] Token immunity time ≥ 4 hours (14400s)?
 - [ ] Crawler labeling rule placed before Challenge rule?
@@ -138,9 +146,10 @@ For byte_match rules with hash/random-token search_string:
 ### 17. Cross-rule and Label Dependency Analysis
 
 **17a. Label source verification:**
-- [ ] Token labels (`token:absent/accepted/rejected`) = shared, produced by Bot Control, ATP, ACFP, AND AntiDDoS AMR
+- [ ] Token labels (`awswaf:managed:token:absent/accepted/rejected`, with reasons such as `rejected:not_solved`, and the same set under `awswaf:managed:captcha:`) = shared, produced by Bot Control, ATP, ACFP, AND AntiDDoS AMR. AWS doesn't document a plain Challenge or CAPTCHA rule adding them, so without one of those groups, don't rely on them
 - [ ] `challengeable-request` = produced by AntiDDoS AMR
-- [ ] Custom Count rules without labels → Awareness (metric-only or missing labels?)
+- [ ] Custom Count rules without labels → Awareness (metric-only or missing labels?). A Count rule that inserts a request header does something, so it isn't listed
+- [ ] Labels a rule adds that no rule matches → Awareness (scripted)
 
 **17b. Fix impact analysis:**
 - [ ] For each fix: trace affected traffic through full rule chain
@@ -150,10 +159,12 @@ For byte_match rules with hash/random-token search_string:
 ### 18. Rule Priority Ordering
 
 Scripted. Report only orderings with real consequences among existing rules:
-- [ ] A rule matches a label that only later rules produce
+- [ ] A rule matches a label that only later rules produce, or that no rule in the Web ACL adds
+- [ ] A rule no request reaches: every request it matches is already ended by an earlier Allow or Block (e.g. a UA rate limit whose keywords an earlier Allow lets through). Medium when an Allow skips a protection, Low otherwise
 - [ ] An IP block list runs after Allow rules
 - [ ] Default-Block ACL: content inspection rule groups run after Allow rules
-- [ ] Bot Control runs before rules that block on their own (cost only, Low)
+- [ ] Bot Control runs before rules that block or challenge on their own (cost only, Low)
+- [ ] Default-Block ACL: rules after the last Allow can't change the outcome, since every request reaching them ends in Block (Low)
 
 Missing rule types are recommended protections, not ordering problems. Use the recommended order in managed-overrides.md (Appendix D) only to say where a new rule belongs. Don't flag an intentional order, such as `block-internal-url` before an office allow list.
 
@@ -164,18 +175,23 @@ Missing rule types are recommended protections, not ordering problems. Use the r
 ### 19. Custom Rule Matching Correctness
 
 Scripted.
-- [ ] Path Block rules without `URL_DECODE`: WAF inspects the raw path, so `/%69nternal/` bypasses `/internal/`. Recommend `URL_DECODE` ×2 → `REMOVE_NULLS` → `NORMALIZE_PATH` → `LOWERCASE`
+- [ ] Path Block rules, and rate limits scoped by path, without `URL_DECODE`: WAF inspects the raw path, so `/%69nternal/` bypasses `/internal/`. Recommend `URL_DECODE` ×2 → `REMOVE_NULLS` → `NORMALIZE_PATH` → `LOWERCASE`
+- [ ] Allow rules with `STARTS_WITH` on the path and no `NORMALIZE_PATH`: `/prefix/../admin` matches the prefix, and reaches `/admin` if CloudFront or the origin resolves `..`
 - [ ] Literal `*` in a byte match (no wildcard support)
 - [ ] Query-string pattern on `UriPath` (`?`, `[?&]`): never matches
 - [ ] `UriFragment` with `FallbackBehavior: MATCH`: always true, so an AND with it reduces to its other conditions
+- [ ] Patterns that can never match (scripted): after LOWERCASE, a pattern with an uppercase letter (e.g. `adsBot-google`) never matches, and the reverse for UPPERCASE. A crawler name that matches none of the User-Agents the crawler publishes (`bingbot.html`; Bingbot sends `bingbot.htm`), or a robots.txt-only token, never matches either. `scripts/crawler-uas.json` holds the official User-Agents of Google, Bing, and Yandex search crawlers
+- [ ] For crawler conditions on the User-Agent, the fix isn't the pattern: any client can send it. Use the `crawler:verified` label from Appendix A (ASN + User-Agent)
 
 Managed rules inspect content as plain text (except the SQLi 2.0 lineage's JSON parsing). Encoded payloads can't all be caught by custom rules either: say so, and point to identity-based controls (IP allow lists, API key checks, tokens) and application input validation.
 
 ### 20. Protections Left in Count
 
 Scripted.
-- [ ] Whole managed rule groups in Count
-- [ ] Content rules inside CRS, KnownBadInputs, SQLi, OS, PHP, WordPress, or AdminProtection overridden to Count (except `SizeRestrictions_BODY`)
+- [ ] Whole managed rule groups in Count, including groups whose rules are all overridden to Count (checked against the latest version's rule list; a rule the running version lacks may be the only one left)
+- [ ] Content rules inside CRS, KnownBadInputs, SQLi, OS, PHP, WordPress, or AdminProtection overridden to Count (except `SizeRestrictions_BODY`), and the default-Block rules of the IP reputation and anonymous IP lists (except `HostingProviderIPList`)
+- [ ] Overrides that set a rule to its default action change nothing (Awareness). All rules in CRS, KnownBadInputs, SQLi, and the IP lists default to Block, except `AWSManagedIPDDoSList` (Count). In Bot Control, `TGT_TokenAbsent` defaults to Count and `TGT_VolumetricIpTokenAbsent` to Challenge
+- [ ] A rule overridden to Challenge or CAPTCHA still acts; it doesn't count as "in Count"
 
 ### 21. PCI DSS
 
