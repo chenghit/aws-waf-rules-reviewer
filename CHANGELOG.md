@@ -1,5 +1,55 @@
 # Changelog
 
+## v0.7.4 (2026-09-30)
+
+Fixes from three rounds of reviewing three real Web ACLs with fresh agents that followed AGENTS.md and logged every tool problem.
+
+### Fixed
+- Preprocessing crashed on exports that list every statement type with unused ones as `null`: each rule was read as a `ByteMatchStatement`. Null values are now dropped.
+- `regex_pattern_reference_statement` (a regex pattern set in snake_case exports) is parsed. It was `UNKNOWN`.
+- The managed version check skipped every group in snake_case exports: the vendor came out as `managedruleset`, and `DEFAULT_VERSION` counted as pinned. Both now mean an unpinned AWS group.
+- The forgeable Allow finding names the fields in plain words (the `vevor_app_deviceId` cookie, not `cookies[scope=ALL, ...]`), gives an example for each, and lists the later rules that could stop a forged request instead of a fixed "IP reputation, Bot Control, rate limiting". Path branches are reported apart: a path-only branch lets every request to the path through.
+- Its recommendations fit the rule: for a default-Block Web ACL, access goes by source IP (a WAF token isn't access control, since any browser can get one); crawler User-Agents point to Appendix A; Count+Label is offered only for native apps and probes.
+- The case-mismatch finding doesn't tell you to fix a pattern inside a forgeable Allow, since that widens the Allow.
+- `count_without_labels` skips Count rules that insert a request header.
+- Managed groups whose rules are all overridden to Count are reported as labeling only, or with the one rule still blocking. The IP reputation and anonymous IP lists' default-Block rules in Count are reported too.
+- Without Anti-DDoS AMR, a default-Allow Web ACL's always-on Challenge goes to the LLM instead of being skipped.
+- Sections 4, 6, and 7 go to the LLM whenever the Web ACL has Challenge, rate-based, or IP list rules. Before, a generator that found nothing marked them covered, and real problems surfaced only in Step 7.
+- AGENTS.md says where findings added in Step 7 go: before the fix-order finding, which is renumbered to come last.
+- The Mermaid diagram draws token labels only from the four groups AWS documents as adding them.
+- Appendix D says how the order changes for a default-Block Web ACL, and the Anti-DDoS placement advice no longer says "after IP allow lists" for a rule that isn't IP-only.
+- Findings that list one line per rule start their Problem with a summary line, so the Summary table's Impact column says what's wrong instead of showing a cut-off rule name.
+- The appendix has one H1 with the rule flow under it. The Summary table no longer cuts inside a URL or ends with a per-item "(Medium)".
+- AGENTS.md lists the LLM sections in number order, one bullet each: agents missed sections 4, 6, and 7 when they shared a bullet.
+- Rate-limit findings are split by kind, so a Web ACL with only shared counts doesn't read "Challenge or CAPTCHA". A per-crawler budget scoped by User-Agent is reported only when it covers a Google, Bing, or Yandex crawler, with "count only the verified crawler" instead of "add the IP". Budgets for AI and other bots aren't reported.
+- A group rule overridden to Challenge or CAPTCHA counts as still acting when deciding whether a group only labels.
+- The forgeable Allow's Current state shows IP set names instead of full ARNs. For AI crawler names in the Allow, it says to remove them: they don't affect search ranking.
+- The Anti-DDoS advice "don't scope it down" names the two-instance split in Appendix B as the exception.
+- Removing a scripted finding no longer breaks the issue map. `waf-build-issue-map.py` reads the Rule lines of every issue in the report, and AGENTS.md says how to renumber.
+- The Summary table no longer cuts inside a code span.
+- Token labels: the sub-labels (`rejected:not_solved` and others) and the `awswaf:managed:captcha:` set are known.
+- Mermaid: the last rule links to the default action, namespace labels show their last segment, and managed rule groups show their Block/Challenge/CAPTCHA exit. The HTML flow shows the exit too.
+- The "Bot Control before blocking rules" finding says "block or challenge", and the ordering advice no longer mentions partner payloads.
+
+### Added
+- Rules no request reaches, because an earlier Allow or Block ends every request they match. Medium when an Allow skips a protection.
+- Labels a rule matches that nothing in the Web ACL adds.
+- Forgeable exemptions: a scope-down or condition like `NOT(body CONTAINS 'x')` or `NOT(User-Agent matches crawler names)` that any client can meet to skip a managed group, rate limit, or Block/Challenge rule. Random-looking values count as intended secrets. Severity follows what skipping changes today: Low for Count rules, for a default-Block Web ACL with no later Allow, and for browser prefetch signals. A Host exemption counts on regional Web ACLs only, since CloudFront routes by Host.
+- Rate limits that act with Challenge or CAPTCHA (a token holder passes), and rate limits that share one count (CONSTANT, or custom keys without the IP).
+- A default-Allow Web ACL with no per-IP rate limit that does more than Count (Medium).
+- Allow rules that match a path prefix without `NORMALIZE_PATH`, so `/prefix/../admin` matches. The URL-decoding check also covers rate limits scoped by path.
+- Labels a rule adds that no rule matches.
+- Overrides that set a managed rule to its default action, including Bot Control's `TGT_TokenAbsent` → Count and `TGT_VolumetricIpTokenAbsent` → Challenge.
+- Rules after the last Allow in a default-Block Web ACL, which can't change the outcome.
+- Rules and IP sets from Security Automations for AWS WAF, which retires in December 2026.
+- Patterns that can never match: a letter case that a LOWERCASE or UPPERCASE transform removed (`adsBot-google`), a crawler name that matches none of the User-Agents the crawler publishes (`bingbot.html`; Bingbot sends `bingbot.htm`), or a robots.txt-only token. `scripts/crawler-uas.json` holds the official User-Agents of Google, Bing, and Yandex search crawlers with their sources; AI crawlers are left out, since they don't affect SEO. For User-Agent conditions, the finding recommends the Appendix A `crawler:verified` label (ASN + User-Agent) before fixing the pattern.
+- `waf-summary.json` records rate-based `custom_keys`, a rule's custom response code and inserted headers, SQLi sensitivity, the Web ACL scope, and `actual_capacity` when the export has it.
+- AGENTS.md allows `wafv2 get-regex-pattern-set`, and says what to do when a finding depends on a pattern set's contents.
+
+### Changed
+- The opaque search_string check is gone. Values written into rules are judged by whether a client can send them, not treated as leaked because they sit in the config.
+- Appendix B and C (Anti-DDoS patterns) are left out for a default-Block Web ACL without Anti-DDoS AMR.
+
 ## v0.7.3 (2026-09-30)
 
 Fixes from reviewing a real Web ACL whose priority 0 Allow was `OR(ip_set, ip_set, cookie, User-Agent regex)`. The scripts missed it.

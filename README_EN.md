@@ -56,8 +56,8 @@ Given a Web ACL, either as a JSON file or fetched from your account, the agent:
 
 1. **Fetches** (optional): pulls the Web ACL and its logging config with read-only AWS CLI calls
 2. **Preprocesses**: extracts structured rule summaries, compresses input (56KB → 16KB)
-3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (13 checks total)
-4. **Deterministic findings**: 26 generators auto-produce most findings (forgeable Allow, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
+3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (19 checks total)
+4. **Deterministic findings**: 30 generators auto-produce most findings (forgeable Allow, forgeable exemptions, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
 5. **LLM analysis**: only analyzes judgment-heavy checklist items (Bot Control strategy, cookie logic, cross-rule dependencies) from the sections not covered by scripts
 6. **Report generation**: severity-rated findings (Critical / Medium / Low / Awareness)
 7. **Mermaid flow diagram**: auto-generated rule execution flow with issue annotations
@@ -136,7 +136,7 @@ The review covers 21 categories:
 **Phase 1: Independent Checks**
 
 1. Allow rules audit (forgeability, bypass risk)
-2. Scope-down statements (too narrow / too broad)
+2. Scope-down statements (too narrow / too broad, forgeable exemptions)
 3. AntiDDoS AMR configuration (ChallengeAllDuringEvent, exempt regex, SEO impact, dual instance pattern)
 4. Challenge action applicability (POST/API/native app limitations, Count-to-Challenge staging risk)
 5. Bot Control configuration (Allow override risks, verified vs unverified bots)
@@ -148,18 +148,18 @@ The review covers 21 categories:
 11. Token domain configuration
 12. Managed rule group versions (unpinned groups, old Bot Control versions, SQLi version lineages)
 13. Logging and monitoring
-14. Hashed/opaque search_string in byte_match_statement
+14. (Merged into item 1) Fixed values in rules are judged by forgeability, not treated as leaked because they sit in the config
 15. Default action (redundant trailing Allow-all detection)
 16. Always-on Challenge for landing pages (proactive DDoS defense, immunity time, crawler exclusion)
 
 **Phase 2: Global Cross-checks**
 
 17. Cross-rule and label dependency analysis (label source verification + fix impact analysis)
-18. Rule priority ordering (only orderings with real consequences: labels consumed before they're produced, block lists after Allow rules, inspection after Allow rules in allow-list ACLs)
+18. Rule priority ordering (only orderings with real consequences: labels consumed before they're produced, labels no rule adds, rules an earlier Allow or Block always ends first, block lists after Allow rules, inspection after Allow rules in allow-list ACLs)
 
 **Additional Checks**
 
-19. Custom rule matching correctness (URL decoding on path rules, literal wildcards, query patterns on UriPath, UriFragment fallback)
+19. Custom rule matching correctness (URL decoding on path rules, literal wildcards, query patterns on UriPath, UriFragment fallback, patterns a case transform makes unmatchable)
 20. Protections left in Count (whole managed groups, content rules overridden to Count)
 21. PCI DSS considerations for payment customers (ASV scan interference, Requirement 6.4.2)
 
