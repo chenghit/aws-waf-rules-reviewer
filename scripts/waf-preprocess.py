@@ -30,6 +30,7 @@ SKIP_KEYS = frozenset({
 })
 
 SAMPLE_THRESHOLD = 3  # OR branches with more same-type leaves get sampled
+MAX_BRANCHES = 256    # larger statements get branches=None
 
 # ── Key normalization ──────────────────────────────────────────────────────
 
@@ -269,8 +270,27 @@ def _field_to_match_str(ftm: dict) -> str:
         return key
     return "unknown_field"
 
+def _and_branches(parts: list) -> list | None:
+    """Cross product of the children's branches: one branch from each must match."""
+    out = [[]]
+    for p in parts:
+        if p is None:
+            return None
+        out = [a + b for a in out for b in p]
+        if len(out) > MAX_BRANCHES:
+            return None
+    return out
+
 def _summarize_statement(stmt: dict) -> dict:
-    """Return {summary: str, leaf_count: int, leaf_types: set, samples: dict|None}."""
+    """Return {summary, leaf_count, leaf_types, samples, leaves, branches}.
+    `branches` is the statement in disjunctive normal form: lists of indices
+    into `leaves`, and the statement matches when every leaf of some branch
+    does. Leaves under a NOT carry negated=True. None if too large to expand."""
+    r = _summarize_node(stmt)
+    r.setdefault("branches", [[0]] if r["leaves"] else [])
+    return r
+
+def _summarize_node(stmt: dict) -> dict:
     if not stmt or not isinstance(stmt, dict):
         return {"summary": "EMPTY", "leaf_count": 0, "leaf_types": set(), "samples": None,
                 "leaves": []}
@@ -336,6 +356,15 @@ def _summarize_statement(stmt: dict) -> dict:
                 "leaf_types": {"regex_match"}, "samples": None,
                 "leaves": [_leaf("regex_match", rm, ftm, "REGEX", regex)]}
 
+    # Leaf: regex_pattern_statement (snake_case export of an inline regex)
+    if "regex_pattern_statement" in stmt:
+        rm = stmt["regex_pattern_statement"]
+        ftm = _field_to_match_str(rm.get("field_to_match", {}))
+        regex = rm.get("regular_expression", "?")
+        return {"summary": f"regex_match({ftm}, '{regex}')", "leaf_count": 1,
+                "leaf_types": {"regex_match"}, "samples": None,
+                "leaves": [_leaf("regex_match", rm, ftm, "REGEX", regex)]}
+
     # Leaf: regex_pattern_set_reference_statement
     if "regex_pattern_set_reference_statement" in stmt:
         rp = stmt["regex_pattern_set_reference_statement"]
@@ -376,7 +405,10 @@ def _summarize_statement(stmt: dict) -> dict:
     if "not_statement" in stmt:
         inner = stmt["not_statement"].get("statement", {})
         child = _summarize_statement(inner)
-        return {"summary": f"NOT({child['summary']})",
+        # De Morgan: NOT(OR of ANDs) is an AND of ORs over the negated leaves
+        cb = child["branches"]
+        branches = None if cb is None else _and_branches([[[i] for i in b] for b in cb])
+        return {"summary": f"NOT({child['summary']})", "branches": branches,
                 "leaf_count": child["leaf_count"],
                 "leaf_types": child["leaf_types"],
                 "samples": child["samples"],
@@ -449,9 +481,22 @@ def _summarize_logic(op: str, children: list) -> dict:
                 samples = r["samples"]
                 break
 
+    parts, offset = [], 0
+    for r in child_results:
+        b = r["branches"]
+        parts.append(None if b is None else [[i + offset for i in br] for br in b])
+        offset += len(r["leaves"])
+    if op == "AND":
+        branches = _and_branches(parts)
+    elif None in parts or sum(map(len, parts)) > MAX_BRANCHES:
+        branches = None
+    else:
+        branches = [br for p in parts for br in p]
+
     return {"summary": summary, "leaf_count": total_leaves,
             "leaf_types": all_types, "samples": samples,
-            "leaves": [l for r in child_results for l in r["leaves"]]}
+            "leaves": [l for r in child_results for l in r["leaves"]],
+            "branches": branches}
 
 # ── Rule extraction ───────────────────────────────────────────────────────
 
@@ -541,7 +586,7 @@ def _extract_scope_down(container: dict) -> dict | None:
     if not sd:
         return None
     s = _summarize_statement(sd)
-    return {"summary": s["summary"], "leaves": s["leaves"],
+    return {"summary": s["summary"], "leaves": s["leaves"], "branches": s["branches"],
             "source_lines": None}  # source_lines filled later
 
 def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) -> dict:
@@ -641,6 +686,7 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
             "leaf_types": sorted(stmt_result["leaf_types"]),
             "samples": stmt_result["samples"],
             "leaves": stmt_result["leaves"],
+            "branches": stmt_result["branches"],
         },
         "source": source,
         "scope_down": scope_down,

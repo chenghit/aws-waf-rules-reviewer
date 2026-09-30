@@ -87,6 +87,8 @@ LINES = {
         "example_ua": "the matching User-Agent header",
         "example_header": "the matching custom header",
         "example_other": "the matching condition",
+        "or_note": "- The rule ORs these conditions with {safe}. Any one branch is enough to match, so the {safe} condition doesn't limit the forgeable ones\n",
+        "or_rec": "- Keep only the {safe} conditions in this Allow rule and remove the forgeable branches. If that traffic still needs to be identified, use the Count+Label rule below\n",
         "hosting_scope_state": ", rule group scope-down `{scope}`",
         "hosting_scope": "- The rule group's scope-down is `{scope}`. Only requests that match it enter the rule group, so the bypass covers cloud-hosted requests that match the scope-down\n",
         "hosting_scope_widen": "- Before removing or widening that scope-down, change this override. Otherwise the bypass widens with it\n",
@@ -150,6 +152,8 @@ LINES = {
         "example_ua": "匹配的 User-Agent 头",
         "example_header": "匹配的自定义请求头",
         "example_other": "匹配的条件",
+        "or_note": "- 这些条件和 {safe} 是 OR 关系，命中任意一个分支就放行，{safe} 条件管不住可伪造的分支\n",
+        "or_rec": "- 这条 Allow 规则只保留 {safe} 条件，删掉可伪造的分支。还需要识别这部分流量的话，按下一条另建 Count+Label 规则\n",
         "hosting_scope_state": "，规则组的 scope-down 为 `{scope}`",
         "hosting_scope": "- 规则组的 scope-down 是 `{scope}`，只有匹配它的请求才会进入规则组。所以被放行的是匹配这个 scope-down 的云主机请求\n",
         "hosting_scope_widen": "- 要去掉或放宽这个 scope-down，先改掉这个 override，否则放行范围会跟着扩大\n",
@@ -340,12 +344,17 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
             if opaque_note:
                 break
 
+        safe = ", ".join(group[0].get("safe_conditions", []))
+        or_rec = L["or_rec"].format(safe=safe) if safe else ""
+        if safe:
+            opaque_note = L["or_note"].format(safe=safe) + opaque_note
+
         md = T["forgeable_allow"].format(
             n="{n}", rule_names=rule_names, rule_line=rule_line,
             stmt_summary=group[0]["statement_summary"],
             forgeable_fields=forgeable_fields, is_are=is_are,
             forgeable_example=forgeable_example,
-            opaque_note=opaque_note, opaque_rec=opaque_rec)
+            opaque_note=opaque_note, opaque_rec=opaque_rec, or_rec=or_rec)
         results.append((md, {"severity": "Critical", "title_key": "forgeable_allow",
                              "rules": names, "sections": [1]}))
     return results if results else NOT_APPLICABLE

@@ -63,12 +63,40 @@ def _classify_leaves(leaves: list) -> tuple[list, list]:
     return forgeable, unforgeable
 
 
+def _is_forgeable(leaf: dict) -> bool:
+    return leaf["type"] not in UNFORGEABLE_LEAF_TYPES and leaf["field"] not in UNFORGEABLE_FIELDS
+
+
+def _branches(stmt: dict) -> list | None:
+    """The statement's DNF branches as lists of leaves, None if not expanded."""
+    b = stmt.get("branches")
+    return None if b is None else [[stmt["leaves"][i] for i in br] for br in b]
+
+
+def _attacker_branches(stmt: dict) -> list | None:
+    """Branches any client can satisfy on its own: every condition is forgeable
+    or negated (an attacker is outside an IP set), and at least one is forgeable."""
+    branches = _branches(stmt)
+    if branches is None:
+        return None
+    return [b for b in branches if any(_is_forgeable(l) for l in b)
+            and all(_is_forgeable(l) or l["negated"] for l in b)]
+
+
 def _has_uri_constraint(leaves: list) -> bool:
     """True if a non-negated URI path condition limits the rule to some paths.
     uri_path STARTS_WITH '/' matches all traffic, so it doesn't count."""
     return any(l["field"] == "uri_path" and not l["negated"]
                and not (l["match"] == "STARTS_WITH" and l["value"] == "/")
                for l in leaves)
+
+
+def _path_scoped(stmt: dict, branches: list | None = None) -> bool:
+    """True if every branch that can match is limited to some paths."""
+    branches = branches or _branches(stmt)
+    if branches is None:
+        return _has_uri_constraint(stmt.get("leaves", []))
+    return bool(branches) and all(_has_uri_constraint(b) for b in branches)
 
 
 def _ref(r: dict) -> dict:
@@ -230,7 +258,7 @@ def _check_hosting_provider_allow(rules: list) -> dict:
                                    f"Cloud-hosted attack traffic bypasses all subsequent rules. Override to Count instead.",
                         "rule": r["name"], "priority": r["priority"],
                         "scope_down": sd["summary"] if sd else None,
-                        "path_scoped": bool(sd) and _has_uri_constraint(sd.get("leaves", []))}
+                        "path_scoped": bool(sd) and _path_scoped(sd)}
     return {"status": "PASS", "finding": None}
 
 
@@ -473,8 +501,20 @@ def _flag_allow_rules(rules: list) -> list:
         summary = r.get("statement", {}).get("summary", "")
         leaves = _leaves(r)
         forgeable, unforgeable = _classify_leaves(leaves)
-        all_forgeable = len(unforgeable) == 0 and len(forgeable) > 0
-        blast_radius = "path_scoped" if _has_uri_constraint(leaves) else "global"
+        attack = _attacker_branches(r["statement"])
+        safe = []
+        if attack is None:
+            all_forgeable = len(unforgeable) == 0 and len(forgeable) > 0
+            blast_radius = "path_scoped" if _has_uri_constraint(leaves) else "global"
+        else:
+            # One forgeable branch of an OR is enough, whatever the other branches check
+            all_forgeable = bool(attack)
+            if attack:
+                forgeable = _classify_leaves([l for b in attack for l in b])[0]
+                # Unforgeable conditions in the branches an attacker can't satisfy
+                safe = _classify_leaves([l for b in _branches(r["statement"]) if b not in attack
+                                         for l in b if not l["negated"]])[1]
+            blast_radius = "path_scoped" if _path_scoped(r["statement"], attack or None) else "global"
 
         flags.append({
             "name": r["name"],
@@ -482,6 +522,7 @@ def _flag_allow_rules(rules: list) -> list:
             "statement_summary": summary,
             "forgeable_conditions": forgeable,
             "unforgeable_conditions": unforgeable,
+            "safe_conditions": safe,
             "all_forgeable": all_forgeable,
             "blast_radius": blast_radius,
         })

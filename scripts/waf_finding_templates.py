@@ -13,7 +13,7 @@ TEMPLATES_EN = {
 - The blast radius is global: every path is affected, with no host or URI restriction
 {opaque_note}
 **Recommendation**:
-- Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow. The traffic doesn't need to bypass the WAF entirely
+{or_rec}- Change action to Count+Label (e.g., `custom:native-app` or `custom:probe`) instead of Allow. The traffic doesn't need to bypass the WAF entirely
 - If the rule is for internal probes or monitoring, use an unforgeable condition (IP Set or WAF Token) instead
 {opaque_rec}
 ---
@@ -447,7 +447,7 @@ TEMPLATES_ZH = {
 - 该规则的 blast radius 是全局的：所有路径都受影响，没有 host 或 URI 限制
 {opaque_note}
 **Recommendation**:
-- 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow，这些流量不需要绕过 WAF
+{or_rec}- 将 action 改为 Count+Label（如 `custom:native-app` 或 `custom:probe`），不要直接 Allow，这些流量不需要绕过 WAF
 - 如果此规则用于内部探针或监控工具，应改用不可伪造的条件（如 IP Set 或 WAF Token）
 {opaque_rec}
 ---
