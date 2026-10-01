@@ -33,6 +33,8 @@ All script and reference paths below are relative to `tool_dir`. Resolve every p
 
 ### Step 0: Get the Web ACL configuration
 
+Ask the user early which clients reach this Web ACL besides browsers: native apps, API clients, partners, or monitoring. Several recommendations depend on it (Bot Control overrides, Challenge), and the Web ACL can't prove there are none. If you can't ask, write both cases in those findings.
+
 **Case A: the user gives a file or directory.**
 
 - `input_file` is that path, resolved to an absolute path. If it's a directory, Step 1 finds the WAF JSON inside it.
@@ -41,7 +43,7 @@ All script and reference paths below are relative to `tool_dir`. Resolve every p
 
 **Case B: the user has no file.** Fetch the config with the AWS CLI.
 
-Use read-only calls only: `sts get-caller-identity`, `wafv2 list-web-acls`, `wafv2 get-web-acl`, `wafv2 get-logging-configuration`, and in Step 4 `wafv2 get-regex-pattern-set`. Never run `create-*`, `update-*`, `delete-*`, `put-*`, `associate-*`, or any other call that changes state, even if the user asks for a fix during the review. Recommendations belong in the report.
+Use read-only calls only: `sts get-caller-identity`, `wafv2 list-web-acls`, `wafv2 get-web-acl`, `wafv2 get-logging-configuration`, and in Step 4 `wafv2 get-regex-pattern-set`, `wafv2 get-ip-set`, `wafv2 list-available-managed-rule-group-versions`, `cloudfront list-distributions-by-web-acl-id`, and `wafv2 list-resources-for-web-acl`. Never run `create-*`, `update-*`, `delete-*`, `put-*`, `associate-*`, or any other call that changes state, even if the user asks for a fix during the review. Recommendations belong in the report.
 
 1. Run `aws sts get-caller-identity`. Show the user the account ID and ask them to confirm it's the right account. If the CLI is missing or has no credentials, tell the user and stop. Don't try to set up credentials.
 2. Work out the scope and region. CloudFront Web ACLs use `--scope CLOUDFRONT --region us-east-1`. Regional Web ACLs (ALB, API Gateway, AppSync, Cognito, App Runner, Verified Access) use `--scope REGIONAL --region <their region>`. If the user didn't say, ask.
@@ -154,14 +156,14 @@ Report format rules:
 - Start `**Problem**:` and `**Recommendation**:` on their own line, followed by `- ` bullets. The Summary table takes its Impact text from the first Problem bullet. Step 6 checks the severity word, the Rule/Rules form, and the Problem bullets.
 - Rule reference lines take one of three forms: `**Rule**: {name} (priority {N})`, `**Rules**: {name} (priority {N}), {name} (priority {N})`, or `**Rule**: N/A (missing rule)`. Only the reason after `N/A` may be in the report's language; `(priority N)` always stays in English. Use `**Rules**:` whenever there's more than one rule. Always write `(priority N)` in full; the validator doesn't read other forms.
 - If a finding's severity depends on business context the user has to confirm, append ` ⏳` to the end of its title, never inside the severity brackets: `## Issue 7 (Low): Title ⏳`.
-- Refer to scripted findings by issue number. Don't cite the number of a finding you haven't written yet; describe it instead.
+- Refer to other findings as `Issue N`. Step 4b renumbers by severity and updates these references. Don't cite the number of a finding you haven't written yet; describe it instead.
 - End the last Issue section with `---`. No conclusion paragraph.
 
 Content rules, learned from reviews with customers:
 - Say what the configuration does, not what the reader doesn't know. Don't write things like "many customers don't realize".
 - Values written into rules (device IDs, test parameters, tokens) are there on purpose, and the Web ACL config isn't public. Judge them by whether a client can send them. Don't call a value leaked or exposed because it's stored in the config.
 - Use `capacity` for WCU. Some exports also carry `actual_capacity`, which isn't part of the WAF API; don't cite it.
-- `get-web-acl` output has only the ARN of a regex pattern set, not its patterns. If a finding depends on them, fetch the set with `wafv2 get-regex-pattern-set` when you have AWS access (Case B). Otherwise mark the finding ` ⏳` and name the set to check.
+- `get-web-acl` output has only the ARNs of IP sets and regex pattern sets, not their contents. `llm_context.referenced_sets` lists each one with the name, ID, scope, and region the get calls need, and the rules that use it. With AWS access (Case B), fetch the ones a finding depends on with `wafv2 get-ip-set` or `wafv2 get-regex-pattern-set`. In IP sets, look for ranges wider than the purpose needs (a /8, a /0, a cloud provider's ranges) in Allow lists, since they change how bad a bypass is; an empty or stale block list; and partners or monitoring already allowed by IP. Without AWS access, mark the finding ` ⏳` and list the sets the customer should provide.
 - Base claims on the configuration and public AWS documentation. Don't cite internal sources.
 - `SizeRestrictions_BODY` in Count is a normal choice: legitimate bodies often exceed 8 KB, and scanners rarely need to. Don't recommend switching it to Block. If the user can list the endpoints that need large bodies, recommend keeping it in Count and adding a custom rule after CRS that blocks its label on all other paths. Never add a scope-down to CRS for this.
 - Don't recommend log-driven 4xx auto-blocking for burst scanning. It takes minutes to act and costs a lot to run.
@@ -173,6 +175,8 @@ Content rules, learned from reviews with customers:
 ```bash
 python3 "{tool_dir}/scripts/waf-generate-report-header.py" "{output_dir}"
 ```
+
+This first orders the Issue sections by severity, keeping their order within a severity, and renumbers them 1 to N. `Issue N` and `#N` references in the text follow the new numbers, so always refer to other findings as `Issue N`. Running it again changes nothing.
 
 ### Step 4c: Build issue-rule mapping
 
@@ -200,7 +204,7 @@ Read `{output_dir}/work/validation.json`.
 
 **Mechanical checks.** If any check is `FAIL`, fix the report and run Step 6 again. Retry at most twice. If it still fails after 3 attempts in total, report the remaining errors to the user and stop. If everything is `PASS`, go on.
 
-**Adversarial check.** This applies only to your own findings, the ones after the last scripted finding. Scripted findings were covered by the sanity check in Step 4.0.
+**Adversarial check.** This applies only to your own findings, the ones that aren't in `scripted-findings.md` (Step 4b may have moved them among the scripted ones). Scripted findings were covered by the sanity check in Step 4.0.
 - Take the 2 highest-severity findings you wrote; on a tie, take the lowest issue numbers. Go back to `waf-summary.json`, and to the original JSON via `source.lines` if needed, and derive each one again from scratch. If the new result disagrees with the report, fix the report.
 - For each finding that recommends a fix, trace the fix through the rule execution flow. If it breaks another rule or a label dependency, add a note to the finding.
 

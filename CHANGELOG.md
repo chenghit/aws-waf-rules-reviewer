@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.7.5 (2026-10-01)
+
+From another agent's review of a VEVOR report made with v0.7.4, checked against public AWS documentation.
+
+### Fixed
+- Bot Control pinned to 5.0 or later but not the latest static version is reported (Low). The latest version lives in `latest_versions` in `scripts/managed-labels.json` with its release date (6.1, 2026-07-24); before, only versions below 5.0 were flagged.
+- Unpinned Bot Control no longer claims to run Version_1.0. It runs AWS's current default, which the changelog doesn't track; the finding says to check `CurrentDefaultVersion` with `ListAvailableManagedRuleGroupVersions`, which AGENTS.md now allows.
+- The version field is `Version`, not `VersionToUse`.
+- `SignalNonBrowserUserAgent` and `CategoryHttpLibrary` go to Count only when native apps, API clients, partners, or monitoring reach the Web ACL. A site only browsers use keeps the default Block. AGENTS.md has the agent ask which clients there are, and write both cases when it can't.
+
+### Added
+- Step 4b orders findings by severity and renumbers them, updating `Issue N` references in the text. Before, scripted findings came first and the LLM's followed, so the body jumped from Medium to Low and back.
+- A host excluded with NOT(Host) by 3 or more rules gets a Low finding: a separate Web ACL is simpler if the host has its own distribution or load balancer. The finding gives the command to check.
+- `llm_context.referenced_sets` lists the IP sets and regex pattern sets the rules use, with what `get-ip-set` and `get-regex-pattern-set` need. AGENTS.md allows those calls and `list-distributions-by-web-acl-id` / `list-resources-for-web-acl`, says what to look for in IP sets, and says to list the sets for the customer when they can't be fetched.
+- Appendix B points to a separate Web ACL before two Anti-DDoS instances when the native app traffic has its own host and distribution.
+- `references/bot-control.md`: TARGETED without the application integration SDKs. Which rules need a token, which requests can complete a Challenge, why `TGT_TokenAbsent` defaults to Count and when to move it to Challenge, and that the docs don't say the ML rules weaken without tokens.
+
 ## v0.7.4 (2026-09-30)
 
 Fixes from three rounds of reviewing three real Web ACLs with fresh agents that followed AGENTS.md and logged every tool problem.
