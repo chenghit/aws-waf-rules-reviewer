@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.6 (2026-10-01)
+
+### Fixed
+- `references/bot-control.md` sorts the TARGETED rules by token dependency: five documented as needing a token, the `TGT_TokenReuse*` rules as inferred, and the `TGT_ML_*` rules as not requiring one, with their inputs, the machine learning setting, and the 24-hour baseline. It says not to claim the ML rules weaken without tokens or improve with the SDK, and splits "watch Count, then enforce" by token dependency. The note that other TGT rules don't depend on `TGT_TokenAbsent`'s action is back, with where tokens come from.
+
 ## v0.7.5 (2026-10-01)
 
 From another agent's review of a VEVOR report made with v0.7.4, checked against public AWS documentation.
