@@ -51,11 +51,12 @@ For every Challenge or CAPTCHA rule:
 ### 5. Bot Control Configuration
 
 - [ ] State the inspection level the Web ACL actually uses first. COMMON only looks at the User-Agent and source IP: it catches self-identifying bots, non-browser UAs, and known bot data centers, and misses scanners that send a browser UA from a clean IP (common when a financial customer scans itself)
-- [ ] Unpinned Bot Control runs the default Version_1.0 (scripted in section 12). TGT_* overrides at COMMON do nothing (scripted)
+- [ ] Unpinned Bot Control runs AWS's current default version, whichever that is (scripted in section 12). TGT_* overrides at COMMON do nothing (scripted)
+- [ ] TARGETED depends on tokens. Before recommending TARGETED, or switching TGT rules from Count to Block, check whether the site uses the application integration SDK (read bot-control.md "Targeted level without the SDKs")
 - [ ] For browser-only hosts, token-based controls (Challenge, TARGETED with the JS SDK) stop scanners that don't run JavaScript, regardless of payload encoding. Bot Control doesn't block a request just for missing a token: `TGT_TokenAbsent` only counts, so blocking on `awswaf:managed:token:absent` needs a custom rule
 - [ ] Allow override on category rules → lets unverified bots bypass all subsequent rules
 - [ ] CategorySearchEngine/CategorySeo Allow → Low severity, limited blast radius. Correct approach: crawler labeling rule
-- [ ] SignalNonBrowserUserAgent and CategoryHttpLibrary → best practice: override to Count
+- [ ] SignalNonBrowserUserAgent and CategoryHttpLibrary: Count when native apps, API clients, partners, or monitoring reach the Web ACL; default Block for a site only browsers use. The ACL can't prove which; ask, or write both cases
 - [ ] Crawler names in UA conditions: the scripts check them against the official User-Agents in `scripts/crawler-uas.json`. For crawlers not in that file, check by hand
 
 If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
@@ -84,6 +85,7 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - [ ] Missing IP reputation or anonymous IP lists on a default-Allow ACL are scripted (recommended protections). Scope anonymous IP by who the caller is: end-user hosts yes, machine-to-machine hosts no
 - [ ] `AWSManagedIPReputationList`, `AWSManagedReconnaissanceList`, or `AnonymousIPList` in Count is scripted with section 20
 - [ ] Rules or IP sets named after Security Automations for AWS WAF are scripted (Awareness): the solution retires in December 2026
+- [ ] IP set contents (Case B, `get-ip-set`): Allow lists with ranges wider than needed, empty or stale block lists, partners and monitoring already allowed by IP
 
 ### 8. Landing Page and Cookie-based Logic
 
@@ -113,7 +115,7 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules. Use `capacity
 ### 12. Managed Rule Group Versions
 
 Scripted. Unpinned groups follow the AWS default version, and default changes are announced only through each group's SNS topic.
-- [ ] Bot Control unpinned (default Version_1.0) or pinned below 5.0 → Medium. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures
+- [ ] Bot Control unpinned (AWS's current default, unknown from the config) or pinned below 5.0 → Medium; pinned to 5.0 or later but not the latest static version (6.1, `latest_versions` in managed-labels.json) → Low. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures
 - [ ] Other unpinned groups → Low. `DEFAULT_VERSION` in snake_case exports means unpinned. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
 - IP reputation and anonymous IP lists are unversioned
 
@@ -150,6 +152,7 @@ Retired in v0.7.4. A value stored in the Web ACL config isn't treated as leaked.
 - [ ] `challengeable-request` = produced by AntiDDoS AMR
 - [ ] Custom Count rules without labels → Awareness (metric-only or missing labels?). A Count rule that inserts a request header does something, so it isn't listed
 - [ ] Labels a rule adds that no rule matches → Awareness (scripted)
+- [ ] A host excluded with NOT(Host) by 3 or more rules → Low (scripted): a separate Web ACL is simpler if the host has its own distribution or load balancer, since a Web ACL attaches per resource, not per host. Check with `cloudfront list-distributions-by-web-acl-id` (CloudFront) or `wafv2 list-resources-for-web-acl` (regional); keep the exclusions if the hosts share a distribution
 
 **17b. Fix impact analysis:**
 - [ ] For each fix: trace affected traffic through full rule chain
