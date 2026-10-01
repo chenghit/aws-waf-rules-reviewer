@@ -35,6 +35,52 @@ SEVERITY_EMOJI = {
 }
 
 
+APPENDIX_START = "<!-- waf-appendix:start -->"
+SEV_RANK = {"critical": 0, "medium": 1, "low": 2, "awareness": 3}
+# Code blocks, inline code, and URLs keep their text when references are renumbered
+_PROTECTED = re.compile(r"```.*?```|`[^`\n]*`|https?://\S+", re.DOTALL)
+
+
+def _renumber(report: str) -> str:
+    """Order Issue sections by severity, keeping their order within a severity,
+    and renumber them 1..N. `Issue N` and `#N` references in the text follow
+    the new numbers. Text after the appendix marker is regenerated later and
+    left alone. Idempotent: a report already in order comes back unchanged."""
+    cut = report.find(APPENDIX_START)
+    body, tail = (report[:cut], report[cut:]) if cut != -1 else (report, "")
+    heads = list(re.finditer(r"^## Issue (\d+) \(([^)]*)\)", body, re.MULTILINE))
+    if not heads:
+        return report
+    pre = body[:heads[0].start()]
+    secs = [body[h.start():(heads[i + 1].start() if i + 1 < len(heads) else len(body))]
+            for i, h in enumerate(heads)]
+    order = sorted(range(len(secs)), key=lambda i: (SEV_RANK.get(heads[i].group(2).strip().lower(), 9), i))
+    old = [int(h.group(1)) for h in heads]
+    new_of = {old[i]: pos + 1 for pos, i in enumerate(order)}
+    if all(new_of[n] == n for n in old):
+        return report
+
+    def refs(text: str) -> str:
+        def sub(part: str) -> str:
+            part = re.sub(r"(Issue\s*#?)(\d+)", lambda m: m.group(1) + (
+                f"\x00{new_of[int(m.group(2))]}\x00" if int(m.group(2)) in new_of else m.group(2)), part)
+            return re.sub(r"(?<![\w&/#\x00])#(\d{1,3})(?!\d)", lambda m: "#" + (
+                f"\x00{new_of[int(m.group(1))]}\x00" if int(m.group(1)) in new_of else m.group(1)), part)
+        out, last = [], 0
+        for m in _PROTECTED.finditer(text):
+            out += [sub(text[last:m.start()]), m.group(0)]
+            last = m.end()
+        out.append(sub(text[last:]))
+        return "".join(out).replace("\x00", "")
+
+    ordered = []
+    for pos, i in enumerate(order):
+        first, rest = secs[i].split("\n", 1) if "\n" in secs[i] else (secs[i], "")
+        first = re.sub(r"^## Issue \d+", f"## Issue {pos + 1}", first)
+        ordered.append(first + ("\n" + refs(rest) if rest or "\n" in secs[i] else ""))
+    return refs(pre) + "".join(ordered) + tail
+
+
 def _extract_issues(report: str) -> list[dict]:
     """Extract issue number, severity, and title from ## Issue sections."""
     issues = []
@@ -94,6 +140,10 @@ def main():
 
     report = Path(report_path).read_text(encoding="utf-8")
     summary = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+    first_issue = re.search(r'^## Issue \d+', report, re.MULTILINE)
+    if first_issue:  # drop an earlier header before renumbering
+        report = report[first_issue.start():]
+    report = _renumber(report)
 
     web_acl = summary.get("web_acl", {})
     acl_name = web_acl.get("name", "unknown")

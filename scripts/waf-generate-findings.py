@@ -68,8 +68,10 @@ LINES = {
         "fragment_allow": "- For Allow rules this removes the path restriction: the rule allows every path for the requests its other conditions match",
         "default_block_note": "- This Web ACL blocks by default and relies on allow lists, so these rules are open entries into it\n",
         "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` has two version lineages with different detection trade-offs. The 2.0 line added JSON parsing to `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5 form a separate line. Choose a lineage deliberately\n",
-        "default_version": "AWS default (Version_1.0)",
-        "unpinned_bot": "Bot Control is not pinned to a static version, so it runs the AWS default version, Version_1.0",
+        "default_version": "not pinned (AWS default version)",
+        "unpinned_bot": "Bot Control isn't pinned to a static version, so it runs whatever AWS currently sets as the default. Check which one with `ListAvailableManagedRuleGroupVersions` (`CurrentDefaultVersion`)",
+        "versions_later": "Later versions added:",
+        "versions_all": "What each static version added (the default can be any of them):",
         "outdated_bot": "Bot Control is pinned to {version}",
         # What each static version added, from the AWS Managed Rules changelog
         "bot_versions": [
@@ -160,6 +162,9 @@ LINES = {
         "rate_rec_crawler": "- Keep the budget, but count only the real search engine crawler: add the `crawler:verified` label from the ASN + User-Agent rule in Appendix A to the scope-down. Leave forged User-Agents to a per-IP limit\n",
         "no_ip_counted": "- {rules} would limit per IP, but it's in Count\n",
         "rule_na_global": "**Rule**: N/A (Web ACL global configuration)",
+        "host_excluded": "- `{host}` is left out of {n} rules with a NOT(Host) condition: {rules}",
+        "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` lists the distributions and their alternate domain names (`Aliases`)",
+        "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <type>` lists the associated resources, one resource type per call",
         "traversal_note": "- The path branches use `STARTS_WITH` without `NORMALIZE_PATH`. `/prefix/../admin` also starts with the prefix; if CloudFront or the origin resolves `..`, the request reaches a path the rule never meant to allow\n",
         "traversal_rec": "- Add `NORMALIZE_PATH` (after `URL_DECODE`) to the path conditions of this Allow rule\n",
         "rec_other_crawlers": "- AI crawlers and agents don't affect search ranking, so they need no Allow: remove their names from this rule\n",
@@ -206,8 +211,10 @@ LINES = {
         "fragment_allow": "- 对 Allow 规则来说，路径限制因此失效：只要其他条件满足，任何路径都会被放行",
         "default_block_note": "- 这个 ACL 默认 Block，靠白名单放行，这些规则等于在白名单上开了口子\n",
         "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` 分成两条版本线，检测逻辑不同。2.0 那条线给 `SQLi_BODY` 加了 JSON 解析；1.3、2.3、2.4、2.5 是另一条线。选版本时要明确选哪条线\n",
-        "default_version": "AWS 默认版本（Version_1.0）",
-        "unpinned_bot": "Bot Control 没有固定版本，跑的是 AWS 默认版本 Version_1.0",
+        "default_version": "没有固定版本（AWS 默认版本）",
+        "unpinned_bot": "Bot Control 没有固定静态版本，跑的是 AWS 当前设定的默认版本。具体是哪个版本，可以用 `ListAvailableManagedRuleGroupVersions` 查（看 `CurrentDefaultVersion`）",
+        "versions_later": "之后的版本新增了：",
+        "versions_all": "各个静态版本新增的内容（默认版本可能是其中任何一个）：",
         "outdated_bot": "Bot Control 固定在 {version}",
         "bot_versions": [
             ((2, 0), "- 2.0/3.0：TARGETED 级别按 IP、ASN、国家区分的 `TGT_TokenReuse*` 规则，COMMON 各类别也加了很多新的 bot"),
@@ -297,6 +304,9 @@ LINES = {
         "rate_rec_crawler": "- 额度可以保留，但只算真正的搜索引擎爬虫：在 scope-down 里加上附录 A 的 ASN + User-Agent 规则打的 `crawler:verified` 标签。伪造 User-Agent 的请求交给按 IP 的限速\n",
         "no_ip_counted": "- {rules} 本来会按 IP 限速，但它是 Count\n",
         "rule_na_global": "**Rule**: N/A (Web ACL 全局配置)",
+        "host_excluded": "- `{host}` 被 {n} 条规则用 NOT(Host) 条件排除在外：{rules}",
+        "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` 会列出关联的 distribution 和它们的备用域名（`Aliases`）",
+        "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <类型>` 会列出关联的资源，每次查一种资源类型",
         "traversal_note": "- 这些路径分支用的是 `STARTS_WITH`，没有 `NORMALIZE_PATH`。`/prefix/../admin` 也以这个前缀开头，如果 CloudFront 或源站会解析 `..`，请求就会到达规则本来没打算放行的路径\n",
         "traversal_rec": "- 给这条 Allow 规则的路径条件加上 `NORMALIZE_PATH`（放在 `URL_DECODE` 之后）\n",
         "rec_other_crawlers": "- AI 爬虫和 agent 不影响搜索排名，不需要放行，直接从这条规则里删掉它们的名字\n",
@@ -393,6 +403,24 @@ def _field_label(field: str, L: dict) -> str:
         return L["f_cookie"].format(name=m.group(1))
     return {"query_string": L["f_query"], "body": L["f_body"]}.get(base) or (
         L["f_cookies"] if base.startswith("cookies") else field)
+
+
+def _referenced_sets(summary: dict) -> list:
+    """IP sets and regex pattern sets the rules reference, with the name, ID,
+    and scope `get-ip-set` / `get-regex-pattern-set` need. The export has only ARNs."""
+    sets = {}
+    for r in summary.get("rules", []):
+        for l in r.get("statement", {}).get("leaves", []) + (r.get("scope_down") or {}).get("leaves", []):
+            m = re.search(r"arn:aws:wafv2:([^:]+):[^:]*:(global|regional)/(ipset|regexpatternset)/([^/]+)/([0-9a-f-]+)$",
+                          str(l.get("value")))
+            if l["type"] in ("ip_set", "regex_pattern_set") and m:
+                e = sets.setdefault(l["value"], {
+                    "type": "ip_set" if m.group(3) == "ipset" else "regex_pattern_set", "name": m.group(4),
+                    "id": m.group(5), "scope": "CLOUDFRONT" if m.group(2) == "global" else "REGIONAL",
+                    "region": m.group(1), "used_by": []})
+                if r["name"] not in e["used_by"]:
+                    e["used_by"].append(r["name"])
+    return list(sets.values())
 
 
 def _payment_indicators(summary: dict) -> list:
@@ -810,9 +838,19 @@ def _gen_managed_versions(summary, pre_checks, flags, T, lang):
         current = (int(m.group(1)), int(m.group(2))) if m else (1, 0)
         additions = "\n".join("  " + line for v, line in L["bot_versions"] if v > current)
         md = T["bot_control_version"].format(
-            n="{n}", rule_name=b["name"], priority=b["priority"],
-            current_version=version, detail=detail, additions=additions)
+            n="{n}", rule_name=b["name"], priority=b["priority"], current_version=version, detail=detail,
+            versions_header=L["versions_later"] if b.get("version") else L["versions_all"], additions=additions)
         results.append((md, {"severity": "Medium", "title_key": "bot_control_version",
+                             "rules": [b["name"]], "sections": [12]}))
+    # Pinned to 5.0 or later but not the latest: narrower bot coverage, Low
+    for b in check.get("behind", []):
+        m = re.search(r'(\d+)\.(\d+)', b["version"])
+        current = (int(m.group(1)), int(m.group(2)))
+        additions = "\n".join("  " + line for v, line in L["bot_versions"] if v > current)
+        md = T["bot_control_behind"].format(
+            n="{n}", rule_name=b["name"], priority=b["priority"], current_version=b["version"],
+            latest=b["latest"], released=b["released"], additions=additions)
+        results.append((md, {"severity": "Low", "title_key": "bot_control_behind",
                              "rules": [b["name"]], "sections": [12]}))
     others = [u for u in check.get("unpinned", []) if u["group"] != BOT_GROUP]
     if others:
@@ -1169,6 +1207,21 @@ def _gen_unused_labels(summary, pre_checks, flags, T, lang):
                   "rules": [f["name"] for f in check["rules"]], "sections": [17]})]
 
 
+def _gen_host_exclusions(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("host_exclusions", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    acl = summary.get("web_acl", {})
+    lookup = L["host_lookup_cf" if acl.get("scope") != "REGIONAL" else "host_lookup_regional"].format(arn=acl.get("arn", "<web ACL ARN>"))
+    details = [L["host_excluded"].format(host=f["host"], n=len(f["rules"]), rules=_ticks(f["rules"], lang))
+               for f in check["hosts"]]
+    rules = list({r["name"]: r for r in check["rules"]}.values())
+    md = T["host_exclusions"].format(n="{n}", rule_line=_rule_line(rules), details="\n".join(details), lookup=lookup)
+    return [(md, {"severity": "Low", "title_key": "host_exclusions",
+                  "rules": [r["name"] for r in rules], "sections": [17]})]
+
+
 def _gen_security_automations(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("security_automations", {})
     if check.get("status") != "FAIL":
@@ -1232,6 +1285,7 @@ ALL_GENERATORS = [
     (_gen_rate_limits, [6], False),  # Section 6 needs the LLM when rate rules exist
     (_gen_unused_labels, [17], True),
     (_gen_security_automations, [7], False),
+    (_gen_host_exclusions, [17], True),
     (_gen_bot_control_config, [5], False),
 ]
 
@@ -1370,6 +1424,7 @@ def main():
             any(lbl.startswith(p) for p in CRAWLER_LABEL_PATTERNS)
             for r in rules for lbl in r.get("rule_labels", [])),
         "payment_indicators": _payment_indicators(summary),
+        "referenced_sets": _referenced_sets(summary),
     }
 
     next_issue_number = len(all_findings) + 1

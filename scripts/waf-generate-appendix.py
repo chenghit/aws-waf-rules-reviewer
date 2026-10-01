@@ -98,7 +98,7 @@ Confirmed ASNs: Google 15169, Bing 8075, Yandex 13238 + 208722. For other search
 
 ## Appendix B: Dual AntiDDoS AMR Instance Pattern
 
-When browser and native app traffic need different AntiDDoS strategies:
+When browser and native app traffic need different AntiDDoS strategies. If the native app traffic has its own host on its own distribution or load balancer, a separate Web ACL for it is simpler than two instances.
 
 1. **Add a Count+Label rule before both AMR instances** to label native app traffic (e.g., label `native-app:identified`). This rule must have a higher priority (lower number) than both AMR instances.
 2. **AMR instance 1 (browser traffic)**: scope-down excludes the native app label. `ChallengeAllDuringEvent` enabled. Block sensitivity: LOW (default).
@@ -173,8 +173,8 @@ When adding or reviewing managed rule groups, consider these common overrides:
 - Override `SizeRestrictions_BODY` to **Count**. This rule blocks request bodies larger than 8KB, which frequently causes false positives on file upload endpoints, API endpoints with large payloads, and form submissions with rich content.
 
 **AWSManagedRulesBotControlRuleSet (Bot Control Common level):**
-- Override `SignalNonBrowserUserAgent` to **Count**. Default Block will block legitimate non-browser clients (native apps using okhttp/gohttp, API clients, monitoring tools).
-- Override `CategoryHttpLibrary` to **Count**. Same reason: legitimate HTTP libraries used by native apps and API clients will be blocked.
+- `SignalNonBrowserUserAgent` and `CategoryHttpLibrary` block non-browser User-Agents by default. If native apps (okhttp, gohttp), API clients, partners, or monitoring reach this Web ACL, override both to **Count**, or scope Bot Control so that traffic doesn't enter it.
+- For a site only browsers use, keep both at the default Block.
 
 **AWSManagedRulesAnonymousIpList:**
 - Review `HostingProviderIPList` carefully. Default Block will block requests from cloud platforms and hosting providers. If your clients may originate from cloud-hosted environments (e.g., enterprise users behind cloud proxies, SaaS integrations), override to **Count**. Never override to Allow: that lets cloud-hosted attack traffic bypass all subsequent rules.
@@ -265,7 +265,7 @@ APPENDIX_SECTIONS_ZH = r"""
 
 ## 附录 B：双 AntiDDoS AMR 实例
 
-浏览器流量和原生 App 流量需要不同的 AntiDDoS 策略时使用：
+浏览器流量和原生 App 流量需要不同的 AntiDDoS 策略时使用。如果原生 App 流量走的是单独的 host，并且有自己的 distribution 或负载均衡，给它单独建一个 Web ACL 比两个实例更简单。
 
 1. **在两个 AMR 实例之前加一条 Count+Label 规则**，给原生 App 流量打标签（如 `native-app:identified`）。这条规则的 priority 数字要比两个 AMR 实例都小。
 2. **AMR 实例 1（浏览器流量）**：scope-down 排除原生 App 标签。启用 `ChallengeAllDuringEvent`，Block 灵敏度 LOW（默认值）。
@@ -340,8 +340,8 @@ token 免疫时间建议至少 4 小时（14400 秒）。真实用户完成一�
 - 把 `SizeRestrictions_BODY` 设为 **Count**。这条规则会拦截超过 8KB 的请求体，在文件上传、大 payload 的 API 和内容较多的表单提交上经常误报。
 
 **AWSManagedRulesBotControlRuleSet（Bot Control COMMON 级别）：**
-- 把 `SignalNonBrowserUserAgent` 设为 **Count**。默认 Block 会拦掉正常的非浏览器客户端（用 okhttp、gohttp 的原生 App，API 客户端，监控工具）。
-- 把 `CategoryHttpLibrary` 设为 **Count**。原因同上，原生 App 和 API 客户端用的 HTTP 库也会被拦。
+- `SignalNonBrowserUserAgent` 和 `CategoryHttpLibrary` 默认会拦非浏览器的 User-Agent。如果有原生 App（okhttp、gohttp）、API 客户端、合作方或监控访问这个 Web ACL，把两条都设为 **Count**，或者用 scope-down 让这些流量不进 Bot Control。
+- 只有浏览器访问的站点，两条都保持默认的 Block。
 
 **AWSManagedRulesAnonymousIpList：**
 - 仔细评估 `HostingProviderIPList`。默认 Block 会拦截来自云平台和主机托管商的请求。如果你的客户端可能从云上发起（例如经过云代理的企业用户、SaaS 集成），把它设为 **Count**。不要设为 Allow，那样会让云上的攻击流量跳过后面所有规则。

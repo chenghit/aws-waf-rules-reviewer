@@ -163,5 +163,13 @@
       "TGT_TokenAbsent": "count",
       "TGT_VolumetricIpTokenAbsent": "challenge"
     }
+  },
+  "latest_versions": {
+    "_comment": "Latest static version per the AWS Managed Rules changelog. Update when a new version ships.",
+    "AWSManagedRulesBotControlRuleSet": {
+      "version": "6.1",
+      "released": "2026-07-24",
+      "checked": "2026-10-01"
+    }
   }
 }

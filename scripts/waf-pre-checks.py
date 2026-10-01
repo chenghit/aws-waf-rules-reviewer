@@ -176,7 +176,8 @@ def _check_token_domain(web_acl: dict) -> dict:
 def _check_managed_versions(rules: list) -> dict:
     """Check #12: managed rule groups not pinned to a static version, or pinned
     to an old Bot Control version."""
-    unpinned, outdated = [], []
+    unpinned, outdated, behind = [], [], []
+    latest = LABELS["latest_versions"]
     for r in rules:
         mg = r.get("managed")
         if not mg or mg.get("vendor", "AWS") != "AWS":
@@ -191,12 +192,17 @@ def _check_managed_versions(rules: list) -> dict:
         m = re.search(r'(\d+)\.(\d+)', ver)
         if m and "BotControl" in gn and int(m.group(1)) < 5:
             outdated.append(dict(_ref(r), group=gn, version=ver))
-    if unpinned or outdated:
+        elif m and gn in latest:
+            top = tuple(int(x) for x in latest[gn]["version"].split("."))
+            if (int(m.group(1)), int(m.group(2))) < top:
+                behind.append(dict(_ref(r), group=gn, version=ver, latest=latest[gn]["version"],
+                                   released=latest[gn]["released"]))
+    if unpinned or outdated or behind:
         parts = [f"{u['name']}: {u['group']} not pinned (follows AWS default version)" for u in unpinned]
-        parts += [f"{o['name']}: {o['group']} pinned to {o['version']}" for o in outdated]
+        parts += [f"{o['name']}: {o['group']} pinned to {o['version']}" for o in outdated + behind]
         return {"status": "FAIL", "finding": "; ".join(parts),
-                "unpinned": unpinned, "outdated": outdated,
-                "rules": unpinned + outdated}
+                "unpinned": unpinned, "outdated": outdated, "behind": behind,
+                "rules": unpinned + outdated + behind}
     return {"status": "PASS", "finding": None}
 
 def _check_default_action_redundancy(web_acl: dict, rules: list) -> dict:
@@ -503,6 +509,21 @@ def _check_unused_labels(rules: list) -> dict:
     if flagged:
         return {"status": "FAIL", "rules": flagged,
                 "finding": "Labels no rule matches: " + ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
+def _check_host_exclusions(rules: list) -> dict:
+    """Hosts that many rules leave out with NOT(Host ...): a sign the host would be
+    simpler on its own Web ACL, if it has its own distribution or load balancer."""
+    hosts = {}
+    for r in rules:
+        for l in _leaves(r, include_scope_down=True):
+            if l["field"] == "single_header:host" and l["negated"] and l["value"]:
+                hosts.setdefault(str(l["value"]).lower(), {})[r["name"]] = _ref(r)
+    flagged = [{"host": h, "rules": list(rs.values())} for h, rs in hosts.items() if len(rs) >= 3]
+    if flagged:
+        return {"status": "FAIL", "hosts": flagged, "rules": [x for f in flagged for x in f["rules"]],
+                "finding": "Hosts excluded by 3+ rules: " + ", ".join(f["host"] for f in flagged)}
     return {"status": "PASS", "finding": None}
 
 
@@ -1046,6 +1067,7 @@ def main():
         "rate_limits": _check_rate_limits(web_acl, rules),
         "unused_labels": _check_unused_labels(rules),
         "security_automations": _check_security_automations(rules),
+        "host_exclusions": _check_host_exclusions(rules),
     }
 
     # Build flags

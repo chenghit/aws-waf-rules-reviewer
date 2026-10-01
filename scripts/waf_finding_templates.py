@@ -364,6 +364,22 @@ TEMPLATES_EN = {
 
 ---
 """,
+"host_exclusions": """## Issue {n} (Low): A host left out of many rules may be simpler on its own Web ACL
+
+{rule_line}
+**Current state**: The same host is excluded with a NOT(Host) condition in several rules
+
+**Problem**:
+{details}
+- Each exclusion has to be kept in step as rules change, and some patterns, such as two Anti-DDoS AMR instances (Appendix B), exist only to treat this host differently
+
+**Recommendation**:
+- A Web ACL attaches to a whole distribution or load balancer, not to a host. If this host has its own distribution or load balancer, give it its own Web ACL with the rules it needs, and drop the exclusions here
+- If it shares a distribution with the other hosts, the exclusions are the way to do it; keep them
+- To check: {lookup}
+
+---
+""",
 "managed_allow_override": """## Issue {n} (Awareness): Managed rule group has an Allow override that bypasses all later rules
 
 **Rule**: {rule_name} (priority {priority})
@@ -414,7 +430,7 @@ TEMPLATES_EN = {
 
 **Problem**:
 - {detail}
-- Later versions added:
+- {versions_header}
 {additions}
 - On the old version, far fewer bots are recognized, so the category rules match much less traffic
 
@@ -424,10 +440,26 @@ TEMPLATES_EN = {
 
 ---
 """,
+"bot_control_behind": """## Issue {n} (Low): Bot Control isn't on the latest static version
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: Pinned to {current_version}; the latest static version is {latest} ({released})
+
+**Problem**:
+- Later versions added:
+{additions}
+- Bots that only the newer signatures recognize go through as unclassified
+
+**Recommendation**:
+- Pin {latest}. Run it in Count first and compare labels with current traffic
+- Subscribe to the rule group's SNS topic and add a CloudWatch alarm on `DaysToExpiry` for the pinned version
+
+---
+""",
 "managed_unpinned": """## Issue {n} (Low): Managed rule groups not pinned to a version
 
 {rule_line}
-**Current state**: No `VersionToUse` on {groups}
+**Current state**: No `Version` set on {groups}
 
 **Problem**:
 - These rule groups follow the AWS default version. AWS announces default-version changes only through each rule group's SNS topic, not in the changelog, so detection can change without any change to this Web ACL
@@ -891,6 +923,22 @@ TEMPLATES_ZH = {
 
 ---
 """,
+"host_exclusions": """## Issue {n} (Low): 被很多规则排除的 host，单独用一个 Web ACL 可能更简单
+
+{rule_line}
+**Current state**: 同一个 host 在多条规则里用 NOT(Host) 条件排除
+
+**Problem**:
+{details}
+- 每条排除条件都要跟着规则一起维护。有些做法，比如两个 Anti-DDoS AMR 实例（附录 B），只是为了单独处理这个 host
+
+**Recommendation**:
+- Web ACL 是关联到整个 distribution 或负载均衡上的，不能按 host 关联。如果这个 host 有自己的 distribution 或负载均衡，给它单独建一个 Web ACL，只放它需要的规则，这里的排除条件就可以删掉
+- 如果它和其他 host 共用一个 distribution，排除条件就是正确的做法，保留即可
+- 确认方法：{lookup}
+
+---
+""",
 "managed_allow_override": """## Issue {n} (Awareness): 托管规则组存在 Allow 覆盖，匹配的请求会绕过所有后续规则
 
 **Rule**: {rule_name} (priority {priority})
@@ -941,7 +989,7 @@ TEMPLATES_ZH = {
 
 **Problem**:
 - {detail}
-- 之后的版本陆续加入了：
+- {versions_header}
 {additions}
 - 旧版本能认出的 bot 少得多，各个类别规则能命中的流量也少得多
 
@@ -951,10 +999,26 @@ TEMPLATES_ZH = {
 
 ---
 """,
+"bot_control_behind": """## Issue {n} (Low): Bot Control 不是最新的静态版本
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: 固定在 {current_version}；最新的静态版本是 {latest}（{released}）
+
+**Problem**:
+- 之后的版本新增了：
+{additions}
+- 只有新版本特征才认得出的 bot，现在会被当作未分类放过去
+
+**Recommendation**:
+- 固定到 {latest}。先用 Count 跑一段时间，对比升级前后的标签
+- 订阅规则组的 SNS 主题，并给固定的版本设置 `DaysToExpiry` 的 CloudWatch 告警
+
+---
+""",
 "managed_unpinned": """## Issue {n} (Low): 托管规则组没有固定版本
 
 {rule_line}
-**Current state**: {groups} 没有设置 `VersionToUse`
+**Current state**: {groups} 没有设置 `Version`
 
 **Problem**:
 - 这些规则组跟着 AWS 的默认版本走。AWS 调整默认版本时不写进 changelog，只通过各规则组的 SNS 主题通知，所以 ACL 配置没变，检测行为也可能变了
