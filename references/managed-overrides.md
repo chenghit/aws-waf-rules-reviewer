@@ -40,11 +40,10 @@ Key principles:
 ## Managed Rule Group Action Overrides
 
 ### Version recommendations
-Only these managed rule groups have significant version upgrades worth flagging:
-- **AWSManagedRulesSQLiRuleSet**: version 2.0 has significantly higher SQLi detection coverage than the default 1.0. Recommend upgrading if pinned below 2.0.
+Only this managed rule group has a significant version upgrade worth flagging:
 - **AWSManagedRulesBotControlRuleSet**: version 5.0's Common level can identify close to 700 bot types (up from far fewer in 1.0) based on UA and IP, and Targeted level includes substantially more detection rules. The default version is still 1.0, which is outdated. Recommend upgrading if pinned below 5.0.
 
-For all other managed rule groups, the version shown in JSON is just the current snapshot and requires no action.
+For all other managed rule groups, the version shown in JSON is just the current snapshot and requires no action. SQLi is not an upgrade path: `AWSManagedRulesSQLiRuleSet` has two lineages (2.0 adds JSON parsing to `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5 are a separate line), so a higher number is not a newer detection. Flag it only when unpinned.
 
 ### How overrides work
 - Each rule inside a managed rule group has a default action (Block, Count, Challenge, etc.)
