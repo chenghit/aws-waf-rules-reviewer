@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.7.7 (2026-10-07)
+
+### Fixed
+- `references/managed-overrides.md` no longer recommends upgrading SQLi below 2.0. SQLi has two version lineages (2.0 with JSON parsing in `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5), so a higher number isn't a newer detection. The v0.7.x scripts and checklist already treated it this way; only this reference was stale.
+
 ## v0.7.6 (2026-10-01)
 
 ### Fixed
