@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """WAF Preprocess: Extract structured summary from AWS WAF Web ACL JSON.
 
-Usage: python3 waf-preprocess.py <input_path> <output_dir> [--logging <file>|none]
+Usage: python3 waf-preprocess.py <input_path> <output_dir> [--logging <file>|none] [--refs <dir>]
   input_path: WAF JSON file or directory containing one
   output_dir: absolute path for output files (created if needed)
   --logging:  output of `aws wafv2 get-logging-configuration`, or `none` if
               that call returned WAFNonexistentItemException. Omit if unknown.
+  --refs:     directory of `get-rule-group`, `get-ip-set`, and
+              `get-regex-pattern-set` outputs for the resources the Web ACL
+              references. Rule groups found there are expanded into rules.
+
+Writes work/waf-summary.json, and work/external-refs.json when the Web ACL
+references rule groups, IP sets, or regex pattern sets.
 
 Supports: AWS CLI (PascalCase), Console export, snake_case custom formats.
 """
@@ -95,6 +101,8 @@ def _detect_format(data: dict) -> str | None:
         return "aws_cli"
     if "web_acl" in data and isinstance(data["web_acl"], dict):
         return "snake_case_custom"
+    if "/rulegroup/" in str(data.get("ARN", "")):  # a rule group export, for --refs
+        return None
     if "Rules" in data and isinstance(data["Rules"], list):
         return "console_export"
     if "rules" in data and isinstance(data["rules"], list):
@@ -442,11 +450,11 @@ def _summarize_node(stmt: dict) -> dict:
             return {"summary": f"managed: {vendor}/{name} {version}".strip(),
                     "leaf_count": 0, "leaf_types": set(), "samples": None, "leaves": []}
 
-    # Rule group reference
+    # Rule group reference: its rules come from get-rule-group (see _expand_group)
     if "rule_group_reference_statement" in stmt:
         rg = stmt["rule_group_reference_statement"]
         arn = rg.get("rule_group_arn", rg.get("arn", "?"))
-        return {"summary": f"rule_group '{arn}'", "leaf_count": 0,
+        return {"summary": f"rule_group '{_arn_parts(arn).get('name', arn)}'", "leaf_count": 0,
                 "leaf_types": set(), "samples": None, "leaves": []}
 
     # Unknown
@@ -658,6 +666,19 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
         }
         scope_down = _extract_scope_down(mg)
 
+    rg_info = None
+    if "rule_group_reference_statement" in stmt:
+        rg = stmt["rule_group_reference_statement"]
+        rule_type = "rule_group"
+        if action == "managed_default":  # OverrideAction None: the group's own actions apply
+            action = "rule_group"
+        arn = rg.get("arn", rg.get("rule_group_arn", ""))
+        parts = _arn_parts(arn)
+        rg_info = {"arn": arn, "name": parts.get("name", ""), "loaded": False,
+                   # The documented namespace format; get-rule-group's LabelNamespace replaces it
+                   "label_namespace": f"awswaf:{parts.get('account', '')}:rulegroup:{parts.get('name', '')}:",
+                   "overrides": _extract_overrides(rg), "excluded_rules": _extract_excluded_rules(rg)}
+
     # Check for rate-based
     if "rate_based_statement" in stmt:
         rule_type = "rate_based"
@@ -732,6 +753,8 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
 
     if managed_info:
         result["managed"] = managed_info
+    if rg_info:
+        result["rule_group"] = rg_info
     if rate_info:
         result["rate_based"] = rate_info
     if challenge_cfg:
@@ -741,6 +764,154 @@ def _process_rule(rule: dict, idx: int, line_index: dict, jsonpath_prefix: str) 
         result["action_handling"] = handling
 
     return result
+
+# ── Referenced resources ──────────────────────────────────────────────────
+
+_ARN_RE = re.compile(r"^arn:aws[\w-]*:wafv2:([^:]*):(\d*):(global|regional)/"
+                     r"(rulegroup|ipset|regexpatternset|webacl)/([^/]+)/([^/]+)$")
+REF_TYPES = {"rulegroup": "rule_group", "ipset": "ip_set", "regexpatternset": "regex_pattern_set"}
+# Top-level keys of get-rule-group / get-ip-set / get-regex-pattern-set output
+REF_WRAPPERS = {"RuleGroup": "rule_group", "IPSet": "ip_set", "RegexPatternSet": "regex_pattern_set"}
+
+
+def _arn_parts(arn: str) -> dict:
+    m = _ARN_RE.match(str(arn))
+    if not m:
+        return {}
+    return {"region": m.group(1), "account": m.group(2),
+            "scope": "CLOUDFRONT" if m.group(3) == "global" else "REGIONAL",
+            "type": REF_TYPES.get(m.group(4), m.group(4)), "name": m.group(5), "id": m.group(6)}
+
+
+def _load_refs(refs_dir: str) -> dict:
+    """ARN → (type, normalized resource, file name, raw text) for every
+    get-rule-group / get-ip-set / get-regex-pattern-set output in refs_dir."""
+    found = {}
+    for f in sorted(Path(refs_dir).rglob("*.json")):
+        try:
+            text = f.read_text(encoding="utf-8", errors="replace")
+            data = json.loads(text)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        key = next((k for k in REF_WRAPPERS if isinstance(data.get(k), dict)), None)
+        res = data[key] if key else data
+        rtype = REF_WRAPPERS.get(key) or _arn_parts(res.get("ARN", "")).get("type")
+        if rtype in REF_TYPES.values() and res.get("ARN"):
+            found[res["ARN"]] = (rtype, _normalize_keys(res), f.name, text)
+    return found
+
+
+def _qualify_labels(node, ns: str):
+    """Inside a rule group, a label match key without the `awswaf:` prefix
+    means a label in the group's own namespace (GetRuleGroup ConsumedLabels)."""
+    if isinstance(node, dict):
+        lm = node.get("label_match_statement")
+        if isinstance(lm, dict) and not str(lm.get("key", "")).startswith("awswaf:"):
+            lm["key"] = ns + str(lm.get("key", ""))
+        for v in node.values():
+            _qualify_labels(v, ns)
+    elif isinstance(node, list):
+        for v in node:
+            _qualify_labels(v, ns)
+
+
+def _expand_group(parent: dict, rg: dict, file_name: str, text: str) -> list:
+    """The rules of a referenced rule group, as they run in this Web ACL: at the
+    parent's priority, with the parent's overrides applied and labels in the
+    group's namespace. Names are `<parent>:<rule>`, which no rule name can be."""
+    info = parent["rule_group"]
+    ns = rg.get("label_namespace") or info["label_namespace"]
+    over = {o["rule_name"]: o["action"] for o in info["overrides"]}
+    over.update({n: "count" for n in info["excluded_rules"]})
+    line_index = _build_line_index(text, "rules")
+    out = []
+    raw_rules = rg.get("rules", [])
+    for idx in sorted(range(len(raw_rules)), key=lambda i: raw_rules[i].get("priority", i)):
+        raw = json.loads(json.dumps(raw_rules[idx]))
+        _qualify_labels(raw, ns)
+        r = _process_rule(raw, idx, line_index, "$.RuleGroup.Rules")
+        # own_action: what the rule does inside the group. With the whole group in
+        # Count that is its overridden action; the group still stops on it
+        own = over.get(raw.get("name"), r["action"]) if parent["action"] == "count" else r["action"]
+        action = "count" if parent["action"] == "count" else over.get(raw.get("name"), own)
+        r["group"] = {"rule": parent["name"], "rule_group": info["name"], "priority": r["priority"],
+                      **({"own_action": own} if action != own else {})}
+        r["name"] = f"{parent['name']}:{r['name']}"
+        r["priority"] = parent["priority"]
+        r["action"] = action
+        r["rule_labels"] = [l if l.startswith("awswaf:") else ns + l for l in r["rule_labels"]]
+        r["source"]["file"] = file_name
+        out.append(r)
+    info.update(loaded=True, label_namespace=ns, rule_count=len(out),
+                **({"capacity": rg["capacity"]} if "capacity" in rg else {}))
+    parent["statement"]["summary"] = f"rule_group '{info['name']}' ({len(out)} rules)"
+    return out
+
+
+def _ref_command(ref: dict, refs_dir: str = "") -> str:
+    """The read-only CLI call that exports a referenced resource. Without
+    refs_dir the output is a bare file name, for the report."""
+    name = ref["type"].replace("_", "-") + "-" + ref["name"] + ".json"
+    out = f'"{os.path.join(refs_dir, name)}"' if refs_dir else name
+    if ref["type"] == "rule_group":
+        return f"aws wafv2 get-rule-group --arn {ref['arn']} --region {ref['region']} > {out}"
+    cmd = "get-ip-set" if ref["type"] == "ip_set" else "get-regex-pattern-set"
+    return (f"aws wafv2 {cmd} --name {ref['name']} --scope {ref['scope']} --id {ref['id']} "
+            f"--region {ref['region']} > {out}")
+
+
+def _collect_refs(rules: list, loaded: dict, acl_account: str) -> list:
+    """Rule groups, IP sets, and regex pattern sets the rules reference, with
+    the rules that use them and what was found in --refs."""
+    refs = {}
+
+    def add(arn, rule):
+        parts = _arn_parts(arn)
+        if parts.get("type") not in REF_TYPES.values():
+            return
+        e = refs.setdefault(arn, dict(parts, arn=arn, used_by=[], loaded=arn in loaded))
+        if acl_account and parts["account"] and parts["account"] != acl_account:
+            e["other_account"] = True
+        if rule["name"] not in e["used_by"]:
+            e["used_by"].append(rule["name"])
+
+    for r in rules:
+        if r.get("rule_group"):
+            add(r["rule_group"]["arn"], r)
+        for l in r["statement"]["leaves"] + (r.get("scope_down") or {}).get("leaves", []):
+            if l["type"] in ("ip_set", "regex_pattern_set"):
+                add(l["value"], r)
+    # Rules that match labels from a rule group that wasn't provided
+    for r in rules:
+        rg = r.get("rule_group")
+        if not rg or rg["loaded"] or rg["arn"] not in refs:
+            continue
+        users = [x["name"] for x in rules if any(
+            l["type"] == "label_match" and (str(l["value"]).startswith(rg["label_namespace"])
+                                            or rg["label_namespace"].startswith(str(l["value"])))
+            for l in x["statement"]["leaves"] + (x.get("scope_down") or {}).get("leaves", []))]
+        if users:
+            refs[rg["arn"]]["label_users"] = users
+    for arn, e in refs.items():
+        if not e["loaded"]:
+            e["export_command"] = _ref_command(e)
+            continue
+        rtype, res, file_name, _ = loaded[arn]
+        e["file"] = file_name
+        if rtype == "ip_set":
+            addrs = res.get("addresses", [])
+            e.update(ip_version=res.get("ip_address_version"), address_count=len(addrs), addresses=addrs[:100])
+        elif rtype == "regex_pattern_set":
+            e["regexes"] = [x.get("regex_string", "") for x in res.get("regular_expression_list", [])]
+    # The regex checks read a set's patterns from the leaf that uses it
+    for r in rules:
+        for l in r["statement"]["leaves"] + (r.get("scope_down") or {}).get("leaves", []):
+            if l["type"] == "regex_pattern_set" and "regexes" in refs.get(l["value"], {}):
+                l["regexes"] = refs[l["value"]]["regexes"]
+                l["set"] = refs[l["value"]]["name"]
+    return list(refs.values())
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
@@ -753,8 +924,15 @@ def main():
             fatal("--logging requires a file path or 'none'")
         logging_arg = args[idx + 1]
         del args[idx:idx + 2]
+    refs_arg = None
+    if "--refs" in args:
+        idx = args.index("--refs")
+        if idx + 1 >= len(args) or not Path(args[idx + 1]).is_dir():
+            fatal("--refs requires a directory")
+        refs_arg = args[idx + 1]
+        del args[idx:idx + 2]
     if len(args) < 2:
-        fatal("Usage: waf-preprocess.py <input_path> <output_dir> [--logging <file>|none]")
+        fatal("Usage: waf-preprocess.py <input_path> <output_dir> [--logging <file>|none] [--refs <dir>]")
 
     input_path = args[0]
     output_dir = args[1]
@@ -791,11 +969,35 @@ def main():
     else:
         jp_prefix = "$.Rules"
 
-    # Extract rules
-    rules_raw = web_acl.get("rules", [])
+    # Extract rules in evaluation order: Firewall Manager's first rule groups,
+    # the Web ACL's rules, then Firewall Manager's last rule groups. Rules of
+    # a rule group found in --refs follow their reference rule. `order` is the
+    # position in that order; `id` is unique where priorities repeat.
+    loaded = _load_refs(refs_arg) if refs_arg else {}
+    acl_prefix = jp_prefix.rsplit(".", 1)[0]
     rules = []
-    for idx, rule in enumerate(rules_raw):
-        rules.append(_process_rule(rule, idx, line_index, jp_prefix))
+    for key, tag in (("pre_process_firewall_manager_rule_groups", "pre"), ("rules", ""),
+                     ("post_process_firewall_manager_rule_groups", "post")):
+        batch = []
+        for idx, rule in enumerate(web_acl.get(key, [])):
+            if tag:
+                rule = dict(rule, statement=rule.get("firewall_manager_statement", {}))
+                jkey = key if fmt == "snake_case_custom" else "".join(w.capitalize() for w in key.split("_"))
+                r = _process_rule(rule, idx, {}, f"{acl_prefix}.{jkey}")
+                r["firewall_manager"] = tag
+            else:
+                r = _process_rule(rule, idx, line_index, jp_prefix)
+            batch.append(r)
+        for r in sorted(batch, key=lambda r: r["priority"]):
+            r["id"] = f"{tag}{r['priority']}"
+            rules.append(r)
+            arn = (r.get("rule_group") or {}).get("arn")
+            if arn in loaded:
+                for x in _expand_group(r, loaded[arn][1], loaded[arn][2], loaded[arn][3]):
+                    x["id"] = f"{r['id']}_{x['group']['priority']}"
+                    rules.append(x)
+    for i, r in enumerate(rules):
+        r["order"] = i
 
     # Extract web_acl metadata
     default_action = "unknown"
@@ -850,10 +1052,17 @@ def main():
             "challenge_config": challenge_config,
             "captcha_config": captcha_config,
             "logging": _load_logging(logging_arg),
+            **({"managed_by_firewall_manager": True} if web_acl.get("managed_by_firewall_manager") else {}),
+            # ALB resource-level DDoS protection; has effect only on an ALB
+            **({"alb_low_reputation_mode": osd["alb_low_reputation_mode"]}
+               if (osd := web_acl.get("on_source_ddos_protection_config") or {}).get("alb_low_reputation_mode") else {}),
         },
         "rule_count": len(rules),
         "rules": rules,
     }
+    refs = _collect_refs(rules, loaded, _arn_parts(acl_arn).get("account", ""))
+    if refs:
+        summary["external_refs"] = refs
 
     # Write output
     os.makedirs(output_dir, exist_ok=True)
@@ -864,6 +1073,20 @@ def main():
     except OSError as e:
         fatal(f"Failed to write {output_file}: {e}")
 
+    # What Step 1b asks the user about: each resource, and the call that exports it
+    refs_file = work_path(output_dir, "external-refs.json")
+    missing = [r for r in refs if not r["loaded"]]
+    if refs:
+        refs_dir = os.path.abspath(refs_arg or os.path.join(os.path.dirname(refs_file), "refs"))
+        Path(refs_file).write_text(json.dumps({
+            "refs_dir": refs_dir,
+            "refs": [{k: r[k] for k in ("type", "name", "arn", "account", "used_by", "loaded")
+                      if k in r} | ({"other_account": True} if r.get("other_account") else {})
+                     | ({} if r["loaded"] else {"command": _ref_command(r, refs_dir)}) for r in refs],
+        }, indent=2, ensure_ascii=False), encoding="utf-8")
+    elif os.path.exists(refs_file):
+        os.remove(refs_file)
+
     print(f"Processed {len(rules)} rules", file=sys.stderr)
     print("---RESULT---")
     print("SPEC: 1")
@@ -871,6 +1094,10 @@ def main():
     print(f"OUTPUT_FILE: {output_file}")
     print(f"INPUT_FILE: {input_file}")
     print(f"RULE_COUNT: {len(rules)}")
+    print(f"EXTERNAL_REFS: {len(refs)}")
+    print(f"EXTERNAL_REFS_MISSING: {len(missing)}")
+    if refs:
+        print(f"REFS_FILE: {refs_file}")
 
 if __name__ == "__main__":
     main()

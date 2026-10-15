@@ -102,7 +102,7 @@ TEMPLATES_EN = {
 - WAF logs are essential for security incident investigation, rule tuning, and false positive analysis
 
 **Recommendation**:
-- Verify that WAF logging is enabled (Kinesis Data Firehose, S3, or CloudWatch Logs) via the AWS Console or CLI
+- Verify that WAF logging is enabled (Amazon Data Firehose, S3, or CloudWatch Logs) via the AWS Console or CLI
 - Recommend retaining at least 90 days of logs and configuring CloudWatch alarms for key metrics (Block rate, Challenge rate)
 
 ---
@@ -117,7 +117,7 @@ TEMPLATES_EN = {
 - Without logs, false positives, rule tuning, and incident investigation have to rely on sampled requests and CloudWatch metrics only
 
 **Recommendation**:
-- Enable WAF logging to CloudWatch Logs, S3, or Kinesis Data Firehose
+- Enable WAF logging to CloudWatch Logs, S3, or Amazon Data Firehose
 - Recommend retaining at least 90 days of logs and configuring CloudWatch alarms for key metrics (Block rate, Challenge rate)
 
 ---
@@ -296,10 +296,10 @@ TEMPLATES_EN = {
 
 ---
 """,
-"no_ip_rate_limit": """## Issue {n} (Medium): No rate limit acts per client IP
+"no_ip_rate_limit": """## Issue {n} (Medium): No per-IP rate limit covers all traffic
 
 {rule_line}
-**Current state**: This Web ACL allows by default, and no rate-based rule that counts per IP has an action other than Count
+**Current state**: This Web ACL allows by default, and no rate-based rule counts per IP across all paths with an action other than Count
 
 **Problem**:
 - A single IP can send as many requests as it wants. Rate limits keyed by User-Agent or a constant only cover the clients they name
@@ -345,6 +345,81 @@ TEMPLATES_EN = {
 
 **Recommendation**:
 - If a rule was meant to act on the label, add it after the producing rule. Otherwise the labels are fine for observation
+
+---
+""",
+"alb_always_on": """## Issue {n} (Awareness): ALB resource-level DDoS protection is set to Always on ⏳
+
+{rule_line}
+**Current state**: `OnSourceDDoSProtectionConfig.ALBLowReputationMode` is `ALWAYS_ON`
+
+**Problem**:
+- On an ALB, this rate-limits requests from known low-reputation sources all the time, checking both the client IP and IPs in `X-Forwarded-For`. AWS notes it can affect legitimate traffic more than the default, Active under DDoS
+- It doesn't appear in WAF logs or labels. What it drops shows only in the ALB's `LowReputationPacketsDropped` and `LowReputationRequestsDenied` CloudWatch metrics, so a request it stopped looks like no WAF rule acted on it
+
+**Recommendation**:
+- If users reach the ALB through shared proxies, or through a proxy or CDN that sets `X-Forwarded-For`, check those metrics for drops of real traffic
+- Unless there's a reason for Always on, switch to the default, Active under DDoS. The setting applies to every ALB this Web ACL is associated with
+
+---
+""",
+"broad_regex": """## Issue {n} (Low): Regex conditions match more than they spell out ⏳
+
+{rule_line}
+**Current state**: Block, Challenge, or CAPTCHA rules with regex patterns whose alternatives or character classes are wider than the words in them suggest
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+- Before changing a pattern, check in sampled requests or logs what it matches today, and test the new one in Count first
+
+---
+""",
+"empty_sets": """## Issue {n} (Low): Referenced IP sets or regex pattern sets are empty ⏳
+
+{rule_line}
+**Current state**: The sets these rules use have no addresses or patterns
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- If something fills these sets later (automation, an incident runbook), no change is needed. Check that it still runs
+- Otherwise fill the sets with what the rules are meant to match, or remove the rules
+
+---
+""",
+"rule_group_count": """## Issue {n} (Low): Rule groups set to Count by the Web ACL ⏳
+
+{rule_line}
+**Current state**: Rule group references with `OverrideAction` Count, or with rules overridden to Count in `RuleActionOverrides`
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- If the Count is a test, check the matches in sampled requests or logs, then remove the override
+- To test a whole group, override each of its rules to Count in `RuleActionOverrides` instead of setting the group's `OverrideAction` to Count. The group then runs every rule and adds every label
+- If a rule has false positives, fix the rule in the rule group instead of keeping the override
+
+---
+""",
+"unreviewed_refs": """## Issue {n} (Awareness): Rule groups or sets this Web ACL references weren't reviewed ⏳
+
+{rule_line}
+**Current state**: These rules reference rule groups, IP sets, or regex pattern sets by ARN; their contents weren't provided
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- Export them with these read-only calls, then run the review again with the files:
+
+```bash
+{commands}
+```
 
 ---
 """,
@@ -501,7 +576,7 @@ TEMPLATES_EN = {
 "path_block_decoding": """## Issue {n} (Medium): Path Block or rate rules don't URL-decode, so encoded paths slip through
 
 {rule_line}
-**Current state**: Block rules, or rate-based rules through their scope-down, match `UriPath` without `URL_DECODE`
+**Current state**: Block rules, rate-based rules through their scope-down, or Count rules whose label a Block rule acts on, match `UriPath` without `URL_DECODE`
 
 **Problem**:
 - WAF inspects the raw URI path as the client sent it. Without a decoding transformation, `/%69nternal/` doesn't match `/internal/`. If the origin decodes the path, the request reaches the path the rule meant to block
@@ -661,7 +736,7 @@ TEMPLATES_ZH = {
 - WAF 日志对于安全事件调查、规则调优和误报分析至关重要
 
 **Recommendation**:
-- 通过 AWS 控制台或 CLI 确认是否已启用 WAF 日志（Kinesis Data Firehose、S3 或 CloudWatch Logs）
+- 通过 AWS 控制台或 CLI 确认是否已启用 WAF 日志（Amazon Data Firehose、S3 或 CloudWatch Logs）
 - 建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）
 
 ---
@@ -676,7 +751,7 @@ TEMPLATES_ZH = {
 - 排查误报、调规则、调查安全事件时，只能依赖采样请求和 CloudWatch 指标
 
 **Recommendation**:
-- 启用 WAF 日志，目标可选 CloudWatch Logs、S3 或 Kinesis Data Firehose
+- 启用 WAF 日志，目标可选 CloudWatch Logs、S3 或 Amazon Data Firehose
 - 建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）
 
 ---
@@ -855,10 +930,10 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"no_ip_rate_limit": """## Issue {n} (Medium): 没有一条按客户端 IP 生效的限速
+"no_ip_rate_limit": """## Issue {n} (Medium): 没有覆盖全部流量的按 IP 限速
 
 {rule_line}
-**Current state**: 这个 ACL 默认放行，按 IP 计数的限速规则要么没有，要么都是 Count
+**Current state**: 这个 ACL 默认放行，没有一条覆盖所有路径、动作不是 Count 的按 IP 限速规则
 
 **Problem**:
 - 单个 IP 发多少请求都不会被限。按 User-Agent 或常量计数的限速，只管得到它们点名的客户端
@@ -904,6 +979,81 @@ TEMPLATES_ZH = {
 
 **Recommendation**:
 - 如果本来想根据这个标签采取动作，在产生它的规则后面补上对应的规则；只是用来观察的话，保持现状就行
+
+---
+""",
+"alb_always_on": """## Issue {n} (Awareness): ALB 资源级 DDoS 防护设成了 Always on ⏳
+
+{rule_line}
+**Current state**: `OnSourceDDoSProtectionConfig.ALBLowReputationMode` 是 `ALWAYS_ON`
+
+**Problem**:
+- 关联到 ALB 时，它会一直对已知低信誉来源的请求限速，既看客户端 IP，也看 `X-Forwarded-For` 里的 IP。AWS 说明它对正常流量的影响比默认的 Active under DDoS 更大
+- 它不会出现在 WAF 日志和标签里，拦掉的请求只体现在 ALB 的 `LowReputationPacketsDropped` 和 `LowReputationRequestsDenied` 这两个 CloudWatch 指标里。被它挡掉的请求，看起来就像没有任何 WAF 规则处理过
+
+**Recommendation**:
+- 如果用户经过共享代理访问 ALB，或者前面有会设置 `X-Forwarded-For` 的代理或 CDN，先看看这两个指标里有没有正常流量被丢
+- 没有特别理由的话，改回默认的 Active under DDoS。这个设置对这个 Web ACL 关联的所有 ALB 都生效
+
+---
+""",
+"broad_regex": """## Issue {n} (Low): 正则条件匹配得比字面更宽 ⏳
+
+{rule_line}
+**Current state**: Block、Challenge 或 CAPTCHA 规则里的正则，分支或字符类比里面的字看起来要宽
+
+**Problem**:
+{details}
+
+**Recommendation**:
+{recs}
+- 改模式之前，先在 sampled requests 或日志里看它现在命中了什么，新模式先用 Count 试
+
+---
+""",
+"empty_sets": """## Issue {n} (Low): 引用的 IP set 或 regex pattern set 是空的 ⏳
+
+{rule_line}
+**Current state**: 这些规则用到的 set 里没有地址，也没有正则
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- 如果有东西会往这些 set 里填（自动化脚本、应急预案），不用改，确认它还在运行就行
+- 否则按规则的用途把 set 填上，或者删掉这些规则
+
+---
+""",
+"rule_group_count": """## Issue {n} (Low): Web ACL 把 rule group 设成了 Count ⏳
+
+{rule_line}
+**Current state**: rule group 引用的 `OverrideAction` 是 Count，或者在 `RuleActionOverrides` 里把组内规则改成了 Count
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- 如果 Count 是在测试，先在 sampled requests 或日志里看匹配情况，再去掉 override
+- 要测试整个组，用 `RuleActionOverrides` 把组里每条规则改成 Count，不要把组的 `OverrideAction` 设成 Count。这样组里每条规则都会执行，每个标签都会打上
+- 如果某条规则有误报，直接在 rule group 里改这条规则，不要一直靠 override
+
+---
+""",
+"unreviewed_refs": """## Issue {n} (Awareness): 这个 Web ACL 引用的 rule group 或 set 没有审到 ⏳
+
+{rule_line}
+**Current state**: 这些规则按 ARN 引用了 rule group、IP set 或 regex pattern set，评审时没拿到它们的内容
+
+**Problem**:
+{details}
+
+**Recommendation**:
+- 用下面的只读命令导出这些资源，再带上导出的文件重新评审：
+
+```bash
+{commands}
+```
 
 ---
 """,
@@ -1060,7 +1210,7 @@ TEMPLATES_ZH = {
 "path_block_decoding": """## Issue {n} (Medium): 按路径拦截或限速的规则没做 URL 解码，编码后的路径可以绕过
 
 {rule_line}
-**Current state**: Block 规则，或限速规则的 scope-down，匹配 `UriPath` 时没有 `URL_DECODE`
+**Current state**: Block 规则、限速规则的 scope-down，或者打出的标签被 Block 规则使用的 Count 规则，匹配 `UriPath` 时没有 `URL_DECODE`
 
 **Problem**:
 - WAF 检查的是客户端发来的原始路径。没有解码转换时，`/%69nternal/` 匹配不上 `/internal/`。如果源站会解码，请求就会到达规则本来要拦的路径

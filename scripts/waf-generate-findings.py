@@ -62,7 +62,7 @@ LINES = {
         "wildcard": "- `{rule}` (priority {p}): `{value}` contains `*`. Byte match has no wildcards, so `*` is a literal character and this condition only matches paths that literally contain it",
         "query_in_path": "- `{rule}` (priority {p}): `{value}` expects a query string, but UriPath never includes the query string, so this condition never matches",
         "no_decode": "- `{rule}` (priority {p}): text transformation {transforms}{case}",
-        "case_note": ". No LOWERCASE either, so a case change like `/Internal/` also gets through",
+        "case_note": ". No LOWERCASE either, so a case change like `{path}` also gets through",
         "group_count": "- `{rule}` (priority {p}, {group}): the whole rule group is set to Count, none of its rules block",
         "rule_count": "- `{rule}` (priority {p}, {group}): {names} overridden to Count",
         "fragment_allow": "- For Allow rules this removes the path restriction: the rule allows every path for the requests its other conditions match",
@@ -82,6 +82,9 @@ LINES = {
             ((6, 1), "- 6.1: more signatures across categories, including Security, SEO, and scraping frameworks"),
         ],
         "missing_amr": "- No Anti-DDoS rule group: this Web ACL allows traffic by default and has no automatic HTTP flood mitigation (Medium)",
+        "missing_amr_alb": "- No Anti-DDoS rule group. If this Web ACL is on an ALB, the ALB's resource-level DDoS protection (`ALBLowReputationMode` `{mode}`) rate-limits requests from known low-reputation sources {when}. It doesn't act on a flood from sources without a bad reputation, and it has no traffic baseline, Challenge, or labels, so HTTP flood mitigation is still missing (Medium)",
+        "alb_when_ACTIVE_UNDER_DDOS": "only while the ALB is under high load or a likely DDoS event",
+        "alb_when_ALWAYS_ON": "all the time",
         "missing_iprep": "- No Amazon IP reputation list: IPs on AWS threat intelligence lists, including ones doing reconnaissance and scanning, are not blocked (Medium)",
         "missing_anon": "- No anonymous IP list: traffic from VPNs, Tor, proxies, and non-AWS cloud hosts is not flagged. Many scanners run on cloud hosts (Low)",
         "missing_bot": "- No Bot Control: if this Web ACL serves browser pages, self-identifying bots and non-browser clients are not classified (Low)",
@@ -98,6 +101,7 @@ LINES = {
         "example_other": "the matching value",
         "sum_managed": "- {k} rule(s) across {g} managed rule group(s) are in Count: they label but don't block{whole}",
         "sum_whole": ". {names} block nothing at all",
+        "sum_managed_whole": "- {g} managed rule group(s) are in Count as a whole: they label but don't block",
         "sum_order": "- {n} ordering problem(s) that change what gets inspected or blocked: {kinds}",
         "kind_label_before_producer": "a label used before it's added",
         "kind_label_no_producer": "a label nothing adds",
@@ -137,6 +141,13 @@ LINES = {
         "what_custom": "this rule",
         "case_dead": "- `{rule}` (priority {p}): after {transform}, {field} can't contain {dead}{whole}{neg}",
         "case_whole": ". The condition never matches",
+        "in_set": "{field} (regex pattern set `{name}`)",
+        "sum_broad": "- {n} regex condition(s) on Block, Challenge, or CAPTCHA rules match more than they spell out, so ordinary requests can hit them",
+        "broad_short": "- `{rule}` (priority {p}): in {field}, `{regex}` has the alternative(s) {parts}. `|` splits the whole pattern, so each one matches on its own, anywhere in the value",
+        "broad_class": "- `{rule}` (priority {p}): in {field}, `{cls}` is a character class. It matches any one of the characters inside it, not the sequence `{seq}`",
+        "broad_overridden": "- Overridden to Count by the Web ACL today: {rules}. Their patterns act as soon as the override is removed",
+        "rec_broad_short": "- Put alternatives in a group with the context they share, such as `(?:a|b)` inside the rest of the pattern, and anchor with `^`, `$`, or `\\b` where the value's position is known",
+        "rec_broad_class": "- To match an encoded character, write the sequence itself (`%20`) if the rule doesn't decode, or the decoded character (a space) if it applies `URL_DECODE` first",
         "case_neg": ". It sits under a NOT, so the exclusion never applies",
         "case_neg_part": ". It sits under a NOT, so these requests aren't excluded",
         "case_rec": "- Write these patterns in the case the transform produces, e.g. `adsbot-google` after LOWERCASE",
@@ -161,7 +172,27 @@ LINES = {
         "rate_shared_crawler": "- `{rule}` (priority {p}): one budget of {limit} requests per {window} seconds for everything with this User-Agent (`{key}`), which search engine crawlers also send. Anyone can send that User-Agent, so forged requests use up the budget and the real crawler gets blocked with them",
         "rate_rec_crawler": "- Keep the budget, but count only the real search engine crawler: add the `crawler:verified` label from the ASN + User-Agent rule in Appendix A to the scope-down. Leave forged User-Agents to a per-IP limit\n",
         "no_ip_counted": "- {rules} would limit per IP, but it's in Count\n",
+        "no_ip_scoped": "- Per-IP limits only on the paths in a scope-down: {rules}. Every other path has none\n",
+        "no_ip_unloaded": "- Some rule groups this Web ACL references weren't provided, and one of them may hold a per-IP rate limit\n",
         "rule_na_global": "**Rule**: N/A (Web ACL global configuration)",
+        "sum_refs": "- The Web ACL export holds only the ARNs of {what}. Their rules and contents weren't provided, so this review didn't check them",
+        "refs_groups": "{n} rule group(s)", "refs_sets": "{n} IP or regex pattern set(s)", "refs_and": " and ",
+        "ref_missing": "- `{name}` ({kind}), used by {rules}",
+        "ref_rule_group": "rule group", "ref_ip_set": "IP set", "ref_regex_pattern_set": "regex pattern set",
+        "ref_group_blind": "- A rule group's rules run at the priority of the rule that references it. Unless the Web ACL sets the group to Count, an Allow or Block inside it ends evaluation of the whole Web ACL, so one Allow there skips every later rule",
+        "ref_group_missing": "- Findings that a custom protection is missing, such as a per-IP rate limit or an IP block list, may not hold: these rule groups can contain one. Missing managed rule groups still hold, because a rule group can't contain one",
+        "ref_label_users": "- {rules} match labels from `{name}`. Until its rules are reviewed, whether anything adds those labels can't be checked",
+        "sum_rg_count": "- {n} rule group reference(s) are set to Count, as a whole or rule by rule. The requests they match aren't stopped",
+        "rg_whole": "- `{rule}` (priority {p}, {group}): the whole rule group is set to Count with `OverrideAction`. The group still stops at its first rule with a terminating action, and only that result becomes Count, so later rules in the group never run and add no labels",
+        "rg_rules": "- `{rule}` (priority {p}, {group}): {names} overridden to Count",
+        "fms_note": "- {rules}: set by a Firewall Manager policy, which this account can't change, and no rule in this account can run before Firewall Manager's first rule groups or after its last ones. Ask the Firewall Manager administrator to make the changes above in the policy",
+        "fms_place": "- This Web ACL has Firewall Manager rule groups. Where the steps above place a rule first, last, or next to another rule group, that means among this account's own rules: Firewall Manager's first rule groups always run before them, and its last rule groups after",
+        "fms_post": "- No rule in this account runs after Firewall Manager's last rule groups, so none can act on the labels they add. To act on them, add the account's own instance of the group",
+        "group_note": "- Rules inside rule group `{group}`: {rules}. Make the change in the group, and every Web ACL that uses it gets the change",
+        "sum_empty": "- {n} referenced set(s) are empty. A condition on an empty set never matches, and a NOT condition on one matches every request",
+        "empty_match": "- `{name}` ({kind}) is empty: `{rule}` ({action}) never matches on it",
+        "empty_negated": "- `{name}` ({kind}) is empty: `{rule}` ({action}) matches NOT on it, so it acts on every request that meets its other conditions",
+        "ref_other_account": "- Owned by another account: {names}. Export them in that account, or have the owner add `wafv2:GetRuleGroup` to the permission policy that shares the rule group with this account",
         "host_excluded": "- `{host}` is left out of {n} rules with a NOT(Host) condition: {rules}",
         "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` lists the distributions and their alternate domain names (`Aliases`)",
         "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <type>` lists the associated resources, one resource type per call",
@@ -205,7 +236,7 @@ LINES = {
         "wildcard": "- `{rule}`（priority {p}）：`{value}` 里有 `*`。字节匹配不支持通配符，`*` 就是一个普通字符，这个条件只会匹配路径里真的带 `*` 的请求",
         "query_in_path": "- `{rule}`（priority {p}）：`{value}` 要匹配的是查询串，但 UriPath 不包含查询串，这个条件永远不会命中",
         "no_decode": "- `{rule}`（priority {p}）：文本转换为 {transforms}{case}",
-        "case_note": "。也没有做 LOWERCASE，改一下大小写（如 `/Internal/`）也能绕过",
+        "case_note": "。也没有做 LOWERCASE，改一下大小写（如 `{path}`）也能绕过",
         "group_count": "- `{rule}`（priority {p}，{group}）：整个规则组设成了 Count，组里的规则都不拦截",
         "rule_count": "- `{rule}`（priority {p}，{group}）：{names} 被改成了 Count",
         "fragment_allow": "- 对 Allow 规则来说，路径限制因此失效：只要其他条件满足，任何路径都会被放行",
@@ -224,6 +255,9 @@ LINES = {
             ((6, 1), "- 6.1：多个类别继续增加特征，包括 Security、SEO 和爬虫框架"),
         ],
         "missing_amr": "- 没有部署 Anti-DDoS 规则组：这个 ACL 默认放行，遇到 HTTP flood 时没有自动缓解（Medium）",
+        "missing_amr_alb": "- 没有部署 Anti-DDoS 规则组。如果这个 Web ACL 关联的是 ALB，ALB 的资源级 DDoS 防护（`ALBLowReputationMode` 为 `{mode}`）会{when}对已知低信誉来源的请求限速。它管不到来自正常信誉来源的 flood，也没有流量基线、Challenge 和标签，所以 HTTP flood 的自动缓解仍然缺失（Medium）",
+        "alb_when_ACTIVE_UNDER_DDOS": "在 ALB 高负载或疑似遭受 DDoS 时",
+        "alb_when_ALWAYS_ON": "一直",
         "missing_iprep": "- 没有部署 Amazon IP 信誉列表：AWS 威胁情报名单上的 IP，包括正在做侦察和扫描的 IP，都不会被拦（Medium）",
         "missing_anon": "- 没有部署匿名 IP 列表：来自 VPN、Tor、代理和非 AWS 云主机的流量不会被标记。很多扫描器跑在云主机上（Low）",
         "missing_bot": "- 没有部署 Bot Control：如果这个 ACL 承载浏览器页面，自报身份的 bot 和非浏览器客户端都不会被分类（Low）",
@@ -240,6 +274,7 @@ LINES = {
         "example_other": "匹配的值",
         "sum_managed": "- {g} 个托管规则组里共有 {k} 条规则处于 Count，只打标签不拦截{whole}",
         "sum_whole": "；{names} 整组什么都不拦",
+        "sum_managed_whole": "- {g} 个托管规则组整组处于 Count，只打标签不拦截",
         "sum_order": "- 发现 {n} 处会影响检查或拦截的顺序问题：{kinds}",
         "kind_label_before_producer": "标签在产生之前就被使用",
         "kind_label_no_producer": "用了没有规则产生的标签",
@@ -279,6 +314,13 @@ LINES = {
         "what_custom": "这条规则",
         "case_dead": "- `{rule}`（priority {p}）：做了 {transform} 之后，{field} 里不可能出现 {dead}{whole}{neg}",
         "case_whole": "，这个条件永远不会命中",
+        "in_set": "{field}（regex pattern set `{name}`）",
+        "sum_broad": "- Block、Challenge 或 CAPTCHA 规则里有 {n} 个正则条件比字面看起来匹配得更宽，普通请求也可能命中",
+        "broad_short": "- `{rule}`（priority {p}）：{field} 上的 `{regex}` 有 {parts} 这样的分支。`|` 切分的是整个模式，每个分支都单独成立，出现在值的任何位置都算匹配",
+        "broad_class": "- `{rule}`（priority {p}）：{field} 上的 `{cls}` 是字符类，匹配的是方括号里任意一个字符，不是 `{seq}` 这个序列",
+        "broad_overridden": "- {rules} 现在被 Web ACL 的 override 改成了 Count，去掉 override 后这些模式就会生效",
+        "rec_broad_short": "- 把几个分支和它们共同的上下文放进一个分组，比如在模式里写 `(?:a|b)`。值的位置固定时，用 `^`、`$` 或 `\\b` 锚定",
+        "rec_broad_class": "- 要匹配编码后的字符：规则不解码时直接写序列（`%20`），规则先做了 `URL_DECODE` 时写解码后的字符（空格）",
         "case_neg": "。它在 NOT 里面，所以这项排除永远不起作用",
         "case_neg_part": "。它在 NOT 里面，所以这些请求不会被排除",
         "case_rec": "- 按转换后的大小写来写这些模式，比如 LOWERCASE 之后写 `adsbot-google`",
@@ -303,7 +345,27 @@ LINES = {
         "rate_shared_crawler": "- `{rule}`（priority {p}）：带这个 User-Agent 的所有请求共用一份额度，{window} 秒 {limit} 次（`{key}`），搜索引擎爬虫也会带这个 User-Agent。这个 User-Agent 谁都能发，伪造的请求会把额度用完，真正的爬虫也跟着被拦",
         "rate_rec_crawler": "- 额度可以保留，但只算真正的搜索引擎爬虫：在 scope-down 里加上附录 A 的 ASN + User-Agent 规则打的 `crawler:verified` 标签。伪造 User-Agent 的请求交给按 IP 的限速\n",
         "no_ip_counted": "- {rules} 本来会按 IP 限速，但它是 Count\n",
+        "no_ip_scoped": "- 只在 scope-down 里的路径上按 IP 限速：{rules}。其他路径都没有\n",
+        "no_ip_unloaded": "- 这个 Web ACL 引用的部分 rule group 没有提供，里面可能有按 IP 的限速\n",
         "rule_na_global": "**Rule**: N/A (Web ACL 全局配置)",
+        "sum_refs": "- Web ACL 导出里只有{what}的 ARN，没有它们的规则和内容，这次评审没检查到",
+        "refs_groups": " {n} 个 rule group ", "refs_sets": " {n} 个 IP set / regex pattern set ", "refs_and": "和",
+        "ref_missing": "- `{name}`（{kind}），被 {rules} 引用",
+        "ref_rule_group": "rule group", "ref_ip_set": "IP set", "ref_regex_pattern_set": "regex pattern set",
+        "ref_group_blind": "- rule group 里的规则在引用它的那条规则的 priority 上执行。只要 Web ACL 没把整个组设成 Count，组里的 Allow 或 Block 就会结束整个 Web ACL 的评估。组里有一条 Allow，后面所有规则就都看不到它放行的请求",
+        "ref_group_missing": "- 报告里说缺少某项自定义防护的结论（比如没有按 IP 的限速、没有 IP 黑名单）不一定成立，这些 rule group 里可能已经有了。缺少托管规则组的结论仍然成立，rule group 里不能放托管规则组",
+        "ref_label_users": "- {rules} 匹配的是 `{name}` 里的标签。没审到它的规则之前，查不了到底有没有规则打这些标签",
+        "sum_rg_count": "- 有 {n} 处 rule group 引用被设成了 Count（整组或逐条），匹配到的请求都不会被拦下",
+        "rg_whole": "- `{rule}`（priority {p}，{group}）：整个 rule group 用 `OverrideAction` 设成了 Count。组内照常评估，遇到第一条终止动作的规则就停下，只是把这个结果改成 Count，所以组里后面的规则不会执行，也不会打标签",
+        "rg_rules": "- `{rule}`（priority {p}，{group}）：{names} 被改成了 Count",
+        "fms_note": "- {rules} 来自 Firewall Manager 策略，本账号改不了。本账号的规则也没法排到 Firewall Manager 前置规则组之前、后置规则组之后。上面的改动要请 Firewall Manager 管理员在策略里做",
+        "fms_place": "- 这个 Web ACL 有 Firewall Manager 规则组。上面说的放在最前、最后或者某个规则组旁边，指的是在本账号自己的规则里排：Firewall Manager 的前置规则组总在它们之前，后置规则组总在之后",
+        "fms_post": "- 本账号没有规则能排在 Firewall Manager 后置规则组之后，所以用不了它们打的标签。要用这些标签，得在本账号里自己加一份这个规则组",
+        "group_note": "- rule group `{group}` 里的规则：{rules}。要在这个组里改，所有用到它的 Web ACL 都会跟着变",
+        "sum_empty": "- 有 {n} 个被引用的 set 是空的。匹配空 set 的条件永远不成立，对空 set 取 NOT 的条件对所有请求都成立",
+        "empty_match": "- `{name}`（{kind}）是空的：`{rule}`（{action}）永远匹配不到它",
+        "empty_negated": "- `{name}`（{kind}）是空的：`{rule}`（{action}）对它取了 NOT，所以只要满足其他条件的请求都会被它处理",
+        "ref_other_account": "- 属于其他账号：{names}。要在那个账号里导出，或者请所有者在共享这个 rule group 的 permission policy 里加上 `wafv2:GetRuleGroup`",
         "host_excluded": "- `{host}` 被 {n} 条规则用 NOT(Host) 条件排除在外：{rules}",
         "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` 会列出关联的 distribution 和它们的备用域名（`Aliases`）",
         "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <类型>` 会列出关联的资源，每次查一种资源类型",
@@ -407,20 +469,12 @@ def _field_label(field: str, L: dict) -> str:
 
 def _referenced_sets(summary: dict) -> list:
     """IP sets and regex pattern sets the rules reference, with the name, ID,
-    and scope `get-ip-set` / `get-regex-pattern-set` need. The export has only ARNs."""
-    sets = {}
-    for r in summary.get("rules", []):
-        for l in r.get("statement", {}).get("leaves", []) + (r.get("scope_down") or {}).get("leaves", []):
-            m = re.search(r"arn:aws:wafv2:([^:]+):[^:]*:(global|regional)/(ipset|regexpatternset)/([^/]+)/([0-9a-f-]+)$",
-                          str(l.get("value")))
-            if l["type"] in ("ip_set", "regex_pattern_set") and m:
-                e = sets.setdefault(l["value"], {
-                    "type": "ip_set" if m.group(3) == "ipset" else "regex_pattern_set", "name": m.group(4),
-                    "id": m.group(5), "scope": "CLOUDFRONT" if m.group(2) == "global" else "REGIONAL",
-                    "region": m.group(1), "used_by": []})
-                if r["name"] not in e["used_by"]:
-                    e["used_by"].append(r["name"])
-    return list(sets.values())
+    and scope `get-ip-set` / `get-regex-pattern-set` need, and their contents
+    when Step 1b provided them. The export has only ARNs."""
+    keep = ("type", "name", "id", "scope", "region", "used_by", "loaded",
+            "ip_version", "address_count", "addresses", "regexes")
+    return [{k: e[k] for k in keep if k in e} for e in summary.get("external_refs", [])
+            if e["type"] != "rule_group"]
 
 
 def _payment_indicators(summary: dict) -> list:
@@ -489,8 +543,9 @@ def _gen_forgeable_allow(summary, pre_checks, flags, T, lang):
         forgeable_example = L["or_join"].join(L[k] for k in kinds)
 
         # The later rules a matching request skips
-        first = min(a["priority"] for a in group)
-        later = [r for r in summary.get("rules", []) if r["priority"] > first and r["action"] != "count"
+        first = min(r["order"] for r in summary.get("rules", []) if r["name"] in names)
+        later = [r for r in summary.get("rules", []) if r["order"] > first and r["action"] != "count"
+                 and not (r.get("rule_group") or {}).get("loaded")
                  and r["name"] not in names and not (r["type"] == "custom" and r["action"] == "allow")]
         shown = sep.join(f"`{r['name']}`" for r in later[:5])
         if len(later) > 5:
@@ -939,6 +994,27 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
                   "rules": [r["name"] for r in check["rules"]], "sections": [18]})]
 
 
+def _alb_mode(summary: dict) -> str | None:
+    """ALB resource-level DDoS protection mode. CloudFront exports carry the
+    field too, but it only acts on an ALB, so only regional Web ACLs count."""
+    acl = summary.get("web_acl", {})
+    return acl.get("alb_low_reputation_mode") if acl.get("scope") == "REGIONAL" else None
+
+
+def _missing_line(key: str, summary: dict, L: dict) -> str:
+    mode = _alb_mode(summary)
+    if key == "amr" and mode and "alb_when_" + mode in L:
+        return L["missing_amr_alb"].format(mode=mode, when=L["alb_when_" + mode])
+    return L["missing_" + key]
+
+
+def _gen_alb_always_on(summary, pre_checks, flags, T, lang):
+    if _alb_mode(summary) != "ALWAYS_ON":
+        return NOT_APPLICABLE
+    md = T["alb_always_on"].format(n="{n}", rule_line=LINES[lang]["rule_na_global"])
+    return [(md, {"severity": "Awareness", "title_key": "alb_always_on", "rules": [], "sections": [3]})]
+
+
 def _gen_recommended_protections(summary, pre_checks, flags, T, lang):
     """Best-practice protections missing from an internet-facing (default Allow)
     Web ACL. Allow-list ACLs already block unknown traffic, so these don't apply."""
@@ -964,7 +1040,7 @@ def _gen_recommended_protections(summary, pre_checks, flags, T, lang):
     severity = min((sev for _, sev in items), key=SEVERITY_RANK.get)
     md = T["recommended_protections"].format(
         n="{n}", severity=severity, names=("、" if lang == "zh" else ", ").join(names[k] for k, _ in items),
-        problems="\n".join(L["missing_" + k] for k, _ in items),
+        problems="\n".join(_missing_line(k, summary, L) for k, _ in items),
         recs="\n".join(L["rec_" + k] for k, _ in items))
     return [(md, {"severity": severity, "title_key": "recommended_protections",
                   "rules": [], "sections": [3, 5, 7]})]
@@ -993,7 +1069,11 @@ def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
     for r in check["rules"]:
         for pb in r["problems"]:
             key = "wildcard" if pb["kind"] == "literal_wildcard" else "query_in_path"
-            details.append(L[key].format(rule=r["name"], p=r["priority"], value=pb["value"]))
+            line = L[key].format(rule=r["name"], p=r["priority"], value=pb["value"])
+            if "set" in pb:
+                v = f"`{pb['value']}`"
+                line = line.replace(v, L["in_set"].format(field=v, name=pb["set"]), 1)
+            details.append(line)
     details.insert(0, L["sum_uri"].format(n=len(details)))
     kinds = {pb["kind"] for r in check["rules"] for pb in r["problems"]}
     recs = [L["rec_" + k] for k in ("literal_wildcard", "query_in_path") if k in kinds]
@@ -1004,6 +1084,11 @@ def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
                   "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
 
 
+def _case_flip(path: str) -> str:
+    """The path with its first lowercase letter capitalized: `/admin` → `/Admin`."""
+    return re.sub(r"[a-z]", lambda m: m.group(0).upper(), path, count=1) if re.search(r"[a-z]", path) else "/Internal/"
+
+
 def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("path_block_decoding", {})
     if check.get("status") != "FAIL":
@@ -1012,7 +1097,8 @@ def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
     details = [L["no_decode"].format(
         rule=r["name"], p=r["priority"],
         transforms=" / ".join(f"`{t}`" for t in r["transforms"]),
-        case=L["case_note"] if r["case_sensitive"] else "") for r in check["rules"]]
+        case=L["case_note"].format(path=_case_flip(r.get("path") or "/Internal/"))
+        if r["case_sensitive"] else "") for r in check["rules"]]
     md = T["path_block_decoding"].format(
         n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
     return [(md, {"severity": "Medium", "title_key": "path_block_decoding",
@@ -1055,7 +1141,7 @@ def _gen_managed_count(summary, pre_checks, flags, T, lang):
     whole = [g["group"] for g in check.get("groups", [])] + [
         o["group"] for o in check.get("overrides", []) if o.get("still_blocking") == []]
     k = sum(len(o["overridden"]) for o in check.get("overrides", []))
-    details.insert(0, L["sum_managed"].format(
+    details.insert(0, L["sum_managed_whole"].format(g=len(check["rules"])) if not k else L["sum_managed"].format(
         k=k, g=len(check["rules"]),
         whole=L["sum_whole"].format(names=sep.join(f"`{x}`" for x in whole)) if whole else ""))
     md = T["managed_count"].format(
@@ -1116,8 +1202,10 @@ def _gen_dead_patterns(summary, pre_checks, flags, T, lang):
         neg = (L["case_neg"] if f["whole"] else L["case_neg_part"]) if f["negated"] else ""
         whole = L["case_whole"] if f["whole"] else ""
         if f["dead"]:
+            field = _field_label(f["field"], L)
             details.append(L["case_dead"].format(rule=f["name"], p=f["priority"], transform=f["transform"],
-                                                 field=_field_label(f["field"], L), dead=sep.join(f"`{d}`" for d in f["dead"]),
+                                                 field=L["in_set"].format(field=field, name=f["set"]) if "set" in f else field,
+                                                 dead=sep.join(f"`{d}`" for d in f["dead"]),
                                                  whole=whole, neg=neg))
         for c in f["crawler"]:
             # A robots.txt-only name is redundant, not harmful: those requests carry another UA
@@ -1141,6 +1229,32 @@ def _gen_dead_patterns(summary, pre_checks, flags, T, lang):
     md = T["dead_patterns"].format(n="{n}", rule_line=_rule_line(rules), details="\n".join(details),
                                    recs="\n".join(recs))
     return [(md, {"severity": "Low", "title_key": "dead_patterns",
+                  "rules": [f["name"] for f in rules], "sections": [19]})]
+
+
+def _gen_broad_regex(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("broad_regex", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    sep = "、" if lang == "zh" else ", "
+    details = [L["sum_broad"].format(n=len(check["rules"]))]
+    for f in check["rules"]:
+        field = _field_label(f["field"], L)
+        field = L["in_set"].format(field=field, name=f["set"]) if "set" in f else field
+        if f["short"]:
+            details.append(L["broad_short"].format(rule=f["name"], p=f["priority"], field=field, regex=f["regex"],
+                                                   parts=sep.join(f"`{x}`" for x in f["short"])))
+        for c in f["classes"]:
+            details.append(L["broad_class"].format(rule=f["name"], p=f["priority"], field=field, cls=c["cls"], seq=c["seq"]))
+    over = list({f["name"]: f for f in check["rules"] if f.get("overridden")}.values())
+    if over:
+        details.append(L["broad_overridden"].format(rules=_ticks(over, lang)))
+    recs = [L[k] for k, on in (("rec_broad_short", any(f["short"] for f in check["rules"])),
+                               ("rec_broad_class", any(f["classes"] for f in check["rules"]))) if on]
+    rules = list({f["name"]: f for f in check["rules"]}.values())
+    md = T["broad_regex"].format(n="{n}", rule_line=_rule_line(rules), details="\n".join(details), recs="\n".join(recs))
+    return [(md, {"severity": "Low", "title_key": "broad_regex",
                   "rules": [f["name"] for f in rules], "sections": [19]})]
 
 
@@ -1168,11 +1282,16 @@ def _gen_rate_limits(summary, pre_checks, flags, T, lang):
     out = []
     if check.get("no_ip_limit"):
         counted = check.get("counted_ip", [])
+        scoped = check.get("scoped_ip", [])
+        note = (L["no_ip_counted"].format(rules=_ticks(counted, lang)) if counted else "") + (
+            L["no_ip_scoped"].format(rules=_ticks(scoped, lang)) if scoped else "") + (
+            L["no_ip_unloaded"] if any(r.get("rule_group") and not r["rule_group"]["loaded"]
+                                       for r in summary.get("rules", [])) else "")
         md = T["no_ip_rate_limit"].format(
-            n="{n}", rule_line=_rule_line(counted) if counted else LINES[lang]["rule_na_global"],
-            counted=L["no_ip_counted"].format(rules=_ticks(counted, lang)) if counted else "")
+            n="{n}", rule_line=_rule_line(counted + scoped) if counted + scoped else LINES[lang]["rule_na_global"],
+            counted=note)
         out.append((md, {"severity": "Medium", "title_key": "no_ip_rate_limit",
-                         "rules": [f["name"] for f in counted], "sections": [6]}))
+                         "rules": [f["name"] for f in counted + scoped], "sections": [6]}))
     if check["challenge"]:
         details = [L["rate_challenge"].format(rule=f["name"], p=f["priority"], action=names[f["action"]],
                                               limit=f["limit"], immunity=f["immunity"]) for f in check["challenge"]]
@@ -1251,6 +1370,82 @@ def _gen_managed_allow_override(summary, pre_checks, flags, T, lang):
     return results if results else NOT_APPLICABLE
 
 
+def _gen_empty_sets(summary, pre_checks, flags, T, lang):
+    """IP sets and regex pattern sets provided in Step 1b that have no entries."""
+    empty = [e for e in summary.get("external_refs", []) if e["loaded"] and (
+        (e["type"] == "ip_set" and not e.get("address_count")) or
+        (e["type"] == "regex_pattern_set" and not e.get("regexes")))]
+    if not empty:
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    by_name = {r["name"]: r for r in summary.get("rules", [])}
+    details, users = [L["sum_empty"].format(n=len(empty))], []
+    for e in empty:
+        for u in e["used_by"]:
+            r = by_name.get(u)
+            if not r:
+                continue
+            leaves = r["statement"]["leaves"] + (r.get("scope_down") or {}).get("leaves", [])
+            neg = any(l["value"] == e["arn"] and l["negated"] for l in leaves)
+            details.append(L["empty_negated" if neg else "empty_match"].format(
+                name=e["name"], kind=L["ref_" + e["type"]], rule=u, action=r["action"].capitalize()))
+            users.append(r)
+    users = sorted({r["name"]: r for r in users}.values(), key=lambda r: r["order"])
+    md = T["empty_sets"].format(n="{n}", rule_line=_rule_line(users), details="\n".join(details))
+    return [(md, {"severity": "Low", "title_key": "empty_sets",
+                  "rules": [r["name"] for r in users], "sections": [7]})]
+
+
+def _gen_rule_group_count(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("rule_group_count", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    details = [L["sum_rg_count"].format(n=len(check["rules"]))]
+    for f in check["rules"]:
+        if f["whole"]:
+            details.append(L["rg_whole"].format(rule=f["name"], p=f["priority"], group=f["group"]))
+        if f["overridden"]:
+            details.append(L["rg_rules"].format(rule=f["name"], p=f["priority"], group=f["group"],
+                                                names=", ".join(f"`{x}`" for x in f["overridden"])))
+    md = T["rule_group_count"].format(n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Low", "title_key": "rule_group_count",
+                  "rules": [f["name"] for f in check["rules"]], "sections": [20]})]
+
+
+def _gen_unreviewed_refs(summary, pre_checks, flags, T, lang):
+    """Rule groups and sets the Web ACL references whose contents weren't provided."""
+    missing = [e for e in summary.get("external_refs", []) if not e["loaded"]]
+    if not missing:
+        return NOT_APPLICABLE
+    L = LINES[lang]
+    by_name = {r["name"]: r for r in summary.get("rules", [])}
+    users = list(dict.fromkeys(u for e in missing for u in e["used_by"]))
+    users = sorted((by_name[u] for u in users if u in by_name), key=lambda r: r["order"])
+    groups = [e for e in missing if e["type"] == "rule_group"]
+    sets = [e for e in missing if e["type"] != "rule_group"]
+    details = [L["ref_missing"].format(name=e["name"], kind=L["ref_" + e["type"]],
+                                       rules=", ".join(f"`{u}`" for u in e["used_by"])) for e in missing]
+    what = [L["refs_groups"].format(n=len(groups))] if groups else []
+    what += [L["refs_sets"].format(n=len(sets))] if sets else []
+    details.insert(0, L["sum_refs"].format(what=L["refs_and"].join(what)))
+    if groups:
+        details += [L["ref_group_blind"], L["ref_group_missing"]]
+    details += [L["ref_label_users"].format(name=e["name"], rules=", ".join(f"`{u}`" for u in e["label_users"]))
+                for e in groups if e.get("label_users")]
+    users += [by_name[u] for e in groups for u in e.get("label_users", []) if u in by_name]
+    users = sorted({r["name"]: r for r in users}.values(), key=lambda r: r["order"])
+    other = [e for e in missing if e.get("other_account")]
+    if other:
+        details.append(L["ref_other_account"].format(names=", ".join(
+            f"`{e['name']}` ({e['account']})" for e in other)))
+    cmds = [e["export_command"] for e in missing]
+    md = T["unreviewed_refs"].format(n="{n}", rule_line=_rule_line(users),
+                                     details="\n".join(details), commands="\n".join(cmds))
+    return [(md, {"severity": "Awareness", "title_key": "unreviewed_refs",
+                  "rules": [r["name"] for r in users], "sections": []})]
+
+
 # ── Main ───────────────────────────────────────────────────────────────────
 
 ALL_GENERATORS = [
@@ -1280,6 +1475,7 @@ ALL_GENERATORS = [
     (_gen_uri_path_pitfalls, [19], True),
     (_gen_path_block_decoding, [19], True),
     (_gen_dead_patterns, [19], True),
+    (_gen_broad_regex, [19], True),
     (_gen_managed_count, [20], True),
     (_gen_noop_overrides, [20], True),
     (_gen_rate_limits, [6], False),  # Section 6 needs the LLM when rate rules exist
@@ -1287,6 +1483,10 @@ ALL_GENERATORS = [
     (_gen_security_automations, [7], False),
     (_gen_host_exclusions, [17], True),
     (_gen_bot_control_config, [5], False),
+    (_gen_unreviewed_refs, [], False),
+    (_gen_rule_group_count, [20], False),
+    (_gen_empty_sets, [7], False),
+    (_gen_alb_always_on, [3], False),
 ]
 
 
@@ -1342,11 +1542,9 @@ def main():
         md, meta = item
         sev = SEVERITY_ORDER.get(meta["severity"], 99)
         # Get min priority from rules
-        min_pri = 999
-        for r in summary.get("rules", []):
-            if r["name"] in meta.get("rules", []):
-                min_pri = min(min_pri, r["priority"])
-        return (sev, min_pri)
+        first = min((r["order"] for r in summary.get("rules", []) if r["name"] in meta.get("rules", [])),
+                    default=10**6)
+        return (sev, first)
 
     all_findings.sort(key=sort_key)
 
@@ -1355,8 +1553,27 @@ def main():
     scripted_issues = []
     issue_rule_mapping = {}
 
+    by_name = {r["name"]: r for r in summary.get("rules", [])}
     for i, (md_template, meta) in enumerate(all_findings, 1):
         md = md_template.replace("{n}", str(i))
+        # Rules from Firewall Manager: the recommendation is for its administrator
+        # Rules inside a rule group: the fix goes into the group
+        fms = [by_name[x] for x in meta.get("rules", []) if (by_name.get(x) or {}).get("firewall_manager")]
+        # The refs finding lists FMS groups to export, not changes to make
+        if meta.get("title_key") == "unreviewed_refs":
+            fms = []
+        notes = [LINES[lang]["fms_note"].format(rules=_ticks(fms, lang))] if fms else []
+        if any(r["firewall_manager"] == "post" for r in fms) and meta.get("title_key") == "managed_count":
+            notes.append(LINES[lang]["fms_post"])
+        if not fms and meta.get("title_key") in ("recommended_protections", "missing_baseline") and any(
+                r.get("firewall_manager") for r in by_name.values()):
+            notes.append(LINES[lang]["fms_place"])
+        inner = [by_name[x] for x in meta.get("rules", []) if (by_name.get(x) or {}).get("group")]
+        for g in dict.fromkeys(r["group"]["rule_group"] for r in inner):
+            notes.append(LINES[lang]["group_note"].format(
+                rules=_ticks([r for r in inner if r["group"]["rule_group"] == g], lang), group=g))
+        if notes and md.rstrip().endswith("---"):
+            md = md.rstrip()[:-3].rstrip() + "\n" + "\n".join(notes) + "\n\n---\n"
         findings_md.append(md)
         # Extract title from first line
         first_line = md.strip().split("\n")[0]
@@ -1424,6 +1641,7 @@ def main():
             any(lbl.startswith(p) for p in CRAWLER_LABEL_PATTERNS)
             for r in rules for lbl in r.get("rule_labels", [])),
         "payment_indicators": _payment_indicators(summary),
+        "alb_low_reputation_mode": _alb_mode(summary),
         "referenced_sets": _referenced_sets(summary),
     }
 

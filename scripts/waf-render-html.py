@@ -21,22 +21,22 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
-from waf_utils import fatal, work_path
+from waf_utils import FMS_PREFIX, fatal, work_path
 
 TEXT = {
     "en": {"flow": "Rule Execution Flow", "request": "Request", "no_match": "no match",
            "token": "valid token / no match", "allowed": "✅ Allowed", "blocked": "🚫 Blocked",
            "non_browser": "non-browser → Blocked", "default": "Default action",
-           "scope": "Scope-down", "overrides": "Overrides", "labels": "Adds labels",
+           "scope": "Scope-down", "overrides": "Overrides", "labels": "Adds labels", "in_group": "Action in the rule group",
            "uses": "Uses label", "from": "from", "issues": "Issues", "match": "match"},
     "zh": {"flow": "规则执行流程", "request": "请求", "no_match": "未匹配",
            "token": "token 有效 / 未匹配", "allowed": "✅ 放行", "blocked": "🚫 拦截",
            "non_browser": "非浏览器 → 等于拦截", "default": "默认动作",
-           "scope": "Scope-down", "overrides": "Override", "labels": "添加标签",
+           "scope": "Scope-down", "overrides": "Override", "labels": "添加标签", "in_group": "rule group 里的动作",
            "uses": "使用标签", "from": "来自", "issues": "相关问题", "match": "命中"},
 }
 
-ACTION_NAMES = {"managed_default": "Managed", "allow": "Allow", "block": "Block", "count": "Count",
+ACTION_NAMES = {"managed_default": "Managed", "rule_group": "Rule group", "allow": "Allow", "block": "Block", "count": "Count",
                 "challenge": "Challenge", "captcha": "CAPTCHA"}
 
 CSS = """
@@ -284,7 +284,7 @@ def _starts_block(lines: list, i: int) -> bool:
 # ── Rule flow ──────────────────────────────────────────────────────────────
 
 def _flow(summary: dict, annotations: dict, deps: list, issues: set, T: dict) -> str:
-    rules = sorted(summary.get("rules", []), key=lambda r: r["priority"])
+    rules = sorted(summary.get("rules", []), key=lambda r: r["order"])
     if not rules:
         return ""
     by_name = {r["name"]: r for r in rules}
@@ -303,23 +303,28 @@ def _flow(summary: dict, annotations: dict, deps: list, issues: set, T: dict) ->
             det.append(f'<code>{e(r.get("statement", {}).get("summary", ""))}</code>')
         if r.get("scope_down"):
             det.append(f'{T["scope"]}: <code>{e(r["scope_down"]["summary"])}</code>')
+        own = (r.get("group") or {}).get("own_action")
+        if own:
+            det.append(f'{T["in_group"]}: {ACTION_NAMES.get(own, e(own))}')
         if r.get("rule_labels"):
             det.append(f'{T["labels"]}: ' + ", ".join(f"<code>{e(l)}</code>" for l in r["rule_labels"]))
         for d in deps:
             if d["consumer"] == r["name"] and d["producer"] in by_name:
                 p = by_name[d["producer"]]
                 det.append(f'{T["uses"]} <code>{e(d["label"])}</code> {T["from"]} '
-                           f'<a href="#rule-{p["priority"]}">P{p["priority"]}</a>')
+                           f'<a href="#rule-{p["id"]}">{e(p["name"])}</a>')
         nums = re.findall(r"#(\d+)", annotations.get(r["name"], ""))
         iss = "".join(f'<a href="#issue-{n}">#{n}</a>' for n in nums if n in issues)
-        node = (f'<div class="fnode act-{e(act)}" id="rule-{r["priority"]}">'
-                f'<div class="fhead"><span class="fprio">P{r["priority"]}</span>{e(r["name"])}'
+        node = (f'<div class="fnode act-{e(act)}" id="rule-{r["id"]}">'
+                f'<div class="fhead"><span class="fprio">{FMS_PREFIX.get(r.get("firewall_manager"), "")}P{r["priority"]}</span>{e(r["name"])}'
                 f'<span class="fact">{ACTION_NAMES.get(act, e(act))}</span></div>'
                 f'<div class="fdet">' + "".join(f"<div>{x}</div>" for x in det) + "</div>"
                 + (f'<div class="fiss">{T["issues"]}: {iss}</div>' if iss else "") + "</div>")
         exit_ = {"allow": T["allowed"], "block": T["blocked"]}.get(act)
         if act in ("challenge", "captcha"):
             exit_ = T["non_browser"]
+        elif act == "rule_group" and not r["rule_group"]["loaded"]:
+            exit_ = f'{T["match"]}: Allow / Block?'
         elif mg and act == "managed_default":
             # Block by default, plus the terminating actions its overrides set
             acts = ["Block"] + [ACTION_NAMES[a] for a in ("challenge", "captcha", "allow")
@@ -402,8 +407,8 @@ def main():
     if missing:
         fatal(f"HTML written to {output_file}, but {len(missing)} words from the Markdown are "
               f"missing from it: {', '.join(missing[:20])}. Report the Markdown file instead.")
-    rule_ids = set(re.findall(r'id="rule-(\d+)"', page))
-    lost = [r["name"] for r in summary.get("rules", []) if str(r["priority"]) not in rule_ids]
+    rule_ids = set(re.findall(r'id="rule-([\w-]+)"', page))
+    lost = [r["name"] for r in summary.get("rules", []) if str(r["id"]) not in rule_ids]
     if flow_html and lost:
         fatal(f"Rule flow is missing rules: {', '.join(lost)}")
 

@@ -14,6 +14,10 @@ def fatal(msg: str):
     sys.exit(2)
 
 
+# Shown before a rule's priority: Firewall Manager numbers its rule groups apart from the Web ACL's rules
+FMS_PREFIX = {"pre": "FMS first ", "post": "FMS last "}
+
+
 def work_path(output_dir: str, name: str) -> str:
     """Path for an intermediate file. They live in {output_dir}/work so the
     report is the only thing at the top of output_dir."""

@@ -13,7 +13,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from waf_utils import fatal, work_path
+from waf_utils import FMS_PREFIX, fatal, work_path
 
 GROUPED_MODE_THRESHOLD = 25
 SCRIPTS_DIR = Path(__file__).parent
@@ -67,6 +67,11 @@ def _resolve_label_producers(label: str, rules: list, managed_labels: dict) -> l
                     producers.append(r["name"])
     if producers:
         return producers
+    # A rule group whose rules weren't provided may add any label in its namespace
+    producers = [r["name"] for r in rules if (r.get("rule_group") or {}).get("loaded") is False
+                 and label.startswith(r["rule_group"]["label_namespace"])]
+    if producers:
+        return producers
     # Token and CAPTCHA labels: only the intelligent threat mitigation groups
     # are documented to add them, so the diagram draws only those
     if any(label.startswith(p) for p in managed_labels.get("token_label_prefixes", [])):
@@ -92,16 +97,18 @@ def _build_label_dependencies(rules: list, managed_labels: dict) -> list[dict]:
 
 # ── Node building ──────────────────────────────────────────────────────────
 
-def _safe_id(priority: int) -> str:
-    return f"rule_{priority}"
+def _safe_id(rule: dict) -> str:
+    return f"rule_{rule['id']}"
 
 def _escape_mermaid(text: str) -> str:
     """Escape characters that break Mermaid syntax."""
     return text.replace('"', "'").replace("\n", "\\n")
 
 def _short_label(label: str) -> str:
-    """Last non-empty segment: a namespace like `...:bot-control:bot:` ends in ':'."""
-    short = next((p for p in reversed(label.split(":")) if p), label)
+    """Last non-empty segment: a namespace like `...:bot-control:bot:` ends in ':'.
+    A rule group or Web ACL label keeps everything after its namespace."""
+    m = re.match(r"awswaf:[^:]*:(?:rulegroup|webacl):[^:]+:(.+)", label)
+    short = m.group(1) if m else next((p for p in reversed(label.split(":")) if p), label)
     return short[:27] + "..." if len(short) > 30 else short
 
 def _managed_exit(rule: dict) -> str | None:
@@ -122,6 +129,10 @@ def _exit_lines(rid: str, rule: dict) -> list:
     if rule["action"] in ("challenge", "captcha"):
         act = "Challenge" if rule["action"] == "challenge" else "CAPTCHA"
         return [f'    {rid} -->|"non-browser → {act} = Block"| BLOCK_{rid}["🚫 Blocked"]']
+    rg = rule.get("rule_group")
+    if rg and not rg["loaded"] and rule["action"] == "rule_group":
+        # Its rules weren't provided, so any of them may end evaluation
+        return [f'    {rid} -.->|"match → ?"| EXIT_{rid}["⛔ Allow / Block possible"]']
     exit_ = _managed_exit(rule)
     if exit_:
         return [f'    {rid} -->|"match → {exit_}"| EXIT_{rid}["⛔ {exit_}"]']
@@ -135,15 +146,22 @@ def _next_label(rule: dict | None) -> str:
     return ""
 
 def _short_action(action: str) -> str:
-    return {"managed_default": "Managed", "allow": "Allow", "block": "Block",
+    return {"managed_default": "Managed", "rule_group": "Rule group", "allow": "Allow", "block": "Block",
             "count": "Count", "challenge": "Challenge", "captcha": "CAPTCHA",
             "unknown": "?"}.get(action, action)
 
+def _prio(rule: dict) -> str:
+    """P<priority>, marked for Firewall Manager's first and last rule groups,
+    whose priorities are numbered apart from the Web ACL's rules."""
+    return FMS_PREFIX.get(rule.get("firewall_manager"), "") + f"P{rule['priority']}"
+
 def _build_node_label(rule: dict) -> str:
     name = rule["name"]
-    priority = rule["priority"]
     action = _short_action(rule["action"])
-    parts = [f"P{priority}: {name}", f"Action: {action}"]
+    own = (rule.get("group") or {}).get("own_action")
+    if own:  # set by the Web ACL's override; the group still stops at its own terminating actions
+        action += f" (in group: {_short_action(own)})"
+    parts = [f"{_prio(rule)}: {name}", f"Action: {action}"]
     mg = rule.get("managed")
     if mg:
         overrides = mg.get("overrides", [])
@@ -196,6 +214,7 @@ def _build_fold_groups(rules: list, label_dep_rules: set) -> list[dict]:
                     "start_idx": i, "end_idx": j - 1,
                     "rule_names": [rules[k]["name"] for k in range(i, j)],
                     "priorities": [rules[k]["priority"] for k in range(i, j)],
+                    "ids": [rules[k]["id"] for k in range(i, j)],
                     "label": f"P{rules[i]['priority']}-P{rules[j-1]['priority']}: {j-i} managed rule groups",
                 })
                 i = j
@@ -214,6 +233,7 @@ def _build_fold_groups(rules: list, label_dep_rules: set) -> list[dict]:
                     "start_idx": i, "end_idx": j - 1,
                     "rule_names": [rules[k]["name"] for k in range(i, j)],
                     "priorities": [rules[k]["priority"] for k in range(i, j)],
+                    "ids": [rules[k]["id"] for k in range(i, j)],
                     "label": f"P{rules[i]['priority']}-P{rules[j-1]['priority']}: {j-i} rate-based rules",
                 })
                 i = j
@@ -226,11 +246,11 @@ def _build_fold_groups(rules: list, label_dep_rules: set) -> list[dict]:
 def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
     """Generate detailed Mermaid (every rule = one node)."""
     lines = ["flowchart TD"]
-    lines.append(f'    START(["Request"]) --> {_safe_id(rules[0]["priority"])}')
+    lines.append(f'    START(["Request"]) --> {_safe_id(rules[0])}')
     lines.append("")
 
     for i, r in enumerate(rules):
-        rid = _safe_id(r["priority"])
+        rid = _safe_id(r)
         label = _escape_mermaid(_build_node_label(r))
         ob, cb = _node_shape(r)
         lines.append(f'    {rid}{ob}{label}{cb}')
@@ -239,7 +259,7 @@ def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
         lines += _exit_lines(rid, r)
 
         # Flow to next rule; requests nothing stopped reach the default action
-        next_rid = _safe_id(rules[i + 1]["priority"]) if i < len(rules) - 1 else "DEFAULT_ACTION"
+        next_rid = _safe_id(rules[i + 1]) if i < len(rules) - 1 else "DEFAULT_ACTION"
         lines.append(f'    {rid} -->{_next_label(r)}{next_rid}')
         lines.append("")
 
@@ -253,7 +273,7 @@ def _generate_detailed(rules: list, deps: list, default_action: str) -> str:
         prod_rule = next((r for r in rules if r["name"] == dep["producer"]), None)
         cons_rule = next((r for r in rules if r["name"] == dep["consumer"]), None)
         if prod_rule and cons_rule:
-            lines.append(f'    {_safe_id(prod_rule["priority"])} -.->|"{_short_label(dep["label"])}"| {_safe_id(cons_rule["priority"])}')
+            lines.append(f'    {_safe_id(prod_rule)} -.->|"{_short_label(dep["label"])}"| {_safe_id(cons_rule)}')
 
     return "\n".join(lines)
 
@@ -276,7 +296,7 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
         # Check if this index starts a fold group
         fg = next((g for g in fold_groups if g["start_idx"] == i), None)
         if fg:
-            gid = f"group_{fg['priorities'][0]}_{fg['priorities'][-1]}"
+            gid = f"group_{fg['ids'][0]}_{fg['ids'][-1]}"
             label = _escape_mermaid(fg["label"])
             lines.append(f'    {gid}["{label}"]')
             node_order.append(gid)
@@ -285,7 +305,7 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
             continue
 
         r = rules[i]
-        rid = _safe_id(r["priority"])
+        rid = _safe_id(r)
         label = _escape_mermaid(_build_node_label(r))
         ob, cb = _node_shape(r)
         lines.append(f'    {rid}{ob}{label}{cb}')
@@ -325,23 +345,19 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
 def _first_node_id(rules, folded_indices, fold_groups):
     if 0 in folded_indices:
         fg = next(g for g in fold_groups if g["start_idx"] == 0)
-        return f"group_{fg['priorities'][0]}_{fg['priorities'][-1]}"
-    return _safe_id(rules[0]["priority"])
+        return f"group_{fg['ids'][0]}_{fg['ids'][-1]}"
+    return _safe_id(rules[0])
 
 def _rule_for_node(node_id: str, rules: list, fold_groups: list) -> dict | None:
     if node_id.startswith("group_"):
         return None  # fold group, no single rule
-    m = re.match(r"rule_(\d+)", node_id)
-    if m:
-        p = int(m.group(1))
-        return next((r for r in rules if r["priority"] == p), None)
-    return None
+    return next((r for r in rules if _safe_id(r) == node_id), None)
 
 def _node_id_for_rule(rule: dict, fold_groups: list) -> str:
     for fg in fold_groups:
         if rule["name"] in fg["rule_names"]:
-            return f"group_{fg['priorities'][0]}_{fg['priorities'][-1]}"
-    return _safe_id(rule["priority"])
+            return f"group_{fg['ids'][0]}_{fg['ids'][-1]}"
+    return _safe_id(rule)
 
 # ── Main ──────────────────────────────────────────────────────────────────
 
@@ -408,7 +424,7 @@ def main():
         "rule_count": len(rules),
         "node_count": node_count,
         "rules": [{"name": r["name"], "priority": r["priority"],
-                    "node_id": _safe_id(r["priority"])} for r in rules],
+                    "node_id": _safe_id(r)} for r in rules],
         "label_dependencies": deps,
         "fold_groups": fold_groups,
     }

@@ -52,10 +52,16 @@ CRAWLERS = {k: v for k, v in json.loads(_UA_FILE.read_text(encoding="utf-8")).it
             if not k.startswith("_")} if _UA_FILE.exists() else {}
 
 
-def _leaves(rule: dict, include_scope_down: bool = False) -> list:
+def _leaves(rule: dict, include_scope_down: bool = False, sets: bool = False) -> list:
+    """The rule's match conditions. sets: a regex pattern set provided in
+    Step 1b becomes one regex leaf per pattern, carrying the set's name."""
     leaves = list(rule.get("statement", {}).get("leaves", []))
     if include_scope_down and rule.get("scope_down"):
         leaves += rule["scope_down"].get("leaves", [])
+    if sets:
+        leaves = [x for l in leaves for x in (
+            [dict(l, type="regex_match", match="REGEX", value=v, set_size=len(l["regexes"])) for v in l["regexes"]]
+            if l["type"] == "regex_pattern_set" and l.get("regexes") else [l])]
     return leaves
 
 
@@ -228,8 +234,9 @@ def _check_count_without_labels(rules: list) -> dict:
     """Check #17a: custom Count rules without RuleLabels."""
     flagged = []
     for r in rules:
+        # A rule group rule the Web ACL sets to Count is an override, not a monitoring rule
         if (r["action"] == "count" and r["type"] in ("custom", "rate_based")
-                and not r.get("rule_labels") and not (r.get("action_handling") or {}).get("insert_headers")):
+                and "own_action" not in (r.get("group") or {}) and not r.get("rule_labels") and not (r.get("action_handling") or {}).get("insert_headers")):
             flagged.append({"name": r["name"], "priority": r["priority"]})
 
     if flagged:
@@ -285,7 +292,7 @@ def _check_duplicate_rules(rules: list) -> dict:
     """Rules identical in everything but name and priority. The later copy of
     each group never changes the outcome."""
     groups = {}
-    for r in sorted(rules, key=lambda r: r["priority"]):
+    for r in sorted(rules, key=lambda r: r["order"]):
         sd = r.get("scope_down") or {}
         key = json.dumps([r["type"], r["action"], sorted(r.get("rule_labels", [])),
                           r.get("statement", {}).get("summary"), r.get("statement", {}).get("leaves"),
@@ -322,7 +329,7 @@ def _check_uri_path_pitfalls(rules: list) -> dict:
     flagged = []
     for r in rules:
         problems = []
-        for l in _leaves(r, include_scope_down=True):
+        for l in _leaves(r, include_scope_down=True, sets=True):
             if l["field"] != "uri_path" or l["value"] is None:
                 continue
             v = str(l["value"])
@@ -332,7 +339,7 @@ def _check_uri_path_pitfalls(rules: list) -> dict:
                 if "?" in v:
                     problems.append({"kind": "query_in_path", "value": v})
             elif l["type"] == "regex_match" and re.search(r'\\\?|\[[^\]]*\?[^\]]*\]', v):
-                problems.append({"kind": "query_in_path", "value": v})
+                problems.append({"kind": "query_in_path", "value": v, **({"set": l["set"]} if "set" in l else {})})
         if problems:
             flagged.append(dict(_ref(r), action=r["action"], problems=problems))
     if flagged:
@@ -346,10 +353,15 @@ def _check_path_block_decoding(rules: list) -> dict:
     """Custom Block rules matching URI paths without URL decoding. WAF inspects
     the raw path, so percent-encoded variants of a blocked path slip through."""
     flagged = []
+    # Labels a Block rule acts on: a Count rule that adds one picks paths for it
+    keys = [l for r in rules if r["action"] == "block"
+            for l in _leaves(r, include_scope_down=True) if l["type"] == "label_match" and not l["negated"]]
     for r in rules:
         # Block rules, and rate limits whose scope-down picks the paths they count
         if not ((r["type"] == "custom" and r["action"] == "block")
-                or (r["type"] == "rate_based" and r["action"] != "count")):
+                or (r["type"] == "rate_based" and r["action"] != "count")
+                or (r["type"] == "custom" and r["action"] == "count" and any(
+                    _produces(lbl, str(k["value"]), k["match"]) for lbl in r.get("rule_labels", []) for k in keys))):
             continue
         path = [l for l in _leaves(r, include_scope_down=True) if l["field"] == "uri_path" and not l["negated"]
                 and l["type"] in ("byte_match", "regex_match", "regex_pattern_set")]
@@ -358,7 +370,11 @@ def _check_path_block_decoding(rules: list) -> dict:
             continue
         transforms = sorted({"+".join(l["transforms"]) or "NONE" for l in no_decode})
         case_sensitive = any(not CASE_TRANSFORMS & set(l["transforms"]) for l in no_decode)
-        flagged.append(dict(_ref(r), transforms=transforms, case_sensitive=case_sensitive, type=r["type"]))
+        # Example path for the case note: a case-sensitive condition with a literal value
+        lit = next((l for l in no_decode if l["type"] != "regex_pattern_set"
+                    and not CASE_TRANSFORMS & set(l["transforms"])), None)
+        flagged.append(dict(_ref(r), transforms=transforms, case_sensitive=case_sensitive, type=r["type"],
+                            **({"path": str(lit["value"])} if lit else {})))
     if flagged:
         return {"status": "FAIL", "rules": flagged,
                 "finding": "Path Block or rate rules without URL_DECODE: " +
@@ -373,10 +389,16 @@ def _has_opaque_value(value: str) -> bool:
             and bool(re.search(r"[0-9]", value)) and bool(re.search(r"[A-Za-z]", value)))
 
 
+def _maybe_allow(r: dict) -> bool:
+    """A rule group whose rules weren't provided may hold an Allow rule."""
+    rg = r.get("rule_group")
+    return bool(rg) and not rg["loaded"] and r["action"] == "rule_group"
+
+
 def _allow_sources(rules: list) -> list:
-    """Rules that can end evaluation with Allow: Allow rules, and managed rule
-    groups with a rule overridden to Allow."""
-    return [r for r in rules if r["action"] == "allow" or any(
+    """Rules that can end evaluation with Allow: Allow rules, managed rule
+    groups with a rule overridden to Allow, and rule groups not provided."""
+    return [r for r in rules if r["action"] == "allow" or _maybe_allow(r) or any(
         o.get("action") == "allow" for o in (r.get("managed") or {}).get("overrides", []))]
 
 
@@ -414,7 +436,7 @@ def _check_forgeable_exemptions(web_acl: dict, rules: list) -> dict:
             if r["action"] == "count":
                 # A Count+Label rule acts through its label: skipping it skips its consumers
                 impact = "label" if r.get("rule_labels") else "count"
-            elif default_block and not any(a["priority"] > r["priority"] for a in allows):
+            elif default_block and not any(a["order"] > r["order"] for a in allows):
                 impact = "default_block"
             elif all(l["field"] in BROWSER_SIGNAL_FIELDS for l in escapes):
                 impact = "browser_signal"
@@ -484,13 +506,19 @@ def _check_rate_limits(web_acl: dict, rules: list) -> dict:
     per_ip = [r for r in rules if r.get("rate_based") and (
         r["rate_based"]["aggregate_key_type"] in ("IP", "FORWARDED_IP") or any(
             k.split(":")[0].split("[")[0] in RATE_IP_KEYS for k in r["rate_based"].get("custom_keys") or []))]
-    no_ip = web_acl.get("default_action") == "allow" and not any(r["action"] != "count" for r in per_ip)
+    # A limit scoped to some paths leaves every other path without one
+    scoped_ip = [_ref(r) for r in per_ip if r["action"] != "count"
+                 and r.get("scope_down") and _path_scoped(r["scope_down"])]
+    no_ip = web_acl.get("default_action") == "allow" and not any(
+        r["action"] != "count" and _ref(r) not in scoped_ip for r in per_ip)
     counted_ip = [_ref(r) for r in per_ip if r["action"] == "count"]
     if challenge or shared or no_ip:
         return {"status": "FAIL", "challenge": challenge, "shared": shared, "no_ip_limit": no_ip,
-                "counted_ip": counted_ip, "rules": challenge + shared + counted_ip,
+                "counted_ip": counted_ip, "scoped_ip": scoped_ip if no_ip else [],
+                "rules": challenge + shared + counted_ip + (scoped_ip if no_ip else []),
                 "finding": "Rate limits that token holders pass or that share one count: " +
-                           ", ".join(dict.fromkeys(x["name"] for x in challenge + shared))}
+                           ", ".join(dict.fromkeys(x["name"] for x in challenge + shared))
+                           + ("; no per-IP rate limit" if no_ip else "")}
     return {"status": "PASS", "finding": None}
 
 
@@ -627,7 +655,7 @@ def _check_dead_patterns(rules: list) -> dict:
     transform removed, or a crawler name the crawler doesn't send that way."""
     flagged = []
     for r in rules:
-        for l in _leaves(r, include_scope_down=True):
+        for l in _leaves(r, include_scope_down=True, sets=True):
             dead = _dead_patterns(l)
             crawler = _crawler_dead(l, dead)
             if not dead and not crawler:
@@ -636,10 +664,53 @@ def _check_dead_patterns(rules: list) -> dict:
             flagged.append(dict(_ref(r), action=r["action"], field=l["field"], negated=l["negated"],
                                 transform=next((t for t in reversed(l["transforms"]) if t in CASE_TRANSFORMS), None),
                                 dead=dead, crawler=[{"pattern": p, "family": f, "kind": k} for p, f, k in crawler],
-                                whole=len(dead) + len(crawler) >= total))
+                                whole=len(dead) + len(crawler) >= total,
+                                **({"set": l["set"], "set_size": l["set_size"]} if "set" in l else {})))
+    # One dead pattern of a set doesn't stop the others; the set fails only if all of them are dead
+    for f in flagged:
+        if "set" in f:
+            dead_all = [g for g in flagged if g["name"] == f["name"] and g.get("set") == f["set"]
+                        and g["field"] == f["field"] and g["whole"]]
+            f["whole_set"] = len(dead_all) >= f["set_size"]
+    for f in flagged:
+        if "set" in f:
+            f["whole"] = f.pop("whole_set")
+            del f["set_size"]
     if flagged:
         return {"status": "FAIL", "rules": flagged,
                 "finding": "Patterns that can never match: " + ", ".join(dict.fromkeys(f["name"] for f in flagged))}
+    return {"status": "PASS", "finding": None}
+
+
+BROAD_FIELDS_SKIP = {"single_header:user-agent", "method"}  # short tokens are normal there
+
+
+def _check_broad_regex(rules: list) -> dict:
+    """Regex conditions on Block, Challenge, or CAPTCHA rules that match far
+    more than they spell out: a top-level alternative that is a short word
+    with no anchor (`open|day` matches anything containing `day`), or a
+    character class written as a sequence (`[\\%20]` is one of `%`, `2`, `0`)."""
+    flagged = []
+    for r in rules:
+        # A rule group rule the Web ACL overrides to Count blocks again once the override goes
+        own = (r.get("group") or {}).get("own_action")
+        if r["type"] != "custom" or (own or r["action"]) not in ("block", "challenge", "captcha"):
+            continue
+        for l in _leaves(r, sets=True):
+            if l["type"] != "regex_match" or l["negated"] or l["field"] in BROAD_FIELDS_SKIP:
+                continue
+            regex = str(l["value"])
+            parts = _split_regex_branches(re.sub(r"^\(\?[a-zA-Z]+\)", "", regex))  # drop a leading (?i)
+            short = [b for b in parts if b and not set(b) & REGEX_META and len(b) <= 4] if len(parts) > 1 else []
+            classes = [(c, m) for c in dict.fromkeys(re.findall(r"(?<!\\)\[(?:\\.|[^\]\\])*\]", regex))
+                       for m in re.findall(r"%[0-9A-Fa-f]{2}", c.replace("\\", ""))[:1]]
+            if short or classes:
+                flagged.append(dict(_ref(r), action=r["action"], overridden=bool(own), field=l["field"], regex=regex, short=short,
+                                    classes=[{"cls": c, "seq": m} for c, m in classes],
+                                    **({"set": l["set"]} if "set" in l else {})))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Regex conditions broader than written: " + ", ".join(dict.fromkeys(f["name"] for f in flagged))}
     return {"status": "PASS", "finding": None}
 
 
@@ -677,6 +748,23 @@ def _check_managed_count(rules: list) -> dict:
     return {"status": "PASS", "finding": None}
 
 
+def _check_rule_group_count(rules: list) -> dict:
+    """Rule group references set to Count by the Web ACL: the whole group
+    (OverrideAction Count), or some of its rules (RuleActionOverrides)."""
+    flagged = []
+    for r in rules:
+        rg = r.get("rule_group")
+        if not rg:
+            continue
+        counted = [o["rule_name"] for o in rg["overrides"] if o["action"] == "count"] + rg["excluded_rules"]
+        if r["action"] == "count" or counted:
+            flagged.append(dict(_ref(r), group=rg["name"], whole=r["action"] == "count", overridden=counted))
+    if flagged:
+        return {"status": "FAIL", "rules": flagged,
+                "finding": "Rule groups set to Count: " + ", ".join(f["name"] for f in flagged)}
+    return {"status": "PASS", "finding": None}
+
+
 def _check_bot_control_config(rules: list) -> dict:
     """TGT_* overrides configured while Bot Control runs at COMMON level: those
     rules only exist at TARGETED, so the overrides do nothing."""
@@ -707,6 +795,10 @@ def _label_producers(rules: list) -> list:
             producers += [(pfx, r) for pfx, g in prefixes.items() if g == gn]
             if gn in token_groups:
                 producers += [(pfx, r) for pfx in LABELS["token_label_prefixes"]]
+        # A rule group whose rules weren't provided may add anything in its namespace
+        rg = r.get("rule_group")
+        if rg and not rg["loaded"]:
+            producers.append((rg["label_namespace"], r))
         # AWS documents token labels only for the groups above; a Challenge or
         # CAPTCHA action may add them too, so don't call such labels unreachable
         if r["action"] in ("challenge", "captcha"):
@@ -729,11 +821,11 @@ def _duplicate_copies(rules: list) -> set:
 
 def _label_may_come_from_elsewhere(key: str, rules: list) -> bool:
     """True if a label nobody in this ACL adds could still come from a source
-    the scripts can't see: a referenced rule group, or a managed group whose
-    label namespace isn't in managed-labels.json."""
+    the scripts can't see: a rule group whose rules weren't provided, or a
+    managed group whose label namespace isn't in managed-labels.json."""
     known = set(LABELS["managed_label_prefixes"].values()) | set(LABELS["token_label_producers"])
     for r in rules:
-        if r.get("statement", {}).get("summary", "").startswith("rule_group"):
+        if r.get("rule_group") and not r["rule_group"]["loaded"]:
             return True
         mg = r.get("managed")
         if mg and key.startswith("awswaf:managed:") and mg.get("group_name") not in known:
@@ -788,7 +880,7 @@ def _branch_implies(b: list, a: list) -> bool:
 
 def _check_order_issues(web_acl: dict, rules: list) -> dict:
     """Check #18: ordering problems with real consequences among existing rules."""
-    ordered = sorted(rules, key=lambda r: r["priority"])
+    ordered = sorted(rules, key=lambda r: r["order"])
     producers = _label_producers(ordered)
     issues = []
 
@@ -799,7 +891,7 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
                 continue
             makers = [p for lbl, p in producers
                       if p is not r and _produces(lbl, l["value"], l["match"])]
-            if makers and all(p["priority"] > r["priority"] for p in makers):
+            if makers and all(p["order"] > r["order"] for p in makers):
                 issues.append({"kind": "label_before_producer", "rule": _ref(r),
                                "label": l["value"], "producers": [_ref(p) for p in makers]})
             elif not makers and not _label_may_come_from_elsewhere(l["value"], ordered):
@@ -849,7 +941,7 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
         if (r["action"] == "block" and ips
                 and all(l["field"] == "single_header:host" and not l["negated"] for l in rest)
                 and (not rest or r.get("statement", {}).get("summary", "").startswith("AND("))):
-            before = [a for a in allows if a["priority"] < r["priority"]]
+            before = [a for a in allows if a["order"] < r["order"]]
             if before:
                 issues.append({"kind": "blocklist_after_allow", "rule": _ref(r),
                                "allows": [_ref(a) for a in before]})
@@ -860,15 +952,17 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
             mg = r.get("managed")
             if not mg or mg.get("group_name") not in CONTENT_GROUPS or r["action"] == "count":
                 continue
-            before = [a for a in allows if a["priority"] < r["priority"]]
+            before = [a for a in allows if a["order"] < r["order"]]
             if before:
                 issues.append({"kind": "inspection_after_allow", "rule": _ref(r),
                                "group": mg["group_name"], "allows": [_ref(a) for a in before]})
 
-    # Default-Block ACL: after the last Allow, every request ends in Block anyway
-    if web_acl.get("default_action") == "block" and allows:
-        last = max(a["priority"] for a in allows)
-        inert = [r for r in ordered if r["priority"] > last and not (
+    # Default-Block ACL: after the last Allow, every request ends in Block anyway.
+    # A rule group whose rules weren't provided may Allow, so it counts here
+    maybe = allows + [r for r in ordered if _maybe_allow(r)]
+    if web_acl.get("default_action") == "block" and maybe:
+        last = max(a["order"] for a in maybe)
+        inert = [r for r in ordered if r["order"] > last and not (
             (r.get("managed") or {}).get("group_name") in CONTENT_GROUPS and r["action"] != "count")]
         for x in inert:
             issues.append({"kind": "after_last_allow", "rule": _ref(x), "later": [_ref(y) for y in inert]})
@@ -876,7 +970,7 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
     # Bot Control charges per inspected request; later blocking rules waste that
     bot = next((r for r in ordered if "BotControl" in (r.get("managed") or {}).get("group_name", "")), None)
     if bot:
-        later = [r for r in ordered if r["priority"] > bot["priority"]
+        later = [r for r in ordered if r["order"] > bot["order"]
                  and r["action"] in ("block", "challenge", "captcha")
                  and not any(l["type"] == "label_match" and "bot-control" in str(l["value"])
                              for l in _leaves(r, include_scope_down=True))]
@@ -1059,10 +1153,12 @@ def main():
         "path_block_decoding": _check_path_block_decoding(rules),
         "managed_count": _check_managed_count(rules),
         "bot_control_config": _check_bot_control_config(rules),
+        "rule_group_count": _check_rule_group_count(rules),
         "order_issues": _check_order_issues(web_acl, rules),
         "duplicate_rules": _check_duplicate_rules(rules),
         "forgeable_exemptions": _check_forgeable_exemptions(web_acl, rules),
         "dead_patterns": _check_dead_patterns(rules),
+        "broad_regex": _check_broad_regex(rules),
         "noop_overrides": _check_noop_overrides(rules),
         "rate_limits": _check_rate_limits(web_acl, rules),
         "unused_labels": _check_unused_labels(rules),
