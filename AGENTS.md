@@ -40,10 +40,12 @@ Ask the user early which clients reach this Web ACL besides browsers: native app
 - `input_file` is that path, resolved to an absolute path. If it's a directory, Step 1 finds the WAF JSON inside it.
 - `output_dir` is `{parent directory of input_file}/waf-review`. If the directory holds several Web ACL files, review them one at a time and use `{parent directory}/waf-review/{file name without .json}` for each, so the outputs don't overwrite each other.
 - If the user also gives the output of `get-logging-configuration`, pass it to Step 1 as `--logging <file>`. Otherwise leave `--logging` out. Logging status then stays unknown.
+- If the user also gives `get-rule-group`, `get-ip-set`, or `get-regex-pattern-set` output, pass the directory holding those files to Step 1 as `--refs <dir>`. It can be the same directory as the Web ACL file.
+- Make no AWS calls in Case A unless the user agrees to them in Step 1b. The user may have no AWS access at all, and an agent that reaches into their account unasked is a reason not to trust the tool.
 
 **Case B: the user has no file.** Fetch the config with the AWS CLI.
 
-Use read-only calls only: `sts get-caller-identity`, `wafv2 list-web-acls`, `wafv2 get-web-acl`, `wafv2 get-logging-configuration`, and in Step 4 `wafv2 get-regex-pattern-set`, `wafv2 get-ip-set`, `wafv2 list-available-managed-rule-group-versions`, `cloudfront list-distributions-by-web-acl-id`, and `wafv2 list-resources-for-web-acl`. Never run `create-*`, `update-*`, `delete-*`, `put-*`, `associate-*`, or any other call that changes state, even if the user asks for a fix during the review. Recommendations belong in the report.
+Use read-only calls only: `sts get-caller-identity`, `wafv2 list-web-acls`, `wafv2 get-web-acl`, `wafv2 get-logging-configuration`, in Step 1b `wafv2 get-rule-group`, `wafv2 get-ip-set`, and `wafv2 get-regex-pattern-set`, and in Step 4 `wafv2 list-available-managed-rule-group-versions`, `cloudfront list-distributions-by-web-acl-id`, and `wafv2 list-resources-for-web-acl`. The Step 4 calls are for Case B only. Never run `create-*`, `update-*`, `delete-*`, `put-*`, `associate-*`, or any other call that changes state, even if the user asks for a fix during the review. Recommendations belong in the report.
 
 1. Run `aws sts get-caller-identity`. Show the user the account ID and ask them to confirm it's the right account. If the CLI is missing or has no credentials, tell the user and stop. Don't try to set up credentials.
 2. Work out the scope and region. CloudFront Web ACLs use `--scope CLOUDFRONT --region us-east-1`. Regional Web ACLs (ALB, API Gateway, AppSync, Cognito, App Runner, Verified Access) use `--scope REGIONAL --region <their region>`. If the user didn't say, ask.
@@ -80,10 +82,26 @@ Every script prints a `---RESULT---` block on stdout. Read its `STATUS` line. `O
 ### Step 1: Preprocess
 
 ```bash
-python3 "{tool_dir}/scripts/waf-preprocess.py" "{input_file}" "{output_dir}" [--logging <file>|none]
+python3 "{tool_dir}/scripts/waf-preprocess.py" "{input_file}" "{output_dir}" [--logging <file>|none] [--refs <dir>]
 ```
 
 Note the `INPUT_FILE` value. It's the resolved file path, which matters when the user gave a directory. Use it as `input_file` from here on.
+
+### Step 1b: Get the referenced rule groups and sets
+
+`get-web-acl` output has only the ARNs of the rule groups, IP sets, and regex pattern sets the rules reference. Their rules and contents aren't in it. If Step 1 printed `EXTERNAL_REFS_MISSING` above 0, read `{output_dir}/work/external-refs.json`. Each entry it hasn't found yet has a type, a name, the rules that use it, and the read-only `command` that exports it into `refs_dir`.
+
+Tell the user what the Web ACL references and what the review can't check without it. Rule groups matter most: their rules run inside this Web ACL, and one Allow in a group skips every later rule. Then ask which of these they want:
+
+1. **You fetch them.** Show the commands first, and run them only after the user says yes. Create `refs_dir` before running them. In Case A, also run `aws sts get-caller-identity` and have the user confirm the account matches the one in the ARNs. If there are no credentials, offer option 2.
+2. **The user exports them.** Give them the commands. Any file names work. Ask for the directory that holds the files.
+3. **Skip.** The review goes on without them, and a scripted Awareness finding lists what wasn't reviewed.
+
+In Case B the user has confirmed the account already, so suggest option 1, but still ask. If you can't ask (for example, you're running unattended), use option 1 in Case B and option 3 in Case A.
+
+For options 1 and 2, run Step 1 again with `--refs <dir>` (`refs_dir` for option 1) and the same `--logging` argument. Rule groups found there are expanded: their rules follow the rule that references them, named `<rule>:<rule group rule>`, with the Web ACL's overrides applied, and every later step checks them like any other rule. A rule group can use IP sets and regex pattern sets of its own, so the second run may report new missing resources. Handle them the same way. The user's yes to option 1 covers these too; tell them which ones you fetched. Rule groups can't contain other rule groups, so it never takes more than one extra round.
+
+A rule group owned by another account, for example one from a Firewall Manager policy, shows `other_account`. Its `get-rule-group` call fails with `AccessDeniedException` unless the owner shared it with `wafv2:GetRuleGroup`. Tell the user, and move on; the scripted finding keeps it on the list.
 
 ### Step 2: Generate base Mermaid diagram
 
@@ -113,7 +131,7 @@ This writes `appendix.md` with fixed reference content: rule JSON templates, imp
 python3 "{tool_dir}/scripts/waf-generate-findings.py" "{output_dir}" --lang {lang}
 ```
 
-This produces the findings a script can fully decide, such as forgeable Allow rules, scope-down problems, ChallengeAllDuringEvent, unanchored regex, missing baseline, token domain, and logging. Outputs:
+This produces the findings a script can fully decide, such as forgeable Allow rules, scope-down problems, ChallengeAllDuringEvent, unanchored exemption regex, over-broad regex patterns, missing baseline, token domain, and logging. Outputs:
 - `scripted-findings.md`: complete Issue sections in Markdown
 - `findings-metadata.json`: includes `llm_sections`, `next_issue_number`, `llm_context`, and `issue_rule_mapping`
 
@@ -129,7 +147,7 @@ Read:
 
 **4.0 Adopt scripted findings.** If `--lang` matches the user's language, write `scripted-findings.md` verbatim to `{output_dir}/waf-review-report.md`. If not, translate it into the user's language and write that instead.
 
-Sanity check: read each scripted finding in full in `scripted-findings.md`, not just its title, and check it against `waf-summary.json`. Scripted findings are deterministic, but they don't know the business context. If one contradicts the summary (e.g., "missing CRS" while CRS is in the rules), or doesn't fit what this Web ACL protects (e.g., recommending Anti-DDoS AMR on an ALB that only accepts CloudFront traffic), remove or rewrite it.
+Sanity check: read each scripted finding in full in `scripted-findings.md`, not just its title, and check it against `waf-summary.json`. Scripted findings are deterministic, but they don't know the business context. If one contradicts the summary (e.g., "missing CRS" while CRS is in the rules), or doesn't fit what this Web ACL protects (e.g., recommending Anti-DDoS AMR on an ALB that only accepts CloudFront traffic), remove or rewrite it. If a rule group wasn't provided, a finding that says a custom protection is missing (a per-IP rate limit, an IP block list) may be wrong, because the group can hold it. Say so in that finding. Missing managed rule groups still hold: a rule group can't contain a managed rule group. With Firewall Manager rule groups (`firewall_manager` in `waf-summary.json`), "first" and "last" in a recommendation can only mean among this account's own rules.
 
 If you remove a scripted finding, renumber the ones after it so the issues run 1, 2, 3 … with no gaps, and update any "Issue N" references in their text. The later scripts read the report itself, so nothing else needs changing.
 
@@ -144,8 +162,8 @@ For each section in `llm_sections`, read the matching reference file under `{too
 - **Section 6** (Rate-based rules): read `rate-based.md`. Listed when the Web ACL has rate-based rules. Missing per-IP limits, Challenge rate limits, and shared counts are scripted; check thresholds, which traffic each limit covers, and overlapping scope-downs.
 - **Section 7** (IP reputation and anonymous IP): read `ip-reputation.md`. Listed when those groups are present. IP list rules in Count and Security Automations IP sets are scripted; check the groups' scope-downs and whether anything uses their labels (for example `AWSManagedIPDDoSList`).
 - **Section 8** (Landing page / cookie logic): read `crawler-seo.md`. Evaluate security decisions based on cookies and whether a WAF token would be a better fit.
-- **Section 16** (Always-on Challenge): listed when the scripts found a TARGETED Bot Control with `TGT_TokenAbsent` overridden to Challenge, which challenges token-less requests inside its scope-down, or when a default-Allow Web ACL has no Anti-DDoS AMR. For the first, check whether that scope covers the landing pages, whether the labels it relies on can be forged, and the token immunity time. For the second, decide whether the Web ACL serves browser landing pages that need one. See checklist section 16.
-- **Section 17** (Cross-rule dependencies and fix impact): read `common-patterns.md`. 17a (Count rules without labels) is already scripted, so skip it. For 17b, take every fix the report recommends, scripted or yours, and trace the affected traffic through the whole rule chain. Does fix A break rule B or remove a label something relies on? Write down the fix order and which changes must ship together.
+- **Section 16** (Always-on Challenge): listed when the scripts found a TARGETED Bot Control with `TGT_TokenAbsent` overridden to Challenge, which challenges token-less requests inside its scope-down, or when a default-Allow Web ACL has no Anti-DDoS AMR. For the first, check whether that scope covers the landing pages, whether the labels it relies on can be forged, and the token immunity time. For the second, decide whether the Web ACL serves browser landing pages that need one. If `llm_context.alb_low_reputation_mode` is set, the Web ACL is regional and an associated ALB gets resource-level DDoS protection in that mode: it rate-limits known low-reputation sources, `ACTIVE_UNDER_DDOS` only under high load. It doesn't replace the Anti-DDoS rule group or a Challenge, so don't drop a finding because of it. See checklist section 16.
+- **Section 17** (Cross-rule dependencies and fix impact): read `common-patterns.md`. 17a (Count rules without labels) is already scripted, so skip it. For 17b, take every fix the report recommends, scripted or yours, and trace the affected traffic through the whole rule chain. Does fix A break rule B or remove a label something relies on? Write down the fix order and which changes must ship together. Give this finding severity Awareness, so Step 4b sorts it last.
 - **Section 21** (PCI DSS): decide scope first, using the rule at the top of checklist section 21. It applies to any business that takes card payments, and `llm_context.payment_indicators` lists hosts and paths that look like payment endpoints. If those exist and the user hasn't said, ask. If you can't ask (for example, you're running unattended), write the findings with ` ⏳` instead. If it's in scope, check whether dynamic protections (rate limits, auto-block IP sets, behavior-based bot rules, Challenge) would interfere with ASV scans, and whether long-term Count rules and unknown logging meet Requirement 6.4.2. Recommend confirming with the customer's QSA rather than stating non-compliance.
 
 Append your findings to `waf-review-report.md`.
@@ -163,7 +181,9 @@ Content rules, learned from reviews with customers:
 - Say what the configuration does, not what the reader doesn't know. Don't write things like "many customers don't realize".
 - Values written into rules (device IDs, test parameters, tokens) are there on purpose, and the Web ACL config isn't public. Judge them by whether a client can send them. Don't call a value leaked or exposed because it's stored in the config.
 - Use `capacity` for WCU. Some exports also carry `actual_capacity`, which isn't part of the WAF API; don't cite it.
-- `get-web-acl` output has only the ARNs of IP sets and regex pattern sets, not their contents. `llm_context.referenced_sets` lists each one with the name, ID, scope, and region the get calls need, and the rules that use it. With AWS access (Case B), fetch the ones a finding depends on with `wafv2 get-ip-set` or `wafv2 get-regex-pattern-set`. In IP sets, look for ranges wider than the purpose needs (a /8, a /0, a cloud provider's ranges) in Allow lists, since they change how bad a bypass is; an empty or stale block list; and partners or monitoring already allowed by IP. Without AWS access, mark the finding ` ⏳` and list the sets the customer should provide.
+- `llm_context.referenced_sets` lists each IP set and regex pattern set with the rules that use it. For the ones Step 1b provided (`loaded`), it also has the contents: `addresses` (the first 100 of `address_count`) or `regexes`. In IP sets, look for ranges wider than the purpose needs (a /8, a /0, a cloud provider's ranges) in Allow lists, since they change how bad a bypass is; an empty or stale block list; and partners or monitoring already allowed by IP. If a finding depends on a set that wasn't provided, mark it ` ⏳`. The scripted finding already lists what to export. Don't fetch rule groups or sets in Step 4; that's Step 1b's job. Review the sets whether or not section 7 is in `llm_sections`.
+- A rule named `<rule>:<rule group rule>` lives in a rule group (`group` in `waf-summary.json`; `source.file` is its export). Recommend fixing it in the rule group, and note that other Web ACLs may use the same group. `group.own_action` is the group's own action when the Web ACL overrides it. If the whole group is set to Count (the reference rule's `action` is `count`), every rule in it shows `count`, but the group still stops at its first rule with a terminating `own_action`: later rules in the group don't run and add no labels.
+- A rule with `firewall_manager` set (`pre` or `post`) comes from a Firewall Manager policy, and this account can't change it. Address those recommendations to the Firewall Manager administrator.
 - Base claims on the configuration and public AWS documentation. Don't cite internal sources.
 - `SizeRestrictions_BODY` in Count is a normal choice: legitimate bodies often exceed 8 KB, and scanners rarely need to. Don't recommend switching it to Block. If the user can list the endpoints that need large bodies, recommend keeping it in Count and adding a custom rule after CRS that blocks its label on all other paths. Never add a scope-down to CRS for this.
 - Don't recommend log-driven 4xx auto-blocking for burst scanning. It takes minutes to act and costs a lot to run.
@@ -205,14 +225,14 @@ Read `{output_dir}/work/validation.json`.
 **Mechanical checks.** If any check is `FAIL`, fix the report and run Step 6 again. Retry at most twice. If it still fails after 3 attempts in total, report the remaining errors to the user and stop. If everything is `PASS`, go on.
 
 **Adversarial check.** This applies only to your own findings, the ones that aren't in `scripted-findings.md` (Step 4b may have moved them among the scripted ones). Scripted findings were covered by the sanity check in Step 4.0.
-- Take the 2 highest-severity findings you wrote; on a tie, take the lowest issue numbers. Go back to `waf-summary.json`, and to the original JSON via `source.lines` if needed, and derive each one again from scratch. If the new result disagrees with the report, fix the report.
+- Take the 2 highest-severity findings you wrote; on a tie, take the lowest issue numbers. Go back to `waf-summary.json`, and to the original JSON via `source.lines` if needed (`source.jsonpath` when `lines` is null, as for Firewall Manager rule groups; `source.file` names the rule group export for rules inside one), and derive each one again from scratch. If the new result disagrees with the report, fix the report.
 - For each finding that recommends a fix, trace the fix through the rule execution flow. If it breaks another rule or a label dependency, add a note to the finding.
 
 **Cross-reference check.** This covers all findings.
-- For each label mentioned in any finding, confirm the producer rule exists and has a lower priority number than the consumer. A label that only a recommended new rule adds (such as `crawler:verified`) is fine; check that the recommendation puts that rule first.
+- For each label mentioned in any finding, confirm the producer rule exists and runs before the consumer: a lower `order` in `waf-summary.json`. Priorities repeat across Firewall Manager rule groups and rule group rules, so don't compare them. A label that only a recommended new rule adds (such as `crawler:verified`) is fine; check that the recommendation puts that rule first.
 - Check whether any rule in `waf-summary.json` got no finding and no pre-check coverage. If an ignored rule deserves a finding, add it.
 
-If you add or change findings here, put them before the `<!-- waf-appendix:start -->` marker, then run Steps 4b to 6 again. Step 5 replaces the marked appendix block, so running it again doesn't duplicate anything. Put new findings before your fix-order finding (section 17b), renumber that one to come last, and extend it to cover them.
+If you add or change findings here, put them before the `<!-- waf-appendix:start -->` marker, then run Steps 4b to 6 again. Step 5 replaces the marked appendix block, so running it again doesn't duplicate anything. Put new findings before your fix-order finding (section 17b) and extend it to cover them. Give the fix-order finding severity Awareness, so Step 4b keeps it last.
 
 ### Step 8: Render HTML
 
@@ -264,6 +284,7 @@ You write only Issue sections. `waf-generate-report-header.py` generates the hea
 - Finding text lives in `scripts/waf_finding_templates.py`, and short per-item lines live in `LINES` in `scripts/waf-generate-findings.py`. Every key needs both an English and a Chinese version. Findings that list one line per rule start their Problem with a summary line, since the Summary table shows the first Problem bullet.
 - `scripts/crawler-uas.json` holds the User-Agents crawler operators publish, with the source for each. Update it when an operator changes its User-Agent, and add only strings from the operator's own documentation.
 - Pre-checks read the structured `leaves` that `waf-preprocess.py` records for each statement (field, match type, value, text transformations, fallback, negation), not the summary string. `branches` holds the statement's AND/OR/NOT logic in disjunctive normal form over those leaves; use it when a check depends on how conditions combine, such as whether one forgeable OR branch is enough to trigger an Allow. `SearchString` values are base64-decoded there.
+- `waf-preprocess.py` puts the rules in evaluation order: Firewall Manager's first rule groups, the Web ACL's rules with each loaded rule group's rules after the rule that references it, then Firewall Manager's last rule groups. Priorities repeat in that list, so compare `order` for "runs before" and use `id` for diagram nodes and HTML anchors.
 - Test changes on real `get-web-acl` output as well as `examples/`: the example file is plain text in snake_case, while real exports are PascalCase with base64 `SearchString` values.
 - `waf-render-html.py` handles the Markdown the reports use. If findings start using other syntax, extend it and compare its output with a CommonMark renderer on real reports.
 - Keep `README.md` (Chinese) and `README_EN.md` in sync.

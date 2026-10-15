@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.8.0 (2026-10-15)
+
+Rule groups, IP sets, and regex pattern sets that the Web ACL references are now part of the review. Tested on a Web ACL in a test account and a synthetic Firewall Manager one, with three rounds of fresh agents following AGENTS.md.
+
+### Added
+- Step 1b. `get-web-acl` has only the ARNs of referenced rule groups, IP sets, and regex pattern sets. Preprocessing lists them in `work/external-refs.json` with the read-only command that exports each, and the agent asks before getting them: it fetches them, the user exports them, or the review skips them. With only a local file (Case A), it makes no AWS call without a yes.
+- `waf-preprocess.py --refs <dir>` reads `get-rule-group`, `get-ip-set`, and `get-regex-pattern-set` output. A rule group's rules follow the rule that references it, named `<rule>:<rule group rule>`, with the Web ACL's overrides applied and labels in the group's namespace, so every check covers them. A second run finds the sets those rules use.
+- Firewall Manager's first and last rule groups (`PreProcessFirewallManagerRuleGroups`, `PostProcessFirewallManagerRuleGroups`) are parsed and placed before and after the Web ACL's rules. Findings that involve them say this account can't change them, and the diagram marks them "FMS first" and "FMS last".
+- New scripted findings:
+  - Referenced resources that weren't provided (Awareness), with the export commands, owners in other accounts, and the rules that match labels from a missing group.
+  - Rule groups set to Count by the Web ACL (Low). A whole-group Count still stops the group at its first terminating rule, so later rules in it don't run or add labels.
+  - Empty IP sets and regex pattern sets (Low).
+  - Regex conditions broader than written (Low): a short unanchored alternative such as `day` in `open|day`, or a character class such as `[\%20]` meant as a sequence. Regex pattern set contents also go through the dead-pattern and query-in-path checks.
+  - ALB resource-level DDoS protection set to `ALWAYS_ON` (Awareness).
+- `OnSourceDDoSProtectionConfig` is parsed. On a regional Web ACL, the missing Anti-DDoS rule group line says what the ALB protection covers (known low-reputation sources) and what it doesn't (floods from other sources, baselines, Challenge).
+
+### Changed
+- `waf-summary.json` lists rules in evaluation order, each with `order` and a unique `id`. Checks compare `order` for "runs before", and the diagram and HTML use `id`, because priorities repeat across Firewall Manager groups and rule group rules.
+- Step 4 no longer fetches IP sets or regex pattern sets; Step 1b does. `llm_context.referenced_sets` carries their contents when provided.
+
+### Fixed
+- A per-IP rate limit scoped to some paths no longer counts as one for all traffic. The finding lists the scoped limits.
+- The path decoding check covers Count rules whose label a Block rule acts on, and its case example uses the rule's own path.
+- A managed rule group in Count as a whole no longer reads "0 rules are in Count".
+- "Kinesis Data Firehose" is now "Amazon Data Firehose".
+- The forgeable Allow finding lists the later rules in evaluation order, including later rules in the same rule group.
+
 ## v0.7.7 (2026-10-07)
 
 ### Fixed

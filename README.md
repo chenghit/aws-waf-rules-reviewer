@@ -56,8 +56,8 @@ flowchart LR
 
 1. **拉取配置**（可选）：用只读的 AWS CLI 命令拉 Web ACL 和它的日志配置
 2. **预处理**：提取结构化规则摘要，压缩输入（56KB → 16KB）
-3. **机械预检**：自动检测 token domain 冗余、版本过旧、冗余规则等 20 项确定性问题
-4. **确定性发现生成**：32 个生成器自动产出大部分发现（可伪造 Allow、可伪造的豁免条件、只按路径放行的 Allow、恒为真的 UriFragment 条件、路径规则缺少 URL 解码、处于 Count 的防护、托管规则未固定版本、真正有后果的顺序问题、建议补充的防护等），支持中英双语
+3. **机械预检**：自动检测 token domain 冗余、版本过旧、冗余规则等 22 项确定性问题
+4. **确定性发现生成**：37 个生成器自动产出大部分发现（可伪造 Allow、可伪造的豁免条件、只按路径放行的 Allow、恒为真的 UriFragment 条件、路径规则缺少 URL 解码、处于 Count 的防护、托管规则未固定版本、真正有后果的顺序问题、建议补充的防护等），支持中英双语
 5. **LLM 分析**：仅分析需要判断力的检查项（Bot Control 策略、Cookie 逻辑、跨规则依赖），按 21 项检查清单中脚本未覆盖的部分逐项审查
 6. **报告生成**：按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 7. **Mermaid 流程图**：自动生成规则执行流程图，标注问题引用
@@ -88,6 +88,8 @@ cd aws-waf-rules-reviewer
 **JSON 文件或目录。** 可以从 AWS 控制台导出（Web ACL → "Download web ACL as JSON"），也可以用 `aws wafv2 get-web-acl` 拿。给文件路径，或者给包含该文件的目录都行。支持三种 JSON 格式：AWS CLI 输出（PascalCase）、控制台导出、snake_case 自定义格式。
 
 **什么都不给。** agent 用 AWS CLI 自己拉。它会先用 `aws sts get-caller-identity` 给你看当前账号，再问 scope、region 和要评审哪个 Web ACL。全程只读，凭证需要 `wafv2:ListWebACLs`、`wafv2:GetWebACL`、`wafv2:GetLoggingConfiguration` 三个权限。它还会顺带拉日志配置。JSON 导出里没有这一项，所以拉下来之后报告才能说清日志到底开没开。
+
+**引用的 rule group 和 set。** Web ACL 导出里只有它们的 ARN，没有里面的规则和内容。agent 发现有引用时会先停下来问你：可以让它用只读命令拉（`get-rule-group`、`get-ip-set`、`get-regex-pattern-set`，跑之前会把命令给你看），也可以按它给的命令自己导出再把文件给它，或者跳过。你只给了本地文件时，不经你同意它不会碰 AWS。拉回来的 rule group 会展开，组里的规则和 Web ACL 里的规则一起检查。跳过的资源会在报告里单独列一条 Awareness，说明哪些没审到。跨账号的 rule group（比如来自 Firewall Manager 策略的）要在所属账号里导出，或者请所有者授权 `wafv2:GetRuleGroup`。
 
 ## 输出
 

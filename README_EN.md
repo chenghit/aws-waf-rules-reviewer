@@ -56,8 +56,8 @@ Given a Web ACL, either as a JSON file or fetched from your account, the agent:
 
 1. **Fetches** (optional): pulls the Web ACL and its logging config with read-only AWS CLI calls
 2. **Preprocesses**: extracts structured rule summaries, compresses input (56KB → 16KB)
-3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (20 checks total)
-4. **Deterministic findings**: 32 generators auto-produce most findings (forgeable Allow, forgeable exemptions, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
+3. **Pre-checks**: automatically detects token domain redundancy, outdated versions, redundant rules, challenge on POST/API paths, and other deterministic issues (22 checks total)
+4. **Deterministic findings**: 37 generators auto-produce most findings (forgeable Allow, forgeable exemptions, path-only Allow, UriFragment conditions that always match, path rules without URL decoding, protections left in Count, unpinned managed rule versions, ordering problems with real consequences, recommended protections, etc.) with bilingual support (en/zh)
 5. **LLM analysis**: only analyzes judgment-heavy checklist items (Bot Control strategy, cookie logic, cross-rule dependencies) from the sections not covered by scripts
 6. **Report generation**: severity-rated findings (Critical / Medium / Low / Awareness)
 7. **Mermaid flow diagram**: auto-generated rule execution flow with issue annotations
@@ -88,6 +88,8 @@ Start your agent in that directory. Codex, Cursor, and most other agents load `A
 **A JSON file or directory.** Export it from the AWS Console (Web ACL → "Download web ACL as JSON") or with `aws wafv2 get-web-acl`. You can give the file path, or a directory that contains the file. Three JSON formats work: AWS CLI output (PascalCase), Console export, and snake_case custom formats.
 
 **Nothing.** The agent fetches the Web ACL with the AWS CLI. It first shows you the account from `aws sts get-caller-identity`, then asks for the scope, the region, and which Web ACL. It only makes read calls, so your credentials need `wafv2:ListWebACLs`, `wafv2:GetWebACL`, and `wafv2:GetLoggingConfiguration`. It also fetches the logging config, which a JSON export doesn't include, so the report can say whether logging is actually on.
+
+**Referenced rule groups and sets.** A Web ACL export has only their ARNs, not their rules or contents. When the agent finds references, it stops and asks you first. It can fetch them with read-only calls (`get-rule-group`, `get-ip-set`, `get-regex-pattern-set`) after showing you the commands, you can export them yourself with the commands it gives you, or you can skip them. If you gave only a local file, it makes no AWS calls without your yes. Fetched rule groups are expanded, and their rules are checked along with the Web ACL's own. Anything skipped gets an Awareness finding that lists what wasn't reviewed. A rule group from another account, such as one from a Firewall Manager policy, has to be exported in that account, or its owner has to grant `wafv2:GetRuleGroup`.
 
 ## Output
 
