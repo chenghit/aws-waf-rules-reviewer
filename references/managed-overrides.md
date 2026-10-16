@@ -1,6 +1,6 @@
 ## AWSManagedRulesCommonRuleSet (CRS) Notes
 
-- Provides OWASP Top 10 protection (SQLi, XSS, etc.)
+- Covers cross-site scripting, local and remote file inclusion, SSRF to the EC2 metadata service, bad User-Agents, and size limits. It has no SQL injection rules: those are in `AWSManagedRulesSQLiRuleSet`
 - `SizeRestrictions_BODY` rule blocks request bodies larger than 8KB. This frequently causes false positives on file upload endpoints, API endpoints with large payloads, form submissions with rich content, etc. Most users don't know which of their endpoints need large bodies. When recommending CRS, always advise overriding `SizeRestrictions_BODY` to Count.
 
 
@@ -41,9 +41,9 @@ Key principles:
 
 ### Version recommendations
 Only this managed rule group has a significant version upgrade worth flagging:
-- **AWSManagedRulesBotControlRuleSet**: version 5.0's Common level can identify close to 700 bot types (up from far fewer in 1.0) based on UA and IP, and Targeted level includes substantially more detection rules. The default version is still 1.0, which is outdated. Recommend upgrading if pinned below 5.0.
+- **AWSManagedRulesBotControlRuleSet**: version 5.0 added 400+ bots per the changelog (an AWS Security Blog post says 5.0 covers 650+ bots and agents), identified at Common level by UA and IP, and Targeted level includes substantially more detection rules. A group with no `Version` runs AWS's current default, which can be old: the docs only say it pointed to 1.0 in May 2024. Check `CurrentDefaultVersion` with `ListAvailableManagedRuleGroupVersions`. Recommend upgrading if pinned below 5.0.
 
-For all other managed rule groups, the version shown in JSON is just the current snapshot and requires no action. SQLi is not an upgrade path: `AWSManagedRulesSQLiRuleSet` has two lineages (2.0 adds JSON parsing to `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5 are a separate line), so a higher number is not a newer detection. Flag it only when unpinned.
+For other managed rule groups, a pinned version needs no action; an unpinned one gets the Low finding in section 12. SQLi is not an upgrade path: `AWSManagedRulesSQLiRuleSet` has two lineages (2.0 adds JSON inspection to `SQLi_BODY`; 2.3 and later continue the 1.x line of 1.2 and 1.3), so a higher number is not a newer detection. Flag it only when unpinned.
 
 ### How overrides work
 - Each rule inside a managed rule group has a default action (Block, Count, Challenge, etc.)

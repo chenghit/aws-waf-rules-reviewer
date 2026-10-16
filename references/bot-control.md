@@ -13,7 +13,7 @@
 - Bot Control doesn't block a single request just for missing a token: `TGT_TokenAbsent` only counts, and `TGT_VolumetricIpTokenAbsent` challenges an IP after 5 token-less requests in 5 minutes. Blocking on `awswaf:managed:token:absent` needs a custom rule after the group
 
 ### Common level limitations
-- **Only detects bots that self-identify via User-Agent.** If a bot uses a standard browser User-Agent (e.g., Chrome or Firefox UA), Common level will not detect it at all — the request passes through Bot Control as if it were a normal browser request.
+- **Mostly detects bots that identify themselves.** Common level uses static request data analysis: the User-Agent, the source IP (known bot data centers), and signals that a browser is automated. A scanner that sends a standard browser User-Agent (Chrome or Firefox) from a clean IP looks like a normal browser request and passes through.
 - No behavioral analysis, no browser fingerprinting, no ML-based detection
 - Cannot detect: credential stuffing bots, scraping bots using real browser UAs, headless browsers, automated tools that mimic human behavior
 - Common level is a UA-based classifier, not a bot defense solution for advanced threats
@@ -37,7 +37,7 @@ Both rules block requests with non-browser User-Agents by default.
 ### Verified vs unverified bots
 - For verified bots: the matching category rule adds labels only (`bot:verified` + category + name), takes no action. Bot Control evaluation ends here.
 - For unverified bots: the matching category rule adds labels (`bot:unverified` + category + name) and applies default action (Block).
-- For forged/unknown UA: no category rule matches; falls through to `SignalNonBrowserUserAgent` (Block).
+- For a forged or unknown UA: no category rule names it. If it doesn't look like a browser, `SignalNonBrowserUserAgent` (Block) is the rule documented for "user agent strings that don't seem to be from a web browser"; the docs don't say more about which rule takes it.
 - Override to Allow on a category rule only affects unverified bots in that category — verified bots already pass without action, and forged UAs never match the category rule.
 
 ### Targeted level

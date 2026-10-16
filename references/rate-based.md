@@ -3,7 +3,7 @@
 ### Characteristics
 - There is a delay from threshold breach to rule activation — rate-based rules do not take effect instantaneously
 - Evaluation window options: 60s (1 min), 120s (2 min), 300s (5 min, default), 600s (10 min)
-- Rate limit threshold: minimum 10 requests per evaluation window, no upper bound specified
+- Rate limit threshold: 10 to 2,000,000,000 requests per evaluation window
 - Action: any rule action except Allow
 
 ### What rate-based rules can't do
@@ -23,7 +23,7 @@
 - Ensure at least one rate-based rule covers native app traffic paths without relying on Challenge as the action
 
 ### Multiple rate-based rules with overlapping scope-downs
-- If a Web ACL has multiple rate-based rules, and their scope-down conditions overlap or have a containing relationship (e.g., one targets `/api/` and another targets all traffic), only the rule with the lowest threshold will ever trigger for the overlapping traffic
+- If a Web ACL has multiple rate-based rules, and their scope-down conditions overlap or have a containing relationship (e.g., one targets `/api/` and another targets all traffic), the lower threshold usually acts first on the overlapping traffic, so the higher limit adds little there unless it runs earlier and blocks
 - The other rules are effectively redundant for that traffic
 - If the intent was different rate limits for different traffic types, scope-downs should be adjusted to be mutually exclusive
 

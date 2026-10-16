@@ -34,7 +34,7 @@ For every managed rule group with a scope-down:
 
 - [ ] Is `ChallengeAllDuringEvent` enabled (not overridden to Count)?
 - [ ] If disabled for native app reasons → recommend dual AMR instance (read antiddos-amr.md for details)
-- [ ] Exempt URI regex: are API path branches anchored with `^`? Unanchored = attackers can bypass via paths containing the keyword
+- [ ] Exempt URI regex (scripted): AWS WAF matches it against the host followed by the normalized path (`www.example.com/api/orders`). A branch anchored with `^/` never matches, so those paths stay challengeable; an unanchored path branch is a contains match that attackers can reach. Anchor after the host: `^[^/]+\/api(\/|$)`, or a specific host: `^api\.example\.com\/`. An API host of its own can be exempted this way instead of a second AMR instance
 - [ ] Regex `|` precedence: `$` only anchors the last branch unless grouped with `()`
 - [ ] **SEO**: is there a crawler labeling rule before AMR? Without it, crawlers get challenged during DDoS events (read crawler-seo.md)
 
@@ -50,8 +50,9 @@ For every Challenge or CAPTCHA rule:
 
 ### 5. Bot Control Configuration
 
-- [ ] State the inspection level the Web ACL actually uses first. COMMON only looks at the User-Agent and source IP: it catches self-identifying bots, non-browser UAs, and known bot data centers, and misses scanners that send a browser UA from a clean IP (common when a financial customer scans itself)
+- [ ] State the inspection level the Web ACL actually uses first. COMMON uses static request data analysis (the docs don't list the fields; the User-Agent and source IP are among them): it catches self-identifying bots, non-browser UAs, known bot data centers, and some automated-browser signals, and misses scanners that send a browser UA from a clean IP (common when a financial customer scans itself)
 - [ ] Unpinned Bot Control runs AWS's current default version, whichever that is (scripted in section 12). TGT_* overrides at COMMON do nothing (scripted)
+- [ ] Every rule that would act overridden to Count, and no rule matching Bot Control labels: billed per request, changes nothing (scripted, Low). The rule names per level are in `bot_control_rules` in `scripts/managed-labels.json`
 - [ ] TARGETED depends on tokens. Before recommending TARGETED, or switching TGT rules from Count to Block, check whether the site uses the application integration SDK (read bot-control.md "Targeted level without the SDKs")
 - [ ] For browser-only hosts, token-based controls (Challenge, TARGETED with the JS SDK) stop scanners that don't run JavaScript, regardless of payload encoding. Bot Control doesn't block a request just for missing a token: `TGT_TokenAbsent` only counts, so blocking on `awswaf:managed:token:absent` needs a custom rule
 - [ ] Allow override on category rules → lets unverified bots bypass all subsequent rules
@@ -86,7 +87,7 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - [ ] Missing IP reputation or anonymous IP lists on a default-Allow ACL are scripted (recommended protections). Scope anonymous IP by who the caller is: end-user hosts yes, machine-to-machine hosts no
 - [ ] `AWSManagedIPReputationList`, `AWSManagedReconnaissanceList`, or `AnonymousIPList` in Count is scripted with section 20
 - [ ] Rules or IP sets named after Security Automations for AWS WAF are scripted (Awareness): the solution retires in December 2026
-- [ ] IP set contents (Case B, `get-ip-set`): Allow lists with ranges wider than needed, empty or stale block lists, partners and monitoring already allowed by IP
+- [ ] IP set contents (provided in Step 1b, `llm_context.referenced_sets`): Allow lists with ranges wider than needed, empty or stale block lists, partners and monitoring already allowed by IP
 
 ### 8. Landing Page and Cookie-based Logic
 
@@ -102,6 +103,7 @@ If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
 - [ ] `SizeRestrictions_BODY` in Count is a normal choice, not a finding. If the user can list the large-body endpoints: keep it in Count and add a rule after CRS that blocks its label on other paths. Never scope down CRS for this
 - [ ] Default-Block ACL: CRS/KnownBadInputs must run before the Allow rules to inspect allowed traffic (scripted)
 - [ ] KnownBadInputsRuleSet present? (Log4j, Java deserialization)
+- [ ] Default-Allow ACL: sensitive-file probes such as `/.git/config`, `/.DS_Store`, `/backup.zip` that no managed rule or custom Block rule blocks (scripted, Low). Coverage per managed rule is in `scripts/sensitive-probes.json` and Appendix I
 - [ ] Is absence intentional? (DDoS-only Web ACL)
 
 ### 10. WCU Awareness
@@ -116,13 +118,15 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules. Use `capacity
 ### 12. Managed Rule Group Versions
 
 Scripted. Unpinned groups follow the AWS default version, and default changes are announced only through each group's SNS topic.
-- [ ] Bot Control unpinned (AWS's current default, unknown from the config) or pinned below 5.0 → Medium; pinned to 5.0 or later but not the latest static version (7.0, `latest_versions` in managed-labels.json) → Low. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures; 7.0 token provenance and device ID labels
-- [ ] Other unpinned groups → Low. `DEFAULT_VERSION` in snake_case exports means unpinned. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
+- [ ] Bot Control unpinned (AWS's current default, unknown from the config) or pinned below 5.0 → Medium, or Low when Bot Control acts on nothing and pinning wouldn't turn on new rules; pinned to 5.0 or later but not the latest static version (7.0, `latest_versions` in managed-labels.json) → Low. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures; 7.0 token provenance and device ID labels
+- [ ] Other unpinned groups → Low. `DEFAULT_VERSION` in snake_case exports means unpinned. SQLi has two lineages: 2.0 (JSON inspection in `SQLi_BODY`) and the 1.x line (1.2, 1.3) that 2.3, 2.4, and 2.5 continue
 - IP reputation and anonymous IP lists are unversioned
 
 ### 13. Logging and Monitoring
 
 Read `web_acl.logging.status` in waf-summary.json. `disabled` → logging is confirmed off. `unknown` → config wasn't supplied, remind user to verify. `enabled` → no finding.
+
+Rules that share a `MetricName` report to one CloudWatch metric (scripted, Awareness).
 
 ### 14. Hashed or Opaque search_string
 
@@ -179,15 +183,16 @@ Missing rule types are recommended protections, not ordering problems. Use the r
 ### 19. Custom Rule Matching Correctness
 
 Scripted.
-- [ ] Path Block rules, and rate limits scoped by path, without `URL_DECODE`: WAF inspects the raw path, so `/%69nternal/` bypasses `/internal/`. Recommend `URL_DECODE` ×2 → `REMOVE_NULLS` → `NORMALIZE_PATH` → `LOWERCASE`
-- [ ] Allow rules with `STARTS_WITH` on the path and no `NORMALIZE_PATH`: `/prefix/../admin` matches the prefix, and reaches `/admin` if CloudFront or the origin resolves `..`
+- [ ] Block rules on the path or query string (and rate limits scoped by them) that a rewritten request gets past. The script builds rewrites of each condition's path (`/%69nternal/`, `/%2569nternal/`, `/%49nternal/`, `/internal%2F`, `//x`, `/./x`, `/a/../x`, `/a/%2e%2e/x`, `/../x`, and `x;p=1` for matches anchored at the end), simulates every Block rule's documented transformations on them, and reports only the ones no rule blocks. Core rule set's `GenericLFI_URIPATH` in Block counts as blocking `../` traversal. Rewrites with a condition (decoded twice, case-insensitive origin, origin decodes `%2F`, Java servlet origin) are tagged and alone make the finding Low. Conditions that can't be simulated (a pattern with no literal and no matching sensitive-file path, an unprovided regex set, a transformation the script doesn't model) are judged from their transformations. Conditions whose pattern spells out `%XX` inspect the raw encoding on purpose and aren't flagged. Reference chains, variants, and their costs are in Appendix G
+- [ ] Path exemptions (NOT conditions) in those rules that `/exempt/../blocked` or `/exempt/%2e%2e/blocked` reaches through, tested the same way
+- [ ] Allow rules any client can trigger, with `STARTS_WITH` on the path and no URL decode followed by `NORMALIZE_PATH`: `/prefix/../admin` and `/prefix/%2e%2e/admin` match the prefix, and reach `/admin` if the origin resolves `..`
 - [ ] Literal `*` in a byte match (no wildcard support)
 - [ ] Query-string pattern on `UriPath` (`?`, `[?&]`): never matches
 - [ ] `UriFragment` with `FallbackBehavior: MATCH`: always true, so an AND with it reduces to its other conditions
 - [ ] Patterns that can never match (scripted): after LOWERCASE, a pattern with an uppercase letter (e.g. `adsBot-google`) never matches, and the reverse for UPPERCASE. A crawler name that matches none of the User-Agents the crawler publishes (`bingbot.html`; Bingbot sends `bingbot.htm`), or a robots.txt-only token, never matches either. `scripts/crawler-uas.json` holds the official User-Agents of Google, Bing, and Yandex search crawlers
 - [ ] For crawler conditions on the User-Agent, the fix isn't the pattern: any client can send it. Use the `crawler:verified` label from Appendix A (ASN + User-Agent)
 
-Managed rules inspect content as plain text (except the SQLi 2.0 lineage's JSON parsing). Encoded payloads can't all be caught by custom rules either: say so, and point to identity-based controls (IP allow lists, API key checks, tokens) and application input validation.
+Managed rule groups choose their own transformations, and no rule set catches every encoding of a payload. Say so, and point to identity-based controls (IP allow lists, API key checks, tokens) and application input validation. Don't recommend a specific transformation variant as the only right one: Appendix G lists the options and what each costs, and the choice depends on the origin.
 
 ### 20. Protections Left in Count
 
@@ -201,7 +206,7 @@ Scripted.
 
 LLM. PCI DSS covers anyone who stores, processes, or transmits card data, including merchants that take card payments, not only financial companies. Decide scope first:
 - The user says the customer takes card payments or is a payment or financial business → in scope
-- Otherwise, `llm_context.payment_indicators` lists hosts or paths that look like payment endpoints → ask the user whether these systems are in PCI scope. If you can't ask, or until they answer, write the findings with ` ⏳`
+- Otherwise, `llm_context.payment_indicators` lists hosts, paths, or match patterns that look like payment endpoints → ask the user whether these systems are in PCI scope. If you can't ask, or until they answer, write the findings with ` ⏳`
 - Neither → skip this section
 - [ ] ASV scans (Requirement 11.3.2, quarterly by an ASV; 11.3.2.1 after significant change) must not be interfered with by protections that change behavior based on traffic: rate limits, auto-block IP sets, behavior-based bot rules, Challenge (ASV Program Guide v4.0 r2 section 5.6). Consistent signature and path blocking typically doesn't count. An unresolved interference makes the scan inconclusive and then failed (section 7.6)
 - [ ] Recommend exceptions for the ASV's IPs on the dynamic mechanisms only, not an Allow rule at the top of the ACL

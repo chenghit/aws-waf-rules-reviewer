@@ -9,7 +9,7 @@
 ### Not a scanning control
 - Acts only while a DDoS event is detected for the resource. Vulnerability scanning is low-volume and spread across paths and IPs, so it doesn't trigger an event, and the rule group neither challenges nor blocks it
 - Don't recommend Anti-DDoS AMR as the answer to scanning; recommend it as HTTP flood protection for internet-facing Web ACLs
-- The Challenge exemption (`ExemptUriRegularExpressions`) matches URI paths only, not hosts. In a Web ACL that mixes browser and API hosts, exempting API traffic by path gets awkward: consider Block-only mitigation or splitting the Web ACL
+- The Challenge exemption (`ExemptUriRegularExpressions`) is matched against the host followed by the normalized path, such as `www.example.com/api/orders` (see "Exempt URI regex"). An API host can be exempted in the regex itself (`^api\.example\.com\/`); the two-instance pattern is for one host that serves both browsers and API clients
 
 ### Performance
 - Detection and mitigation: "single digit seconds" for standard DDoS attacks per official documentation
@@ -34,13 +34,16 @@
 - `awswaf:managed:aws:anti-ddos:high/medium/low-suspicion-ddos-request` — suspicion level
 
 ### Exempt URI regex
-- Defines URIs that can't handle Challenge (API paths, static assets)
+- Defines requests that can't handle Challenge (API paths and hosts, static assets)
+- Matched against the host immediately followed by the normalized path, without scheme, query string, or fragment: `www.example.com/api/orders`. The path loses empty segments (including a trailing slash) and `.` segments, and `..` is resolved, so `/api/` is matched as `/api` (API Reference, `ClientSideAction`). Verified in a test Web ACL: `^\/api\/` left `/api/orders` challengeable, and `^<host>\/api\/` exempted it. The console has no separate host field; the host is part of the regex
+- A request matches the exemption when it has no `awswaf:managed:aws:anti-ddos:challengeable-request` label. The label is added outside DDoS events too, so WAF logs of ordinary traffic show whether the regex works
 - Regex `|` branches are independent: `$` only anchors the last branch
-- API paths without `^` are `contains` matches, not `starts-with` — an attacker can exploit this by targeting paths that incidentally contain the exempt keyword (e.g., `/admin/api/delete` or `/internal/messages/export` would be exempted by unanchored `\/api\/` or `\/messages` patterns), causing attack requests to bypass ChallengeAllDuringEvent
-- Always anchor API path branches with `^`: `^\/api\/|^\/query|^\/messages|\.(css|js|png)$`
+- A branch anchored with `^/` or `^\/` never matches, because the string starts with the host. Requests to those paths stay challengeable, and API clients fail during an event
+- Path branches without an anchor are `contains` matches, not `starts-with`: an attacker can target paths that happen to contain the exempt keyword (`/admin/api/delete` or `/internal/messages/export` match unanchored `\/api\/` or `\/messages`), so attack requests skip ChallengeAllDuringEvent
+- Anchor path branches after the host: `^[^/]+\/api(\/|$)|^[^/]+\/query|\.(css|js|png)$`, or name the host to exempt one host only: `^api\.example\.com\/`. `\/api\/` doesn't match `/api` itself after normalization; `\/api(\/|$)` does
 
 ### Pricing
-- $20/month per AMR instance + $0.15/million requests
+- A subscription fee plus a per-request fee (see the AWS WAF pricing page for current rates). A Shield Advanced subscription includes it, up to 50 billion protected WAF requests per month per payer account
 - DDoS traffic detected and mitigated is NOT charged
 
 ### Recommended deployment patterns
