@@ -56,8 +56,8 @@ flowchart LR
 
 1. **拉取配置**（可选）：用只读的 AWS CLI 命令拉 Web ACL 和它的日志配置
 2. **预处理**：提取结构化规则摘要，压缩输入（56KB → 16KB）
-3. **机械预检**：自动检测 token domain 冗余、版本过旧、冗余规则等 22 项确定性问题
-4. **确定性发现生成**：37 个生成器自动产出大部分发现（可伪造 Allow、可伪造的豁免条件、只按路径放行的 Allow、恒为真的 UriFragment 条件、路径规则缺少 URL 解码、处于 Count 的防护、托管规则未固定版本、真正有后果的顺序问题、建议补充的防护等），支持中英双语
+3. **机械预检**：自动检测 token domain 冗余、版本过旧、冗余规则等 26 项确定性问题
+4. **确定性发现生成**：41 个生成器自动产出大部分发现（可伪造 Allow、可伪造的豁免条件、只按路径放行的 Allow、恒为真的 UriFragment 条件、路径和查询串规则的解码跟源站对不上、没拦住的敏感文件探测、处于 Count 的防护、托管规则未固定版本、真正有后果的顺序问题、建议补充的防护等），支持中英双语
 5. **LLM 分析**：仅分析需要判断力的检查项（Bot Control 策略、Cookie 逻辑、跨规则依赖），按 21 项检查清单中脚本未覆盖的部分逐项审查
 6. **报告生成**：按严重程度分级的评审报告（Critical / Medium / Low / Awareness）
 7. **Mermaid 流程图**：自动生成规则执行流程图，标注问题引用
@@ -141,15 +141,15 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 2. Scope-down 语句（过窄 / 过宽、可伪造的豁免条件）
 3. AntiDDoS AMR 配置（ChallengeAllDuringEvent、豁免正则、SEO 影响、双实例模式）
 4. Challenge 动作适用性（POST/API/原生 App 限制、Count 规则切换风险）
-5. Bot Control 配置（Allow 覆盖风险、verified vs unverified bot）
+5. Bot Control 配置（Allow 覆盖风险、verified vs unverified bot、规则全设成 Count 却没人用它的标签、override 了不存在的规则）
 6. 速率规则（激活延迟、阈值合理性、重叠 scope-down）
 7. IP 信誉和匿名 IP 规则
 8. Landing Page 和 Cookie 逻辑
-9. 缺失的基线防护（CRS、KnownBadInputs）
+9. 缺失的基线防护（CRS、KnownBadInputs、默认放行时没拦住的敏感文件探测）
 10. WCU 容量感知
 11. Token Domain 配置
 12. 托管规则组版本（未固定版本、Bot Control 旧版本、SQLi 版本线）
-13. 日志和监控
+13. 日志和监控（含共用 CloudWatch 指标名的规则）
 14. （已并入第 1 项）规则里的固定值按能不能伪造来判断，不因为写在配置里就算泄露
 15. Default Action（冗余的尾部 Allow-all 规则检测）
 16. Landing Page Always-on Challenge（主动 DDoS 防御、免疫时间、爬虫排除）
@@ -161,7 +161,7 @@ v0.4 将约 80% 的发现从 LLM 分析转移到确定性脚本生成，大幅�
 
 **附加检查**
 
-19. 自定义规则的匹配是否正确（路径规则的 URL 解码、字面通配符、UriPath 上的查询串模式、UriFragment fallback、大小写转换后匹配不上的模式）
+19. 自定义规则的匹配是否正确（路径和查询串规则的解码、转换顺序和路径规范化、字面通配符、UriPath 上的查询串模式、UriFragment fallback、大小写转换后匹配不上的模式）
 20. 处于 Count 的防护（托管规则组整组 Count、内容检测规则被改成 Count）
 21. 支付类客户的 PCI DSS 注意事项（ASV 扫描干扰、Requirement 6.4.2）
 

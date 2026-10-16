@@ -1,5 +1,71 @@
 # Changelog
 
+## v0.9.0 (2026-10-16)
+
+Path and query rules are checked by simulating rewritten requests against the whole Web ACL, and the Anti-DDoS exempt regex is checked against what AWS WAF actually matches: the host followed by the normalized path. New findings cover sensitive-file probes, Bot Control that acts on nothing, overrides of rules that don't exist, and shared metric names. Tested on real exports and a test Web ACL, with four rounds of fresh agents following AGENTS.md.
+
+### Added
+- Default-Allow Web ACLs that let sensitive-file probes such as `/.git/config`, `/.DS_Store`, or `/backup.zip` through get a Low finding. A path counts as blocked if a deployed managed rule blocks it (`scripts/sensitive-probes.json`; a group pinned below the recorded version doesn't count) or a custom Block rule matches it on every host. The finding recommends the Linux operating system group only when it would block one of the open paths.
+- `PreParseTextTransformations` are read, ahead of the standard transformations, so a pre-parse `URL_DECODE` counts toward decoding.
+- Bot Control with every rule that would act set to Count, and no rule matching its labels (Low). An unpinned group whose only remaining rules are the 5.0 ones (`CategoryPagePreview`, `CategoryWebhooks`) counts, with a note. `bot_control_rules` in `scripts/managed-labels.json` lists the rules at each level.
+- Rules that share a `MetricName` (Awareness): they report to one CloudWatch metric, and sampled requests can't tell them apart. Full copies of a rule are left to the duplicate rules finding.
+- Bot Control overrides that name no rule in the group, such as `TGT_TokenReuseIp`, which Version_2.0 replaced (Low).
+- Anti-DDoS exempt regex branches anchored with `^/` (Medium while Challenge is in use). AWS WAF matches the exempt regex against the host followed by the normalized path (`www.example.com/api/orders`), so such a branch never matches and API clients get challenged during an event. Verified in a test Web ACL: `^\/api\/` left `/api/orders` challengeable, and a host-anchored branch exempted it.
+- Appendix G covers a leading `../`, which `NORMALIZE_PATH` keeps, and Tomcat's `..;`. Appendix E and the missing-baseline finding say the base price covers 1,500 WCU and each 500 beyond adds a per-request charge.
+- Appendix G covers `;` path parameters, which Java servlet containers drop before routing.
+- Appendix G explains encoding and decoding in custom rules: why a rule should match what the origin acts on, why decoding too little fails open and too much fails closed, why AWS WAF doesn't decode by default, reference chains per field, `URL_DECODE_UNI` and `NORMALIZE_PATH_WIN` as variants with their costs, transformation order, and rules that must not decode.
+- Appendix H: a rule that blocks percent-encoded letters, digits, `-`, `.`, `_`, and null bytes on the path and query string.
+- Appendix I: which managed rules block which sensitive-file paths, and a custom rule for dotfiles, backup extensions, and key files. It's left out for a default-Block Web ACL.
+
+### Changed
+- The decoding check simulates requests. For each path or query condition in a Block rule (or a rate limit's scope-down), it builds rewrites the origin may resolve to the same path: `/%69nternal/`, `/%2569nternal/`, `/%49nternal/`, `/internal%2F`, `//x`, `/./x`, `/a/../x`, `/a/%2e%2e/x`, `/../x`, and `x;p=1` for matches anchored at the end. It applies every Block rule's text transformations as the AWS WAF Developer Guide describes them, counts Core rule set's `GenericLFI_URIPATH` in Block as stopping `../` traversal, and lists only the rewrites nothing blocks, tagged with what they need (decoded twice, a case-insensitive origin, an origin that decodes `%2F`, a Java servlet origin). A pattern with no literal is tried on the sensitive-file paths it matches. Exemptions are tested the same way. Conditions that can't be simulated are judged from their transformations, and rules with the same problems share a line. Recommendations follow what was found: the path or query chain, exemptions, a leading `../`, `;` path parameters, Appendix H.
+- The decoding check covers `QueryString`, `SingleQueryArgument`, and `AllQueryArguments` as well as the path. Besides a missing decode, it reports a single `URL_DECODE`, a cleanup such as `LOWERCASE` before the last decode, a STARTS_WITH, EXACTLY, or `^` path match without `NORMALIZE_PATH`, and path exemptions (NOT conditions) that aren't decoded and then normalized. It also covers rate limits in Count. A finding with only single decodes is Low; the rest stay Medium.
+- An Allow rule's `STARTS_WITH` path condition needs a URL decode followed by `NORMALIZE_PATH`; `NORMALIZE_PATH` alone still lets `/prefix/%2e%2e/admin` through.
+- The decoding finding gives the query string chain without `NORMALIZE_PATH`, says each transformation costs 10 WCU, and points to Appendix G and H.
+- Checklist section 19 no longer says managed rules inspect content as plain text.
+- Bot Control that acts on nothing gets its version finding at Low, with a note. The all-Count finding counts only rules at the group's level and suggests narrowing an existing scope-down rather than adding one.
+- The sensitive-file finding names dotfiles, backups, and dumps in general, and when dotfiles are already blocked it suggests adding only the extension branch of Appendix I's rule. Appendix I's rule ends with `(/|;|$)` and also covers `.dump`, `.tgz`, `.7z`, and `.rar`.
+- Folded managed rule groups in the diagram get a "match → Block" exit and a "no match" edge. Anti-DDoS and TARGETED Bot Control show Challenge (and CAPTCHA) among their exits, as their rules do by default.
+- Bot Control instances on the same version share one version finding, both for "old version" and "not the latest"; the latter opens with a summary line. Bot Control that acts on nothing gets its version finding at Low; the all-Count finding's title says "almost every rule" when `CategoryPagePreview` and `CategoryWebhooks` are left at their defaults.
+- A Count rule that the URI path pitfalls finding says can't match no longer also gets the "Count rules without labels" finding. That finding warns against switching such a rule to Allow on forgeable conditions.
+- The duplicate rules finding says a copy of a per-request-billed rule group is billed again. The Anti-DDoS advice and Appendix D name the crawler exclusion as the other scope-down Anti-DDoS should get.
+- `references/bot-control.md` and checklist section 5 describe COMMON as static request data analysis instead of User-Agent and IP only, and no longer state which rule takes a forged User-Agent. `references/crawler-seo.md` ties the always-on Challenge severity to section 16.
+- `waf-summary.json` leaves out `alb_low_reputation_mode` for a CloudFront Web ACL.
+- The Bot Control version findings list only what a later version adds for this Web ACL: TARGETED-only changes (`TGT_TokenReuse*`, token provenance and device ID labels) only at TARGETED, Web Bot Authentication on regional resources only for a regional Web ACL, and 4.0's CloudFront-only Web Bot Authentication only on CloudFront.
+- Appendix B's trade-off note moved after the steps, so the list isn't split.
+- Appendix I's rule exempts `.well-known/` anywhere in the path, so Keycloak's `/realms/<realm>/.well-known/openid-configuration` isn't blocked; with normalization, `/.well-known/../.git/config` still is.
+- The decoding and sensitive-file findings say when referenced rule groups weren't provided, since a rule in them may block some of the listed requests.
+- In the decoding simulation an attacker sends whatever header skips a "require this header" rule; the sensitive-file check still assumes a scanner that doesn't.
+- When Bot Control acts on nothing but `CategoryPagePreview` and `CategoryWebhooks` are left at their defaults, the version finding stays Medium and says pinning 5.0 or later turns them on.
+- The URI path pitfalls finding is Low when every rule in it is in Count with no labels.
+- When a "require this header" rule stands in front, the decoding finding says the listed requests work only for clients that get past it, for example with a valid API key.
+- An IP block list after an Allow rule that every branch of which needs an IP set (a trusted-IP allow list) is no longer an order issue: that's the order Appendix D recommends.
+- Findings suggest testing a fix in a Count copy of the rule while the original stays in place, instead of switching the rule itself to Count.
+- `references/rate-based.md` gives the threshold range (10 to 2,000,000,000) and no longer says only the lowest of overlapping limits triggers. `references/antiddos-amr.md` points to the pricing page instead of quoting rates, and says Shield Advanced includes the rule group up to 50 billion requests a month. `references/managed-overrides.md` matches the changelog's bot counts and the Low finding for unpinned groups.
+- Appendix G says `REPLACE_SEMICOLONS_WITH_AMPERSANDS` is pre-parse only. Appendix B says `ChallengeAllDuringEvent` is overridden to Count. AGENTS.md says a section that doesn't apply ends with no finding.
+- The unanchored exempt regex finding recommends anchoring after the host (`^[^/]+\/api(\/|$)`) instead of `^`, which never matches. `references/antiddos-amr.md`, checklist section 3, Appendix B, and the Anti-DDoS recommendation say an API host can be exempted in the regex itself, so two instances are only for a host that serves both browsers and API clients.
+- Appendix B labels browser requests (`GET` with `Accept: text/html`) and sends everything else to the Block-only instance, as `references/antiddos-amr.md` does.
+- A deliberately removed scripted finding goes into `work/removed-findings.json`, and Step 6 skips its pre-check instead of failing.
+- Count rate-based rules no longer get the "Count rules without labels" finding: tuning a threshold by its metrics is the usual reason. That finding's Chinese text is rewritten.
+
+### Fixed
+- A condition whose pattern spells out `%XX`, such as a rule that blocks encoded characters, is no longer told to add `URL_DECODE`, which would stop it from working.
+- A regex branch that's an encoded byte, such as `%00`, is no longer reported as a short unanchored word.
+- The case note in the decoding finding no longer makes up a path example for query string or regex conditions.
+- The per-IP rate limit finding mentions User-Agent or constant keys only when such a rate rule exists.
+- Appendix A says its `SearchString` is plain text and the API takes base64.
+- Managed rule groups that block on a match get a "no match" label on their next edge in the diagram.
+- The rate limit pre-check summary no longer starts with an empty list.
+- A "require this header" rule (Block on a host or path unless an API key header is present, or matches a format such as `^[a-f0-9]{32}$`) is no longer reported as a forgeable exemption; the backend checks the key. A fixed guessable value or a client name such as a crawler User-Agent is still reported. The finding lists every header that skips a rule, not just the first.
+- The missing-baseline finding no longer says CRS covers SQL injection: CRS has no SQLi rules, and `AWSManagedRulesSQLiRuleSet` does. Its text moved into `LINES`.
+- The Chinese logging and referenced-resources text is plainer, Appendix G's Chinese order sentences no longer read as instructions, and checklist section 7 says IP set contents come from Step 1b in either case.
+- The query-in-path finding recommends `SingleQueryArgument`, or `QueryString` with `(^|&)name=`; `QueryString` starts after the `?`, so `[?&]name=` misses the first parameter.
+- Unpinned Bot Control gets the title "isn't pinned and may run an old version". `references/managed-overrides.md` no longer says the default is still 1.0.
+- AGENTS.md says `payment_indicators` can hold match patterns as well as hosts and paths.
+- A `TGT_*` override at COMMON is reported once, as doing nothing at COMMON, not also as a rule the group doesn't have.
+- The SQLi lineage note says 2.3 and later continue the 1.x line (1.2, 1.3).
+- Appendix E says when the Web ACL is already above the 1,500 WCU the base price covers. The Anti-DDoS placement advice no longer says "at the top" and "after" in one sentence.
+
 ## v0.8.1 (2026-10-16)
 
 Bot Control Version_7.0 (2026-10-15) is the latest static version.
