@@ -57,6 +57,7 @@ For every Challenge or CAPTCHA rule:
 - [ ] Allow override on category rules → lets unverified bots bypass all subsequent rules
 - [ ] CategorySearchEngine/CategorySeo Allow → Low severity, limited blast radius. Correct approach: crawler labeling rule
 - [ ] SignalNonBrowserUserAgent and CategoryHttpLibrary: Count when native apps, API clients, partners, or monitoring reach the Web ACL; default Block for a site only browsers use. The ACL can't prove which; ask, or write both cases
+- [ ] TARGETED on 7.0 or later: no rule in the group acts on the token provenance labels. If the site issues tokens (SDK or Challenge) and nothing matches `token_provenance:ip_category_mismatch:high`, mention it as an option, Count first. Device ID labels need the Android SDK 2.1.0, not yet available. Label matches on either family under COMMON, an older or unpinned version, or with the wrong case are scripted (section 18). Read bot-control.md "Token provenance and device ID labels"
 - [ ] Crawler names in UA conditions: the scripts check them against the official User-Agents in `scripts/crawler-uas.json`. For crawlers not in that file, check by hand
 
 If `UA_ALLOW_FOUND`: native app traffic will enter Bot Control after fix.
@@ -115,7 +116,7 @@ Remind user to verify WCU ≤ 5000 after adding recommended rules. Use `capacity
 ### 12. Managed Rule Group Versions
 
 Scripted. Unpinned groups follow the AWS default version, and default changes are announced only through each group's SNS topic.
-- [ ] Bot Control unpinned (AWS's current default, unknown from the config) or pinned below 5.0 → Medium; pinned to 5.0 or later but not the latest static version (6.1, `latest_versions` in managed-labels.json) → Low. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures
+- [ ] Bot Control unpinned (AWS's current default, unknown from the config) or pinned below 5.0 → Medium; pinned to 5.0 or later but not the latest static version (7.0, `latest_versions` in managed-labels.json) → Low. 2.0/3.0 added the `TGT_TokenReuse*` rules; 4.0 Web Bot Authentication; 5.0 400+ bots and a precedence change; 6.x more signatures; 7.0 token provenance and device ID labels
 - [ ] Other unpinned groups → Low. `DEFAULT_VERSION` in snake_case exports means unpinned. SQLi has two lineages: 2.0 (JSON parsing in `SQLi_BODY`) and 1.3 → 2.3 → 2.4 → 2.5
 - IP reputation and anonymous IP lists are unversioned
 
