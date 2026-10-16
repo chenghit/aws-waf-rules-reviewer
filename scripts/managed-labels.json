@@ -167,9 +167,19 @@
   "latest_versions": {
     "_comment": "Latest static version per the AWS Managed Rules changelog. Update when a new version ships.",
     "AWSManagedRulesBotControlRuleSet": {
-      "version": "6.1",
-      "released": "2026-07-24",
-      "checked": "2026-10-01"
+      "version": "7.0",
+      "released": "2026-10-15",
+      "checked": "2026-10-16"
     }
+  },
+  "version_gated_labels": {
+    "_comment": "Bot Control labels added only at one inspection level from a static version on (AWS WAF Developer Guide, Bot Control labels)",
+    "awswaf:managed:aws:bot-control:token_provenance": {"level": "TARGETED", "min_version": "7.0"},
+    "awswaf:managed:aws:bot-control:device_id": {"level": "TARGETED", "min_version": "7.0"}
+  },
+  "label_case": {
+    "_comment": "Labels are case-sensitive. Wrong spelling -> the one AWS emits",
+    "awswaf:managed:aws:bot-control:device_id:unavailable": "awswaf:managed:aws:bot-control:device_id:Unavailable",
+    "awswaf:managed:aws:bot-control:device_id:Invalid": "awswaf:managed:aws:bot-control:device_id:invalid"
   }
 }

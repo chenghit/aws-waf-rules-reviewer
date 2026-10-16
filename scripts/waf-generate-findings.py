@@ -49,12 +49,19 @@ LINES = {
         "inspection_after_allow": "- {group} rule group {rules} runs after Allow rules {others}. The default action is Block, so it only inspects traffic that would be blocked anyway. Traffic those Allow rules let through is never inspected",
         "bot_control_not_last": "- Bot Control {rules} runs before rules that block or challenge requests on their own: {others}. Bot Control is charged per inspected request, so requests those rules stop are paid for first. Cost only, no security impact",
         "label_no_producer": "- {rules} matches label `{label}`, but no rule in this Web ACL adds it. The condition never matches",
+        "label_not_emitted": "- {rules} matches label `{label}`. Bot Control adds it only at {level} inspection level on Version_{version} or later, and {others} {reason}",
+        "gate_level": "doesn't use {level} level, so the condition never matches",
+        "gate_version": "is pinned to an earlier version, so the condition never matches",
+        "gate_unpinned": "isn't pinned to a version, so the condition matches only if AWS's current default version is {version} or later. Check `CurrentDefaultVersion` with `ListAvailableManagedRuleGroupVersions`",
+        "label_wrong_case": "- {rules} matches label `{label}`, but labels are case-sensitive and AWS adds `{fixed}`. The condition never matches",
         "unreachable": "- {rules} never sees a request: every request it matches has already been ended by {others} ({actions})",
         "rec_label_before_producer": "- Move the rule that adds the label ahead of the rule that matches it",
         "rec_blocklist_after_allow": "- Move IP block lists ahead of all Allow rules",
         "rec_inspection_after_allow": "- Move content inspection rule groups ahead of the Allow rules so allowed traffic is inspected first. Start in Count and check for false positives before switching to the default actions",
         "rec_bot_control_not_last": "- Place Bot Control after rules that block or challenge requests on their own",
         "rec_label_no_producer": "- Check the label name. If the rule that added it was removed, remove or rewrite this condition",
+        "rec_label_not_emitted": "- To use the label, pin Bot Control to the version and inspection level above, or remove the condition. TARGETED costs more per request, and these labels only appear on requests that present a token",
+        "rec_label_wrong_case": "- Change the label key to the exact spelling AWS adds",
         "rec_unreachable": "- Decide which rule should handle this traffic: narrow the earlier rule's condition, or remove the later rule",
         "order_title": "{count} issue(s)",
         "rec_literal_wildcard": "- For wildcard intent, use a regex, or drop the `*` and keep `STARTS_WITH`",
@@ -80,6 +87,7 @@ LINES = {
             ((5, 0), "- 5.0: 400+ more bots, the `CategoryPagePreview` and `CategoryWebhooks` categories, and a precedence change so specific bot rules match before generic signals"),
             ((6, 0), "- 6.0: Web Bot Authentication on regional resources, and bots verified that way count as verified in every category"),
             ((6, 1), "- 6.1: more signatures across categories, including Security, SEO, and scraping frameworks"),
+            ((7, 0), "- 7.0: token provenance labels at TARGETED level, which flag a token presented from a different kind of IP address than the one that acquired it (for example data center, then residential), and device ID labels from the Android SDK. No rule in the group acts on them. Also the `fastly` cloud service provider label and, per the AWS SNS notification, new bot names, most of them AI and Miscellaneous"),
         ],
         "missing_amr": "- No Anti-DDoS rule group: this Web ACL allows traffic by default and has no automatic HTTP flood mitigation (Medium)",
         "missing_amr_alb": "- No Anti-DDoS rule group. If this Web ACL is on an ALB, the ALB's resource-level DDoS protection (`ALBLowReputationMode` `{mode}`) rate-limits requests from known low-reputation sources {when}. It doesn't act on a flood from sources without a bad reputation, and it has no traffic baseline, Challenge, or labels, so HTTP flood mitigation is still missing (Medium)",
@@ -105,6 +113,8 @@ LINES = {
         "sum_order": "- {n} ordering problem(s) that change what gets inspected or blocked: {kinds}",
         "kind_label_before_producer": "a label used before it's added",
         "kind_label_no_producer": "a label nothing adds",
+        "kind_label_not_emitted": "a Bot Control label its version or level doesn't add",
+        "kind_label_wrong_case": "a label with the wrong case",
         "kind_blocklist_after_allow": "a block list after Allow rules",
         "kind_inspection_after_allow": "content inspection after Allow rules",
         "kind_unreachable": "{c} rule(s) no request reaches",
@@ -223,12 +233,19 @@ LINES = {
         "inspection_after_allow": "- {group} 规则组 {rules}排在 Allow 规则 {others} 后面。默认动作是 Block，它只检查到本来就会被拦的流量，被这些 Allow 规则放行的流量完全没有经过内容检测",
         "bot_control_not_last": "- Bot Control {rules}排在自己会拦截或 Challenge 请求的规则 {others} 前面。Bot Control 按检查的请求数收费，这些规则拦下的请求已经先计过费了。这一条只影响费用，不影响安全",
         "label_no_producer": "- {rules}匹配标签 `{label}`，但这个 Web ACL 里没有任何规则会加这个标签。这个条件永远不会成立",
+        "label_not_emitted": "- {rules}匹配标签 `{label}`。Bot Control 只在 {level} 级别、Version_{version} 及以上版本才加这个标签，而 {others} {reason}",
+        "gate_level": "没有用 {level} 级别，这个条件永远不会成立",
+        "gate_version": "固定在更早的版本，这个条件永远不会成立",
+        "gate_unpinned": "没有固定版本，只有 AWS 当前的默认版本是 {version} 或更高时，这个条件才会成立。可以用 `ListAvailableManagedRuleGroupVersions` 查 `CurrentDefaultVersion`",
+        "label_wrong_case": "- {rules}匹配标签 `{label}`，但标签区分大小写，AWS 加的是 `{fixed}`。这个条件永远不会成立",
         "unreachable": "- {rules}永远收不到请求：它能匹配的请求，在前面已经被 {others}（{actions}）结束了",
         "rec_label_before_producer": "- 把产生标签的规则调到匹配该标签的规则前面",
         "rec_blocklist_after_allow": "- 把 IP 黑名单调到所有 Allow 规则前面",
         "rec_inspection_after_allow": "- 把内容检测规则组调到 Allow 规则前面，放行之前先检查。先用 Count 观察误报，再切回默认动作",
         "rec_bot_control_not_last": "- 把 Bot Control 放到这些会拦截或 Challenge 的规则后面",
         "rec_label_no_producer": "- 核对标签名。如果产生这个标签的规则已经删掉，这个条件也要删掉或改写",
+        "rec_label_not_emitted": "- 要用这个标签，就把 Bot Control 固定到上面说的版本并改用对应级别，否则删掉这个条件。TARGETED 按请求计费更贵，而且这类标签只出现在带 token 的请求上",
+        "rec_label_wrong_case": "- 把标签名改成 AWS 实际加的写法，大小写要一致",
         "rec_unreachable": "- 想清楚这部分流量该由哪条规则处理：收窄前面那条规则的条件，或者删掉后面这条",
         "order_title": "发现 {count} 处",
         "rec_literal_wildcard": "- 想做通配匹配，改用正则，或者去掉 `*` 保留 `STARTS_WITH`",
@@ -253,6 +270,7 @@ LINES = {
             ((5, 0), "- 5.0：新增 400 多种 bot，新增 `CategoryPagePreview` 和 `CategoryWebhooks` 两个类别，并调整了匹配顺序，具体的 bot 规则先于通用信号匹配"),
             ((6, 0), "- 6.0：Web Bot Authentication 支持区域资源，用这种方式验证过的 bot 在所有类别里都算已验证"),
             ((6, 1), "- 6.1：多个类别继续增加特征，包括 Security、SEO 和爬虫框架"),
+            ((7, 0), "- 7.0：TARGETED 级别新增 token 来源标签，token 拿到时和使用时的 IP 类型不一样就打标（比如在数据中心拿到、从家庭宽带使用），还有来自 Android SDK 的设备 ID 标签。规则组里没有规则对这些标签动作。另外新增 `fastly` 云服务商标签；按 AWS 的 SNS 通知，还加了一批新 bot，大多是 AI 和 Miscellaneous 类"),
         ],
         "missing_amr": "- 没有部署 Anti-DDoS 规则组：这个 ACL 默认放行，遇到 HTTP flood 时没有自动缓解（Medium）",
         "missing_amr_alb": "- 没有部署 Anti-DDoS 规则组。如果这个 Web ACL 关联的是 ALB，ALB 的资源级 DDoS 防护（`ALBLowReputationMode` 为 `{mode}`）会{when}对已知低信誉来源的请求限速。它管不到来自正常信誉来源的 flood，也没有流量基线、Challenge 和标签，所以 HTTP flood 的自动缓解仍然缺失（Medium）",
@@ -278,6 +296,8 @@ LINES = {
         "sum_order": "- 发现 {n} 处会影响检查或拦截的顺序问题：{kinds}",
         "kind_label_before_producer": "标签在产生之前就被使用",
         "kind_label_no_producer": "用了没有规则产生的标签",
+        "kind_label_not_emitted": "用了当前 Bot Control 版本或级别不会加的标签",
+        "kind_label_wrong_case": "标签大小写写错",
         "kind_blocklist_after_allow": "黑名单排在 Allow 后面",
         "kind_inspection_after_allow": "内容检测排在 Allow 后面",
         "kind_unreachable": "{c} 条规则永远收不到请求",
@@ -969,10 +989,14 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
     sep = "、" if lang == "zh" else ", "
     problems, kinds = [], []
     for (kind, label, group, _), m in merged.items():
+        i = m["issue"]
+        gate = {"level": i.get("level"), "version": i.get("min_version")}
+        reasons = [L["gate_" + x].format(**gate) for x in dict.fromkeys(o.get("reason") for o in m["others"]) if x]
         problems.append(L[kind].format(
             rules=sep.join(fmt.format(r["name"], r["priority"]) for r in m["subjects"]),
             label=label, group=group, others=_ticks(m["others"], lang),
-            actions="/".join(a.capitalize() for a in m["issue"].get("actions", []))))
+            actions="/".join(a.capitalize() for a in i.get("actions", [])),
+            reason=("；" if lang == "zh" else "; ").join(reasons), fixed=i.get("fixed", ""), **gate))
         if kind not in kinds:
             kinds.append(kind)
     recs = "\n".join(L["rec_" + k] for k in kinds)
@@ -982,8 +1006,8 @@ def _gen_order_issues(summary, pre_checks, flags, T, lang):
         n=n_problems, kinds=sep.join(L["kind_" + k].format(c=counts[k]) for k in kinds)))
     # Medium when it changes what gets inspected or blocked: a protection that
     # never runs because an Allow ends the request first. Cost and dead code are Low.
-    medium = any(i["kind"] in ("label_before_producer", "label_no_producer", "blocklist_after_allow",
-                               "inspection_after_allow")
+    medium = any(i["kind"] in ("label_before_producer", "label_no_producer", "label_not_emitted",
+                               "label_wrong_case", "blocklist_after_allow", "inspection_after_allow")
                  or (i["kind"] == "unreachable" and "allow" in i["actions"] and i.get("rule_action") != "count")
                  for i in check["issues"])
     severity = "Medium" if medium else "Low"

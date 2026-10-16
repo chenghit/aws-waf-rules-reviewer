@@ -878,6 +878,20 @@ def _branch_implies(b: list, a: list) -> bool:
     return bool(a) and all(any(_leaf_implies(lb, la) for lb in b) for la in a)
 
 
+def _gate_miss(rule: dict, gate: dict) -> str | None:
+    """Why a managed rule group can't add a version-gated label: "level",
+    "version", or "unpinned" (runs AWS's default version). None if it can."""
+    mg = rule.get("managed") or {}
+    if (mg.get("config") or {}).get("inspection_level", "COMMON") != gate["level"]:
+        return "level"
+    m = re.search(r'(\d+)\.(\d+)', mg.get("version", ""))
+    if not m:
+        return "unpinned"
+    if (int(m.group(1)), int(m.group(2))) < tuple(int(x) for x in gate["min_version"].split(".")):
+        return "version"
+    return None
+
+
 def _check_order_issues(web_acl: dict, rules: list) -> dict:
     """Check #18: ordering problems with real consequences among existing rules."""
     ordered = sorted(rules, key=lambda r: r["order"])
@@ -889,11 +903,22 @@ def _check_order_issues(web_acl: dict, rules: list) -> dict:
         for l in _leaves(r, include_scope_down=True):
             if l["type"] != "label_match":
                 continue
+            if l["value"] in LABELS["label_case"]:
+                issues.append({"kind": "label_wrong_case", "rule": _ref(r), "label": l["value"],
+                               "fixed": LABELS["label_case"][l["value"]]})
+                continue
             makers = [p for lbl, p in producers
                       if p is not r and _produces(lbl, l["value"], l["match"])]
-            if makers and all(p["order"] > r["order"] for p in makers):
+            gate = next((g for pfx, g in LABELS["version_gated_labels"].items()
+                         if not pfx.startswith("_") and l["value"].startswith(pfx)), None)
+            earlier = [p for p in makers if p["order"] < r["order"]]
+            if makers and not earlier:
                 issues.append({"kind": "label_before_producer", "rule": _ref(r),
                                "label": l["value"], "producers": [_ref(p) for p in makers]})
+            elif gate and earlier and all(_gate_miss(p, gate) for p in earlier):
+                issues.append({"kind": "label_not_emitted", "rule": _ref(r), "label": l["value"],
+                               "level": gate["level"], "min_version": gate["min_version"],
+                               "producers": [dict(_ref(p), reason=_gate_miss(p, gate)) for p in earlier]})
             elif not makers and not _label_may_come_from_elsewhere(l["value"], ordered):
                 issues.append({"kind": "label_no_producer", "rule": _ref(r), "label": l["value"]})
 
