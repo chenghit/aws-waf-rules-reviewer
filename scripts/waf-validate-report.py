@@ -178,14 +178,15 @@ def _check_mermaid_completeness(metadata: dict) -> dict:
             "rule_count": rule_count, "node_count": node_count}
 
 
-def _check_prechecks_coverage(report: str, prechecks: dict) -> dict:
-    """Check that every FAIL pre-check has its rule referenced in a **Rule**: line."""
+def _check_prechecks_coverage(report: str, prechecks: dict, removed: set) -> dict:
+    """Check that every FAIL pre-check has its rule referenced in a **Rule**: line,
+    except the ones Step 4.0 removed on purpose (work/removed-findings.json)."""
     # Extract all rule names from **Rule**:/**Rules**: lines
     rule_refs = {r["name"].lower() for r in _extract_rule_refs(report)}
 
     missing = []
     for name, check in prechecks.get("pre_checks", {}).items():
-        if check.get("status") != "FAIL":
+        if check.get("status") != "FAIL" or name in removed:
             continue
         # Collect rule names from the pre-check result
         check_rules = []
@@ -239,7 +240,12 @@ def main():
         "mermaid_completeness": _check_mermaid_completeness(metadata),
     }
     if prechecks:
-        checks["prechecks_coverage"] = _check_prechecks_coverage(report, prechecks)
+        removed_path = work_path(output_dir, "removed-findings.json")
+        try:
+            removed = {x["check"] for x in json.loads(Path(removed_path).read_text(encoding="utf-8"))}
+        except (OSError, json.JSONDecodeError, KeyError, TypeError):
+            removed = set()
+        checks["prechecks_coverage"] = _check_prechecks_coverage(report, prechecks, removed)
 
     # Write output
     output_file = work_path(output_dir, "validation.json")

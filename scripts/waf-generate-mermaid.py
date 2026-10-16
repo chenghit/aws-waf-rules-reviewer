@@ -117,8 +117,15 @@ def _managed_exit(rule: dict) -> str | None:
     mg = rule.get("managed")
     if not mg or rule["action"] != "managed_default":
         return None
+    over = {o["rule_name"]: o["action"] for o in mg.get("overrides", [])}
+    # Rules that challenge by default: Anti-DDoS, and Bot Control's TGT_* rules at TARGETED
+    gn, level = mg.get("group_name", ""), (mg.get("config") or {}).get("inspection_level")
+    default = {"Challenge": [n for n in ("ChallengeAllDuringEvent", "ChallengeDDoSRequests") if "AntiDDoS" in gn]
+               + (["TGT_VolumetricIpTokenAbsent"] if "BotControl" in gn and level == "TARGETED" else []),
+               "CAPTCHA": ["TGT_VolumetricSession"] if "BotControl" in gn and level == "TARGETED" else []}
     acts = ["Block"] + [a for a in ("Challenge", "CAPTCHA", "Allow")
-                        if any(o["action"] == a.lower() for o in mg.get("overrides", []))]
+                        if any(v == a.lower() for v in over.values())
+                        or any(over.get(n, a.lower()) == a.lower() for n in default.get(a, []))]
     return " / ".join(acts)
 
 def _exit_lines(rid: str, rule: dict) -> list:
@@ -139,7 +146,7 @@ def _exit_lines(rid: str, rule: dict) -> list:
     return []
 
 def _next_label(rule: dict | None) -> str:
-    if rule and rule["action"] in ("allow", "block"):
+    if rule and (rule["action"] in ("allow", "block") or _managed_exit(rule)):
         return '|"no match"| '
     if rule and rule["action"] in ("challenge", "captcha"):
         return '|"valid token / no match"| '
@@ -299,6 +306,11 @@ def _generate_grouped(rules: list, deps: list, default_action: str,
             gid = f"group_{fg['ids'][0]}_{fg['ids'][-1]}"
             label = _escape_mermaid(fg["label"])
             lines.append(f'    {gid}["{label}"]')
+            # Folded managed groups that block on a match exit like a single one
+            exits = list(dict.fromkeys(a for r in rules[fg["start_idx"]:fg["end_idx"] + 1]
+                                       for a in (_managed_exit(r) or "").split(" / ") if a))
+            if exits:
+                lines.append(f'    {gid} -->|"match → {" / ".join(exits)}"| EXIT_{gid}["⛔ {" / ".join(exits)}"]')
             node_order.append(gid)
             i = fg["end_idx"] + 1
             lines.append("")
@@ -350,7 +362,9 @@ def _first_node_id(rules, folded_indices, fold_groups):
 
 def _rule_for_node(node_id: str, rules: list, fold_groups: list) -> dict | None:
     if node_id.startswith("group_"):
-        return None  # fold group, no single rule
+        # A fold group of blocking managed groups: any of its rules stands for the "no match" edge
+        fg = next((g for g in fold_groups if node_id == f"group_{g['ids'][0]}_{g['ids'][-1]}"), None)
+        return next((r for r in rules[fg["start_idx"]:fg["end_idx"] + 1] if _managed_exit(r)), None) if fg else None
     return next((r for r in rules if _safe_id(r) == node_id), None)
 
 def _node_id_for_rule(rule: dict, fold_groups: list) -> str:

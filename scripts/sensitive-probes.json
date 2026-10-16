@@ -1,0 +1,20 @@
+{
+  "_comment": "Paths sensitive-file scanners request, and the AWS managed rules that block each one at the versions below. These were the default versions when recorded, so an unpinned group counts; one pinned to an older version doesn't. An empty list means no AWS managed rule blocks the path. Keep in step with Appendix I in waf-generate-appendix.py.",
+  "versions": {"AWSManagedRulesLinuxRuleSet": "2.6", "AWSManagedRulesKnownBadInputsRuleSet": "1.26", "AWSManagedRulesCommonRuleSet": "1.23"},
+  "probes": {
+    "/.git/config": [],
+    "/.env": [["AWSManagedRulesLinuxRuleSet", "LFI_URIPATH"], ["AWSManagedRulesKnownBadInputsRuleSet", "ExploitablePaths_URIPATH"]],
+    "/.env.local": [["AWSManagedRulesLinuxRuleSet", "LFI_URIPATH"]],
+    "/.htaccess": [["AWSManagedRulesLinuxRuleSet", "LFI_URIPATH"]],
+    "/.ssh/id_rsa": [["AWSManagedRulesLinuxRuleSet", "LFI_URIPATH"]],
+    "/.aws/credentials": [["AWSManagedRulesCommonRuleSet", "GenericLFI_URIPATH"]],
+    "/.aws/config": [["AWSManagedRulesKnownBadInputsRuleSet", "ExploitablePaths_URIPATH"]],
+    "/config.bak": [["AWSManagedRulesCommonRuleSet", "RestrictedExtensions_URIPATH"]],
+    "/.DS_Store": [],
+    "/.svn/entries": [],
+    "/.npmrc": [],
+    "/backup.zip": [],
+    "/db.sql": [],
+    "/docker-compose.yml": []
+  }
+}

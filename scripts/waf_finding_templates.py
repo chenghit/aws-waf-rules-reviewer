@@ -149,6 +149,7 @@ TEMPLATES_EN = {
 **Recommendation**:
 - If these rules are for monitoring only, give them names that say so
 - If the intent is to act on matches (Block, Challenge, etc.), either change the action or add labels for downstream rules to consume
+- Don't switch one to Allow unless its conditions can't be forged, such as an IP set: an Allow on a User-Agent or header lets any client skip every later rule
 
 ---
 """,
@@ -169,19 +170,35 @@ TEMPLATES_EN = {
 
 ---
 """,
+"dead_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR exempt regex branches anchored with `^/` never match, so those paths get challenged
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: Exempt regex `{regex}`
+
+**Problem**:
+- AWS WAF matches the exempt regex against the request's host followed by its normalized path, such as `www.example.com/api/orders`, so a branch that starts with `^/` never matches: {dead_list}
+- GET requests to those paths aren't exempt, and {challenge_rules} challenges them during a DDoS event. API and native app clients can't solve a Challenge, so those requests fail. Only GET requests are challengeable
+{state_note}
+**Recommendation**:
+- Anchor after the host: {suggestion}. `^[^/]+` stands for any host; name the host instead (`^api\\.example\\.com\\/`) to exempt one host only
+- The path loses a trailing slash before the match, so `\\/api\\/` doesn't match `/api` itself; `\\/api(\\/|$)` does
+- Check the result in WAF logs: a request the regex exempts has no `awswaf:managed:aws:anti-ddos:challengeable-request` label, and the label is added outside DDoS events too
+
+---
+""",
 "unanchored_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR exempt URI regex is unanchored, so crafted paths skip Challenge
 
 **Rule**: {rule_name} (priority {priority})
-**Current state**: Exempt regex `{regex}`, API path branches are not anchored with `^`
+**Current state**: Exempt regex `{regex}`, path branches have no anchor
 
 **Problem**:
-- The following regex branches are not anchored with `^`, meaning they are "contains" matches rather than "starts-with": {unanchored_list}
+- AWS WAF matches the exempt regex against the request's host followed by its normalized path. These branches have no anchor, so they match anywhere in it: {unanchored_list}
 - Attackers can craft paths containing these keywords to get past {challenge_rules}, e.g.: {examples}
 - This allows attack requests to be exempted from Challenge during DDoS events
 {state_note}
 **Recommendation**:
-- Add `^` anchoring to all API path branches: {anchored_suggestion}
-- Check the real paths first. If the API sits under a prefix such as `/v1/`, anchor on that prefix (`^\\/v1\\/query`), or the anchored branch stops matching
+- Anchor the branches after the host: {suggestion}. `^[^/]+` stands for any host; name the host instead (`^api\\.example\\.com\\/`) to exempt one host only. Don't anchor with `^/`: the string starts with the host, so such a branch never matches
+- Check the real paths first. If the API sits under a prefix such as `/v1/`, include it (`^[^/]+\\/v1\\/query`), or the anchored branch stops matching
 - Static asset suffix matching (e.g., `\\.(css|js|png)$`) is already anchored with `$` and needs no change
 
 ---
@@ -225,7 +242,7 @@ TEMPLATES_EN = {
 **Current state**: Rules that differ only in name and priority
 
 **Problem**:
-- The first rule in each group already decides every request it matches, so the later copies change nothing. They cost WCU and have to be kept in sync by hand
+- The first rule in each group already decides every request it matches, so the later copies change nothing. They cost WCU and have to be kept in sync by hand. A copy of a rule group billed per request (Bot Control, Anti-DDoS, ATP, ACFP) is billed again for every request it inspects
 {groups}
 
 **Recommendation**:
@@ -302,7 +319,7 @@ TEMPLATES_EN = {
 **Current state**: This Web ACL allows by default, and no rate-based rule counts per IP across all paths with an action other than Count
 
 **Problem**:
-- A single IP can send as many requests as it wants. Rate limits keyed by User-Agent or a constant only cover the clients they name
+- A single IP can send as many requests as it wants{other}
 {counted}
 **Recommendation**:
 - Add a per-IP rate limit on all traffic with Block, starting in Count to find the peak of real users (shared NAT and corporate egress IPs are the high end). Exempt verified crawlers with the `crawler:verified` label from Appendix A, not User-Agent strings
@@ -498,16 +515,16 @@ TEMPLATES_EN = {
 
 ---
 """,
-"bot_control_version": """## Issue {n} (Medium): Bot Control runs an old version with much weaker detection
+"bot_control_version": """## Issue {n} ({severity}): {title}
 
-**Rule**: {rule_name} (priority {priority})
+{rule_line}
 **Current state**: {current_version}
 
 **Problem**:
 - {detail}
 - {versions_header}
 {additions}
-- On the old version, far fewer bots are recognized, so the category rules match much less traffic
+- {old_note}
 
 **Recommendation**:
 - Pin the latest static version (see the AWS Managed Rules changelog). Run it in Count first and compare labels with current traffic: 5.0 changed rule match precedence and added categories, so the same request can get different labels after the upgrade
@@ -517,10 +534,11 @@ TEMPLATES_EN = {
 """,
 "bot_control_behind": """## Issue {n} (Low): Bot Control isn't on the latest static version
 
-**Rule**: {rule_name} (priority {priority})
+{rule_line}
 **Current state**: Pinned to {current_version}; the latest static version is {latest} ({released})
 
 **Problem**:
+- {current_version} misses the bot signatures and labels added up to {latest}
 - Later versions added:
 {additions}
 - Bots that only the newer signatures recognize go through as unclassified
@@ -559,33 +577,90 @@ TEMPLATES_EN = {
 
 ---
 """,
-"uri_path_pitfalls": """## Issue {n} (Medium): URI path conditions that can never match as written
+"uri_path_pitfalls": """## Issue {n} ({severity}): URI path conditions that can't match what they were written for
 
 {rule_line}
-**Current state**: Conditions on `UriPath` whose pattern can't match a real path
+**Current state**: Conditions on `UriPath` whose pattern can't match the requests it was written for
 
 **Problem**:
 {details}
 
 **Recommendation**:
 {recs}
-- Keep the rule in Count after fixing it, check what it matches, then switch to its intended action
+- Test the fix in a Count copy of the rule, keeping the original in place, then replace the original once the copy matches what it should
 
 ---
 """,
-"path_block_decoding": """## Issue {n} (Medium): Path Block or rate rules don't URL-decode, so encoded paths slip through
+"path_block_decoding": """## Issue {n} ({severity}): Path or query rules don't decode like the origin, so rewritten requests slip through
 
 {rule_line}
-**Current state**: Block rules, rate-based rules through their scope-down, or Count rules whose label a Block rule acts on, match `UriPath` without `URL_DECODE`
+**Current state**: These Block rules, rate limits, or Count rules that feed a Block rule match the URI path or query string with the text transformations listed below
 
 **Problem**:
-- WAF inspects the raw URI path as the client sent it. Without a decoding transformation, `/%69nternal/` doesn't match `/internal/`. If the origin decodes the path, the request reaches the path the rule meant to block
-- `URL_DECODE` decodes once, so double encoding such as `%2569` needs it twice
+- WAF inspects the URI path exactly as the client sent it unless a text transformation changes it, and CloudFront forwards the raw path to the origin. A request that the origin resolves to a blocked path, but that the rule doesn't see as that path, gets through. Where a rewrite could be tested, the requests below reach the origin with no Block rule in this Web ACL stopping them
 {details}
 
 **Recommendation**:
-- Use this transformation chain on these path conditions, in order: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `NORMALIZE_PATH`, `LOWERCASE`
+{recs}
+- Each text transformation adds 10 WCU. Appendix G compares this chain with stricter and looser ones and explains which rules must not decode
+- More decoding can match legitimate requests that carry encoded characters. Test the change in a Count copy of the rule and keep the original in place until the copy looks right
 - Test whether the origin decodes paths. If it doesn't, the practical risk is lower
+
+---
+""",
+"bot_control_inert": """## Issue {n} (Low): {title}
+
+{rule_line}
+**Current state**: {level} level, {counted} rules overridden to Count
+
+**Problem**:
+- Bot Control is billed for every request it inspects, but here it blocks nothing and no later rule matches its labels. It only adds labels and Count metrics
+{remaining}
+**Recommendation**:
+- If it's in Count to watch before blocking, review its labels and Count metrics, then set the rules that should act back to their default actions
+- If nothing will act on it, remove it, or {scope} to the traffic you plan to act on
+
+---
+""",
+"unknown_overrides": """## Issue {n} (Low): Bot Control overrides name rules the group doesn't have
+
+{rule_line}
+**Current state**: Overrides for {names}
+
+**Problem**:
+- {detail}
+
+**Recommendation**:
+- Remove these overrides. If the intent was to change what replaced them, override the rules that exist now (the Bot Control rule list in the AWS WAF Developer Guide)
+
+---
+""",
+"duplicate_metrics": """## Issue {n} (Awareness): Rules share a CloudWatch metric name
+
+{rule_line}
+**Current state**: Several rules use the same `MetricName`
+
+**Problem**:
+- CloudWatch rule metrics use the metric name as their `Rule` dimension, so these rules report to one metric. Its counts mix their matches, and an alarm or dashboard on it can't tell which rule fired. Sampled requests are looked up by metric name too
+{details}
+- WAF logs still record which rule matched
+
+**Recommendation**:
+- Give each rule its own `MetricName`. Renaming a rule doesn't change its metric name
+
+---
+""",
+"sensitive_files": """## Issue {n} (Low): No rule blocks sensitive-file probes such as `{first}`
+
+**Rule**: N/A (missing rule)
+**Current state**: This Web ACL allows traffic by default, and no rule in it blocks {paths}
+
+**Problem**:
+- Scanners request these paths on every site they find. If the origin serves one, the file gets downloaded: dotfiles, backups, and dumps can give away source code or credentials
+{gaps}
+**Recommendation**:
+- Keep these files out of the web root, or deny dotfiles at the origin. WAF is the second layer
+{linux}{custom}- If the site serves any of these paths on purpose, exempt them before switching to Block
 
 ---
 """,
@@ -726,18 +801,18 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"no_logging": """## Issue {n} (Awareness): 未检测到 WAF 日志配置
+"no_logging": """## Issue {n} (Awareness): 导出里看不到 WAF 日志配置
 
 **Rule**: N/A (Web ACL 全局配置)
-**Current state**: WAF JSON 导出文件中不包含日志配置信息
+**Current state**: WAF JSON 导出不带日志配置
 
 **Problem**:
-- WAF JSON 导出不包含日志配置。这一条不代表日志未启用，仅表示无法从导出文件中验证
-- WAF 日志对于安全事件调查、规则调优和误报分析至关重要
+- 导出文件不带日志配置，所以这条只说明没法确认，不代表日志没开
+- 查安全事件、调规则、排查误报，都要靠 WAF 日志
 
 **Recommendation**:
-- 通过 AWS 控制台或 CLI 确认是否已启用 WAF 日志（Amazon Data Firehose、S3 或 CloudWatch Logs）
-- 建议至少保留 90 天的日志，并配置 CloudWatch 告警监控关键指标（Block 率、Challenge 率）
+- 在 AWS 控制台或用 CLI 确认 WAF 日志有没有开（Amazon Data Firehose、S3 或 CloudWatch Logs）
+- 日志至少留 90 天，再给关键指标（Block 率、Challenge 率）配上 CloudWatch 告警
 
 ---
 """,
@@ -771,18 +846,19 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"count_without_labels": """## Issue {n} (Awareness): {rule_names} 规则为 Count 但未添加标签，仅产生指标
+"count_without_labels": """## Issue {n} (Awareness): {rule_names} 是不打标签的 Count 规则，只产生指标
 
 {rule_line}
-**Current state**: Count action，无 RuleLabels
+**Current state**: 动作是 Count，没有 RuleLabels
 
 **Problem**:
-- Count 规则不添加标签时，只产生 CloudWatch 指标，下游规则无法基于此匹配结果采取行动
-- 如果意图是基于匹配结果执行某种动作，当前配置无法实现
+- 不打标签的 Count 规则只产生 CloudWatch 指标，后面的规则用不上它的匹配结果
+- 如果本意是对命中的请求做点什么，现在的配置做不到
 
 **Recommendation**:
-- 如果这些规则只是用来观察，把名字改得能看出用途
-- 如果意图是对匹配结果采取行动（如 Block 或 Challenge），应将 action 改为目标动作，或添加标签供下游规则消费
+- 只是用来观察的话，把名字改得能看出用途
+- 要对命中的请求采取动作（Block、Challenge 等），就改动作，或者加上标签给后面的规则用
+- 除非条件伪造不了（比如 IP set），不要改成 Allow：按 User-Agent 或 header 放行，任何客户端都能借它跳过后面所有规则
 
 ---
 """,
@@ -803,20 +879,36 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"unanchored_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR 的豁免 URI 正则表达式未锚定，攻击者可利用路径注入绕过
+"dead_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR 豁免正则里以 `^/` 开头的分支永远匹配不上，这些路径照样会被 Challenge
 
 **Rule**: {rule_name} (priority {priority})
-**Current state**: 豁免正则 `{regex}`，API 路径分支未使用 `^` 锚定
+**Current state**: 豁免正则 `{regex}`
 
 **Problem**:
-- 以下正则分支未以 `^` 锚定，意味着它们是"包含"匹配而非"以...开头"匹配：{unanchored_list}
-- 攻击者可以构造包含这些关键词的任意路径，让 {challenge_rules} 跳过这些请求，例如：{examples}
-- 这使得攻击者可以通过精心构造的路径，让攻击请求被豁免于 Challenge
+- AWS WAF 拿豁免正则去匹配"host 加规范化后的路径"，比如 `www.example.com/api/orders`，所以以 `^/` 开头的分支永远匹配不上：{dead_list}
+- 这些路径上的 GET 请求没有被豁免，DDoS 事件期间会被 {challenge_rules} Challenge。API 和原生 App 客户端过不了 Challenge，这些请求会失败。只有 GET 请求会被 Challenge
 {state_note}
 **Recommendation**:
-- 为所有 API 路径分支添加 `^` 锚定：{anchored_suggestion}
-- 先确认真实路径。如果 API 挂在 `/v1/` 这样的前缀下，要连前缀一起锚定（`^\\/v1\\/query`），否则加了 `^` 的分支就匹配不上了
-- 静态资源后缀匹配已正确使用 `$` 锚定，无需修改
+- 锚定在 host 后面：{suggestion}。`^[^/]+` 代表任意 host；只想豁免某个 host，就写出 host 本身（`^api\\.example\\.com\\/`）
+- 匹配前路径结尾的 `/` 会被去掉，所以 `\\/api\\/` 匹配不到 `/api` 本身，`\\/api(\\/|$)` 可以
+- 用 WAF 日志确认效果：被豁免的请求没有 `awswaf:managed:aws:anti-ddos:challengeable-request` 标签，这个标签平时就会打，不用等 DDoS 事件
+
+---
+""",
+"unanchored_exempt_regex": """## Issue {n} ({severity}): AntiDDoS AMR 的豁免 URI 正则没有锚定，攻击者构造路径就能跳过 Challenge
+
+**Rule**: {rule_name} (priority {priority})
+**Current state**: 豁免正则 `{regex}`，路径分支没有锚定
+
+**Problem**:
+- AWS WAF 拿豁免正则去匹配"host 加规范化后的路径"。下面这些分支没有锚定，在其中任何位置出现都算匹配：{unanchored_list}
+- 攻击者可以构造包含这些关键词的任意路径，让 {challenge_rules} 跳过这些请求，例如：{examples}
+- 这样，攻击请求在 DDoS 事件期间也能免于 Challenge
+{state_note}
+**Recommendation**:
+- 把这些分支锚定在 host 后面：{suggestion}。`^[^/]+` 代表任意 host；只想豁免某个 host，就写出 host 本身（`^api\\.example\\.com\\/`）。不要用 `^/` 锚定：字符串是从 host 开始的，这样的分支永远匹配不上
+- 先确认真实路径。如果 API 挂在 `/v1/` 这样的前缀下，要把前缀写进去（`^[^/]+\\/v1\\/query`），否则锚定后的分支就匹配不上了
+- 静态资源后缀匹配（比如 `\\.(css|js|png)$`）已经用 `$` 锚定，不用改
 
 ---
 """,
@@ -859,7 +951,7 @@ TEMPLATES_ZH = {
 **Current state**: 这些规则除了名字和 priority，其他配置完全一样
 
 **Problem**:
-- 每组里排在前面的规则已经决定了它匹配到的请求怎么处理，后面的副本不会改变任何结果，只是多占 WCU，改规则时还得记得两边一起改
+- 每组里排在前面的规则已经决定了它匹配到的请求怎么处理，后面的副本不会改变任何结果，只是多占 WCU，改规则时还得记得两边一起改。按请求计费的规则组（Bot Control、Anti-DDoS、ATP、ACFP）有副本的话，副本检查的每个请求都要再收一次费
 {groups}
 
 **Recommendation**:
@@ -936,7 +1028,7 @@ TEMPLATES_ZH = {
 **Current state**: 这个 ACL 默认放行，没有一条覆盖所有路径、动作不是 Count 的按 IP 限速规则
 
 **Problem**:
-- 单个 IP 发多少请求都不会被限。按 User-Agent 或常量计数的限速，只管得到它们点名的客户端
+- 单个 IP 发多少请求都不会被限{other}
 {counted}
 **Recommendation**:
 - 加一条覆盖所有流量、按 IP 计数、动作为 Block 的限速。先用 Count 看正常用户的峰值（共享 NAT 和公司出口 IP 最高）。验证过的爬虫用附录 A 的 `crawler:verified` 标签排除，不要按 User-Agent 字符串排除
@@ -1132,16 +1224,16 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"bot_control_version": """## Issue {n} (Medium): Bot Control 跑的是旧版本，识别能力弱很多
+"bot_control_version": """## Issue {n} ({severity}): {title}
 
-**Rule**: {rule_name} (priority {priority})
+{rule_line}
 **Current state**: {current_version}
 
 **Problem**:
 - {detail}
 - {versions_header}
 {additions}
-- 旧版本能认出的 bot 少得多，各个类别规则能命中的流量也少得多
+- {old_note}
 
 **Recommendation**:
 - 固定到最新的静态版本（见 AWS Managed Rules changelog）。先用 Count 跑一段时间，对比升级前后的标签：5.0 调整了规则的匹配顺序并新增了类别，同一个请求升级后可能命中不同的标签
@@ -1151,10 +1243,11 @@ TEMPLATES_ZH = {
 """,
 "bot_control_behind": """## Issue {n} (Low): Bot Control 不是最新的静态版本
 
-**Rule**: {rule_name} (priority {priority})
+{rule_line}
 **Current state**: 固定在 {current_version}；最新的静态版本是 {latest}（{released}）
 
 **Problem**:
+- {current_version} 缺少截至 {latest} 新增的 bot 特征和标签
 - 之后的版本新增了：
 {additions}
 - 只有新版本特征才认得出的 bot，现在会被当作未分类放过去
@@ -1193,33 +1286,90 @@ TEMPLATES_ZH = {
 
 ---
 """,
-"uri_path_pitfalls": """## Issue {n} (Medium): 有些 URI 路径条件按现在的写法永远不会命中
+"uri_path_pitfalls": """## Issue {n} ({severity}): 有些 URI 路径条件按现在的写法匹配不到想拦的请求
 
 {rule_line}
-**Current state**: `UriPath` 上的匹配模式和真实路径对不上
+**Current state**: `UriPath` 上的匹配模式和它要匹配的请求对不上
 
 **Problem**:
 {details}
 
 **Recommendation**:
 {recs}
-- 修正后先保持 Count，看清楚命中情况，再切到原本想要的动作
+- 先建一条修正后的 Count 副本，原规则保留，看清楚副本的命中情况，再替换原规则
 
 ---
 """,
-"path_block_decoding": """## Issue {n} (Medium): 按路径拦截或限速的规则没做 URL 解码，编码后的路径可以绕过
+"path_block_decoding": """## Issue {n} ({severity}): 按路径或查询串匹配的规则，解码跟源站对不上，改写过的请求能绕过
 
 {rule_line}
-**Current state**: Block 规则、限速规则的 scope-down，或者打出的标签被 Block 规则使用的 Count 规则，匹配 `UriPath` 时没有 `URL_DECODE`
+**Current state**: 这些 Block 规则、限速规则，或者给 Block 规则打标签的 Count 规则，按下面列出的文本转换匹配 URI 路径或查询串
 
 **Problem**:
-- WAF 检查的是客户端发来的原始路径。没有解码转换时，`/%69nternal/` 匹配不上 `/internal/`。如果源站会解码，请求就会到达规则本来要拦的路径
-- `URL_DECODE` 只解码一次，`%2569` 这种双重编码要写两次
+- 除非文本转换改写了路径，WAF 按客户端发来的原样检查它，CloudFront 也把原始路径转给源站。源站会解析成被拦路径、规则却认不出来的请求，就能过去。能模拟的地方，下面列出了到达源站、没有任何 Block 规则拦住的请求
 {details}
 
 **Recommendation**:
-- 这些路径条件按这个顺序加文本转换：`URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`NORMALIZE_PATH`、`LOWERCASE`
+{recs}
+- 每个文本转换 10 WCU。附录 G 对比了更严和更松的写法，也说明了哪些规则不能解码
+- 解码多了，带编码字符的正常请求也可能被匹配。先建一条改好的 Count 副本观察，原规则保留，副本没问题再替换
 - 测试一下源站会不会对路径做解码。如果不解码，实际风险会低一些
+
+---
+""",
+"bot_control_inert": """## Issue {n} (Low): {title}
+
+{rule_line}
+**Current state**: {level} 级别，{counted} 条规则改成了 Count
+
+**Problem**:
+- Bot Control 按检查的请求数计费，但在这里它什么都不拦，后面也没有规则匹配它的标签，只是打标签、产生 Count 指标
+{remaining}
+**Recommendation**:
+- 如果是先用 Count 观察，看过标签和 Count 指标后，把该生效的规则改回默认动作
+- 如果不打算用它做任何处理，就删掉，或者{scope}
+
+---
+""",
+"unknown_overrides": """## Issue {n} (Low): Bot Control 的 override 指向了规则组里不存在的规则
+
+{rule_line}
+**Current state**: 对 {names} 做了 override
+
+**Problem**:
+- {detail}
+
+**Recommendation**:
+- 删掉这些 override。如果本意是调整替代它们的规则，就对现在存在的规则做 override（规则列表见 AWS WAF Developer Guide 的 Bot Control 部分）
+
+---
+""",
+"duplicate_metrics": """## Issue {n} (Awareness): 有几条规则共用同一个 CloudWatch 指标名
+
+{rule_line}
+**Current state**: 几条规则的 `MetricName` 相同
+
+**Problem**:
+- CloudWatch 的规则指标用指标名作 `Rule` 维度，这几条规则会写进同一个指标。计数混在一起，基于它的告警和看板分不出是哪条规则命中的。sampled requests 也是按指标名查的
+{details}
+- WAF 日志里仍然记着是哪条规则命中的
+
+**Recommendation**:
+- 给每条规则单独的 `MetricName`。改规则名不会自动改指标名
+
+---
+""",
+"sensitive_files": """## Issue {n} (Low): 没有规则拦截 `{first}` 这类敏感文件探测
+
+**Rule**: N/A (缺失规则)
+**Current state**: 这个 Web ACL 默认放行，里面没有规则拦截 {paths}
+
+**Problem**:
+- 扫描器对找到的每个站点都会试这些路径。源站只要返回其中一个，文件就被下载走了：dotfile、备份和导出文件可能泄露源码或凭证
+{gaps}
+**Recommendation**:
+- 别把这些文件放在 Web 根目录，或者在源站直接拒绝 dotfile。WAF 只是第二层
+{linux}{custom}- 站点确实要提供其中某些路径的话，切 Block 之前先把它们排除掉
 
 ---
 """,

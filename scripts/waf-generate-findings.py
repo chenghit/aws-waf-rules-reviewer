@@ -65,30 +65,80 @@ LINES = {
         "rec_unreachable": "- Decide which rule should handle this traffic: narrow the earlier rule's condition, or remove the later rule",
         "order_title": "{count} issue(s)",
         "rec_literal_wildcard": "- For wildcard intent, use a regex, or drop the `*` and keep `STARTS_WITH`",
-        "rec_query_in_path": "- To match query parameters, use `QueryString` or `SingleQueryArgument` as the field to match",
-        "wildcard": "- `{rule}` (priority {p}): `{value}` contains `*`. Byte match has no wildcards, so `*` is a literal character and this condition only matches paths that literally contain it",
-        "query_in_path": "- `{rule}` (priority {p}): `{value}` expects a query string, but UriPath never includes the query string, so this condition never matches",
-        "no_decode": "- `{rule}` (priority {p}): text transformation {transforms}{case}",
-        "case_note": ". No LOWERCASE either, so a case change like `{path}` also gets through",
+        "rec_query_in_path": "- To match a query parameter, use `SingleQueryArgument` with the parameter's name and match only its value, or `QueryString` with the pattern anchored as `(^|&)name=`. `QueryString` starts after the `?`, so `[?&]name=` misses the first parameter",
+        "wildcard": "- `{rule}` (priority {p}): `{value}` contains `*`. Byte match has no wildcards, so `*` is a literal character and this condition only matches paths with a literal `*` in that place",
+        "query_in_path": "- `{rule}` (priority {p}): `{value}` expects a query string, but UriPath never includes the query string, so the condition can't see query parameters",
+        "dec_open": "- `{rule}` (priority {p}): {fields} with {transforms}. These reach the origin and no rule blocks them: {examples}",
+        "dec_guess": "- {rules}: {fields} with {transforms}: {problems}",
+        "dec_none": "no URL decoding",
+        "dec_once": "one URL decode only, and double encoding such as `%2569` needs a second",
+        "dec_order": "LOWERCASE, REMOVE_NULLS, or NORMALIZE_PATH runs before the last decode and misses what decoding reveals: with LOWERCASE first, `%49nternal` decodes to `Internal` and stays uppercase",
+        "dec_normalize": "no NORMALIZE_PATH on a STARTS_WITH, EXACTLY, or `^` match, so `//x` and `/a/../x` don't match a rule for `/x`",
+        "dec_nocase": "no LOWERCASE either, so changing the case of a letter also gets through",
+        "dec_join": "; ",
+        "tag_double": " (if the origin or a proxy decodes twice)",
+        "tag_case": " (if the origin ignores case)",
+        "tag_slash": " (if the origin decodes `%2F`)",
+        "tag_params": " (Java servlet origins)",
+        "tag_gate": " (only for clients that get past {rules}, for example with a valid API key)",
+        "dec_open_gated": "- `{rule}` (priority {p}): {fields} with {transforms}. For clients that get past {gates} (for example with a valid API key), these reach the origin and no other rule blocks them: {examples}",
+        "exempt_norm": "- `{rule}` (priority {p}): the exemption `{value}` also matches `{example}`, which the origin resolves to a path the rule blocks, so the rule skips it",
+        "exempt_guess": "- `{rule}` (priority {p}): the exemption `{value}` isn't decoded and then normalized, so a path that starts with it followed by `../` skips the rule",
+        "unloaded_note": "- Rule groups this Web ACL references weren't provided, so a rule in them may already block some of these\n",
+        "rec_path_chain": "- Path conditions: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `NORMALIZE_PATH`, `LOWERCASE`, in that order. The second decode covers double encoding",
+        "rec_query_chain": "- Query string conditions: `URL_DECODE`, `URL_DECODE`, `REMOVE_NULLS`, `LOWERCASE`. Leave out `NORMALIZE_PATH`, which would rewrite `//` and `../` inside parameter values",
+        "rec_exempt": "- Give path exemptions (NOT conditions) the same decoding, followed by `NORMALIZE_PATH`",
+        "rec_lead": "- `NORMALIZE_PATH` keeps a `../` at the very start, so `/../admin` passes the chain unchanged. Core rule set's `GenericLFI_URIPATH`, in Block, looks for path traversal such as `../` (Appendix I lists `/foo/../.env` among the paths it blocks)",
+        "rec_params": "- In front of a Java servlet origin, end path matches with `(/|;|$)`, or block `;` on paths that never use it (Appendix G)",
+        "rec_h": "- Appendix H has a rule that blocks encoded letters, digits, and dots on every path and in the query string",
+        "bot_inert_title_all": "Bot Control has every rule that would act in Count, and no rule uses its labels",
+        "bot_inert_title_most": "Bot Control has almost every rule in Count, and no rule uses its labels",
+        "bot_scope_narrow": "narrow its scope-down further",
+        "bot_scope_add": "add a scope-down",
+        "unknown_pinned": "The pinned version has no rules by these names, so the overrides do nothing. `TGT_TokenReuseIp`, for example, was replaced in Version_2.0 by `TGT_TokenReuseIpLow`, `Medium`, and `High`",
+        "unknown_unpinned": "Version_2.0 and later have no rules by these names, so on a current default version the overrides do nothing. `TGT_TokenReuseIp`, for example, was replaced in Version_2.0 by `TGT_TokenReuseIpLow`, `Medium`, and `High`",
+        "bot_inert_note": "- Every rule that would act is in Count and no rule uses its labels (see the finding \"Bot Control has every rule that would act in Count\"), so for now the version only changes which labels it adds\n",
+        "bot_new_rules_note": "- Pinning 5.0 or later also turns on `CategoryPagePreview` and `CategoryWebhooks`, which aren't overridden here and block unverified bots by default. Override them to Count first if nothing else should change\n",
+        "bot_remaining": "- {rules} aren't overridden. They exist from Version_5.0 on, and this group isn't pinned, so whether they block depends on the default version\n",
+        "dup_metric": "- `{metric}`: {rules}",
+        "no_ip_other": ". Rate limits keyed by User-Agent or a constant only cover the clients they name",
+        "probe_gaps": "- At the versions in Appendix I, no AWS managed rule blocks {paths}, even with Core rule set, Known bad inputs, and Linux operating system all deployed\n",
+        "rec_probe_all": "- Block the open paths with a custom rule after the managed rule groups, in Count first: add the one in Appendix I, or extend an existing rule. Appendix I's rule blocks dotfiles outside `/.well-known/`, backup and dump extensions, and a few known file names\n",
+        "rec_probe_ext": "- Dotfiles are already blocked here. Take the extension and file name branch of Appendix I's rule into an existing rule, or add it after the managed rule groups, in Count first\n",
+        "base_crs": "CRS covers common web attacks: cross-site scripting, local and remote file inclusion, SSRF to the EC2 metadata service, bad User-Agents, and request size limits. SQL injection is in the separate SQL database group (`AWSManagedRulesSQLiRuleSet`)",
+        "base_rec_crs": "- Evaluate whether to add CRS; if adding, override `SizeRestrictions_BODY` to Count to avoid false positives on large-payload API endpoints (see Appendix F)",
+        "base_kbi": "KnownBadInputsRuleSet protects against Log4Shell (CVE-2021-44228), Java deserialization exploits, and other known malicious input patterns, with low WCU cost and few false positives",
+        "base_rec_kbi": "- Add AWSManagedRulesKnownBadInputsRuleSet (low WCU cost, recommended as priority)",
+        "base_wcu": "- Check the WCU before adding: this Web ACL uses {cap}. The base price covers 1,500, each 500 beyond adds a per-request charge, and 5,000 is the fixed maximum (Appendix E)",
+        "rec_linux": "- Add `AWSManagedRulesLinuxRuleSet` (200 WCU). It blocks the `.env` variants, `.htaccess`, and `.ssh/` files the other groups miss. It also matches `composer.json` and `wp-config.php`, so watch for false positives in Count\n",
         "group_count": "- `{rule}` (priority {p}, {group}): the whole rule group is set to Count, none of its rules block",
         "rule_count": "- `{rule}` (priority {p}, {group}): {names} overridden to Count",
         "fragment_allow": "- For Allow rules this removes the path restriction: the rule allows every path for the requests its other conditions match",
         "default_block_note": "- This Web ACL blocks by default and relies on allow lists, so these rules are open entries into it\n",
-        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` has two version lineages with different detection trade-offs. The 2.0 line added JSON parsing to `SQLi_BODY`; 1.3, 2.3, 2.4, 2.5 form a separate line. Choose a lineage deliberately\n",
+        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` has two version lineages with different detection trade-offs. The 2.0 line added JSON inspection to `SQLi_BODY`; 2.3 and later continue the 1.x line (1.2, 1.3), not 2.0. Choose a lineage deliberately\n",
         "default_version": "not pinned (AWS default version)",
         "unpinned_bot": "Bot Control isn't pinned to a static version, so it runs whatever AWS currently sets as the default. Check which one with `ListAvailableManagedRuleGroupVersions` (`CurrentDefaultVersion`)",
         "versions_later": "Later versions added:",
         "versions_all": "What each static version added (the default can be any of them):",
         "outdated_bot": "Bot Control is pinned to {version}",
+        "bot_title_pinned": "Bot Control runs an old version with much weaker detection",
+        "bot_title_unpinned": "Bot Control isn't pinned and may run an old version",
+        "bot_old_pinned": "On the old version, far fewer bots are recognized, so the category rules match much less traffic",
+        "bot_old_unpinned": "If the default is an old version, far fewer bots are recognized, so the category rules match much less traffic",
         # What each static version added, from the AWS Managed Rules changelog
+        # Each part applies to every Web ACL, or only to TARGETED, regional, or CloudFront ones
         "bot_versions": [
-            ((2, 0), "- 2.0/3.0: the TARGETED `TGT_TokenReuse*` rules by IP, ASN, and country, and many new bot names across COMMON categories"),
-            ((4, 0), "- 4.0: Web Bot Authentication, which verifies signed AI bots and agents (CloudFront only until 6.0)"),
-            ((5, 0), "- 5.0: 400+ more bots, the `CategoryPagePreview` and `CategoryWebhooks` categories, and a precedence change so specific bot rules match before generic signals"),
-            ((6, 0), "- 6.0: Web Bot Authentication on regional resources, and bots verified that way count as verified in every category"),
-            ((6, 1), "- 6.1: more signatures across categories, including Security, SEO, and scraping frameworks"),
-            ((7, 0), "- 7.0: token provenance labels at TARGETED level, which flag a token presented from a different kind of IP address than the one that acquired it (for example data center, then residential), and device ID labels from the Android SDK. No rule in the group acts on them. Also the `fastly` cloud service provider label and, per the AWS SNS notification, new bot names, most of them AI and Miscellaneous"),
+            ((2, 0), "2.0/3.0", [("targeted", "the TARGETED `TGT_TokenReuse*` rules by IP, ASN, and country"),
+                                 (None, "many new bot names across COMMON categories")]),
+            ((4, 0), "4.0", [("cloudfront", "Web Bot Authentication, which verifies signed AI bots and agents")]),
+            ((5, 0), "5.0", [(None, "400+ more bots, the `CategoryPagePreview` and `CategoryWebhooks` categories, and a precedence change so specific bot rules match before generic signals")]),
+            ((6, 0), "6.0", [("regional", "Web Bot Authentication on regional resources"),
+                             (None, "bots verified with Web Bot Authentication count as verified in every category, not only AI")]),
+            ((6, 1), "6.1", [(None, "more signatures across categories, including Security, SEO, and scraping frameworks")]),
+            ((7, 0), "7.0", [("targeted", "token provenance labels, which flag a token presented from a different kind of IP address than the one that acquired it (for example data center, then residential), and device ID labels from the Android SDK. No rule in the group acts on them"),
+                             (None, "the `fastly` cloud service provider label and, per the AWS SNS notification, new bot names, most of them AI and Miscellaneous")]),
         ],
+        "bot_versions_join": "; ", "bot_versions_sep": ": ",
         "missing_amr": "- No Anti-DDoS rule group: this Web ACL allows traffic by default and has no automatic HTTP flood mitigation (Medium)",
         "missing_amr_alb": "- No Anti-DDoS rule group. If this Web ACL is on an ALB, the ALB's resource-level DDoS protection (`ALBLowReputationMode` `{mode}`) rate-limits requests from known low-reputation sources {when}. It doesn't act on a flood from sources without a bad reputation, and it has no traffic baseline, Challenge, or labels, so HTTP flood mitigation is still missing (Medium)",
         "alb_when_ACTIVE_UNDER_DDOS": "only while the ALB is under high load or a likely DDoS event",
@@ -96,7 +146,7 @@ LINES = {
         "missing_iprep": "- No Amazon IP reputation list: IPs on AWS threat intelligence lists, including ones doing reconnaissance and scanning, are not blocked (Medium)",
         "missing_anon": "- No anonymous IP list: traffic from VPNs, Tor, proxies, and non-AWS cloud hosts is not flagged. Many scanners run on cloud hosts (Low)",
         "missing_bot": "- No Bot Control: if this Web ACL serves browser pages, self-identifying bots and non-browser clients are not classified (Low)",
-        "rec_amr": "- Anti-DDoS: add `AWSManagedRulesAntiDDoSRuleSet` at the top of the Web ACL, after Allow rules that match only IP sets and after the crawler labeling rule (Appendix A). Don't scope it down to a few paths: it needs all traffic for its baseline (the two-instance split in Appendix B is the exception). Exempt API and machine-to-machine paths from Challenge with the exempt URI regex",
+        "rec_amr": "- Anti-DDoS: add `AWSManagedRulesAntiDDoSRuleSet` near the top of the Web ACL, right after Allow rules that match only IP sets and the crawler labeling rule (Appendix A). Don't scope it down to a few paths: it needs all traffic for its baseline. Excluding verified crawlers (Appendix A) and the two-instance split in Appendix B are the exceptions. Exempt API and machine-to-machine traffic from Challenge with the exempt regex, which AWS WAF matches against the host followed by the normalized path: `^[^/]+\\/api(\\/|$)` for an API path, `^api\\.example\\.com\\/` for an API host. Use the two instances in Appendix B only when one host serves both browsers and API clients",
         "rec_iprep": "- IP reputation: add `AWSManagedRulesAmazonIpReputationList` after Anti-DDoS, before rate-based and custom rules",
         "rec_anon": "- Anonymous IP: add `AWSManagedRulesAnonymousIpList` next to the IP reputation list, starting in Count. Scope it down to hosts or paths whose callers are end users: `HostingProviderIPList` blocks non-AWS cloud IPs and can block partners hosted there",
         "rec_bot": "- Bot Control: add it last in the Web ACL, pinned to the latest static version, scoped down to browser-facing hosts or paths",
@@ -206,7 +256,7 @@ LINES = {
         "host_excluded": "- `{host}` is left out of {n} rules with a NOT(Host) condition: {rules}",
         "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` lists the distributions and their alternate domain names (`Aliases`)",
         "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <type>` lists the associated resources, one resource type per call",
-        "traversal_note": "- The path branches use `STARTS_WITH` without `NORMALIZE_PATH`. `/prefix/../admin` also starts with the prefix; if CloudFront or the origin resolves `..`, the request reaches a path the rule never meant to allow\n",
+        "traversal_note": "- The path branches use `STARTS_WITH` without URL decoding followed by `NORMALIZE_PATH`. `/prefix/../admin` and `/prefix/%2e%2e/admin` also start with the prefix; if CloudFront or the origin resolves `..`, the request reaches a path the rule never meant to allow\n",
         "traversal_rec": "- Add `NORMALIZE_PATH` (after `URL_DECODE`) to the path conditions of this Allow rule\n",
         "rec_other_crawlers": "- AI crawlers and agents don't affect search ranking, so they need no Allow: remove their names from this rule\n",
         "after_last_allow": "- These rules run after the last Allow rule: {others}. The default action is Block, so every request that reaches them ends in Block anyway. They can't change the outcome, only the response code",
@@ -249,29 +299,78 @@ LINES = {
         "rec_unreachable": "- 想清楚这部分流量该由哪条规则处理：收窄前面那条规则的条件，或者删掉后面这条",
         "order_title": "发现 {count} 处",
         "rec_literal_wildcard": "- 想做通配匹配，改用正则，或者去掉 `*` 保留 `STARTS_WITH`",
-        "rec_query_in_path": "- 想匹配查询参数，把匹配字段改成 `QueryString` 或 `SingleQueryArgument`",
-        "wildcard": "- `{rule}`（priority {p}）：`{value}` 里有 `*`。字节匹配不支持通配符，`*` 就是一个普通字符，这个条件只会匹配路径里真的带 `*` 的请求",
-        "query_in_path": "- `{rule}`（priority {p}）：`{value}` 要匹配的是查询串，但 UriPath 不包含查询串，这个条件永远不会命中",
-        "no_decode": "- `{rule}`（priority {p}）：文本转换为 {transforms}{case}",
-        "case_note": "。也没有做 LOWERCASE，改一下大小写（如 `{path}`）也能绕过",
+        "rec_query_in_path": "- 要匹配查询参数，用 `SingleQueryArgument` 指定参数名，只匹配它的值；或者用 `QueryString`，pattern 写成 `(^|&)name=`。`QueryString` 从 `?` 后面开始，`[?&]name=` 会漏掉第一个参数",
+        "wildcard": "- `{rule}`（priority {p}）：`{value}` 里有 `*`。字节匹配不支持通配符，`*` 就是一个普通字符，这个条件只会匹配那个位置真的写着 `*` 的路径",
+        "query_in_path": "- `{rule}`（priority {p}）：`{value}` 要匹配的是查询串，但 UriPath 不包含查询串，这个条件看不到查询参数",
+        "dec_open": "- `{rule}`（priority {p}）：{fields} 的文本转换为 {transforms}。下面这些请求能到达源站，没有规则拦：{examples}",
+        "dec_guess": "- {rules}：{fields} 的文本转换为 {transforms}，{problems}",
+        "dec_none": "没有 URL 解码",
+        "dec_once": "只解码一次，`%2569` 这类双重编码要再解一次",
+        "dec_order": "LOWERCASE、REMOVE_NULLS 或 NORMALIZE_PATH 排在最后一次解码前面，管不到解码后才出现的内容：先做 LOWERCASE 的话，`%49nternal` 解码后是 `Internal`，大写留了下来",
+        "dec_normalize": "STARTS_WITH、EXACTLY 或 `^` 开头的匹配没有 NORMALIZE_PATH，`//x` 和 `/a/../x` 都匹配不上针对 `/x` 的规则",
+        "dec_nocase": "也没有做 LOWERCASE，改一下字母大小写也能绕过",
+        "dec_join": "；",
+        "tag_double": "（如果源站或代理解了两次）",
+        "tag_case": "（如果源站不区分大小写）",
+        "tag_slash": "（如果源站会解码 `%2F`）",
+        "tag_params": "（Java servlet 源站）",
+        "tag_gate": "（只对能通过 {rules} 的客户端，比如带了有效 API key 的）",
+        "dec_open_gated": "- `{rule}`（priority {p}）：{fields} 的文本转换为 {transforms}。能通过 {gates} 的客户端（比如带了有效 API key 的），发下面这些请求能到达源站，没有别的规则拦：{examples}",
+        "exempt_norm": "- `{rule}`（priority {p}）：豁免条件 `{value}` 也会匹配 `{example}`，源站会把它解析成这条规则要拦的路径，规则却跳过了它",
+        "exempt_guess": "- `{rule}`（priority {p}）：豁免条件 `{value}` 没有先解码再规范化，以它开头、后面跟 `../` 的路径会跳过这条规则",
+        "unloaded_note": "- 这个 Web ACL 引用的部分 rule group 没有提供，里面的规则可能已经拦住了其中一些\n",
+        "rec_path_chain": "- 路径条件依次用 `URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`NORMALIZE_PATH`、`LOWERCASE`。第二次解码是为了防双重编码",
+        "rec_query_chain": "- 查询串条件用 `URL_DECODE`、`URL_DECODE`、`REMOVE_NULLS`、`LOWERCASE`。不要加 `NORMALIZE_PATH`，它会改写参数值里的 `//` 和 `../`",
+        "rec_exempt": "- 路径上的豁免条件（NOT）也要做同样的解码，再加 `NORMALIZE_PATH`",
+        "rec_lead": "- `NORMALIZE_PATH` 不处理开头的 `../`，所以 `/../admin` 经过这套转换后不变。Core rule set 的 `GenericLFI_URIPATH` 设为 Block 时会检查 `../` 这类路径穿越（附录 I 里 `/foo/../.env` 就是它拦的）",
+        "rec_params": "- 源站是 Java servlet 容器时，路径匹配的结尾写成 `(/|;|$)`，或者在用不到 `;` 的路径上直接拦截它（见附录 G）",
+        "rec_h": "- 附录 H 是一条在所有路径和查询串上拦截编码后字母、数字和点的规则",
+        "bot_inert_title_all": "Bot Control 会生效的规则全设成了 Count，也没有规则用它的标签",
+        "bot_inert_title_most": "Bot Control 几乎所有规则都设成了 Count，也没有规则用它的标签",
+        "bot_scope_narrow": "把 scope-down 再收窄，只留要处理的流量",
+        "bot_scope_add": "加一个 scope-down，只留要处理的流量",
+        "unknown_pinned": "固定的版本里没有这些名字的规则，这些 override 不起作用。比如 `TGT_TokenReuseIp` 在 Version_2.0 里被 `TGT_TokenReuseIpLow`、`Medium`、`High` 取代了",
+        "unknown_unpinned": "Version_2.0 及之后的版本里没有这些名字的规则，默认版本是新版时这些 override 不起作用。比如 `TGT_TokenReuseIp` 在 Version_2.0 里被 `TGT_TokenReuseIpLow`、`Medium`、`High` 取代了",
+        "bot_inert_note": "- 会生效的规则全是 Count，也没有规则用它的标签（见“Bot Control 会生效的规则全设成了 Count”那条），所以眼下换版本只会改变它打的标签\n",
+        "bot_new_rules_note": "- 固定到 5.0 或更高版本，还会启用 `CategoryPagePreview` 和 `CategoryWebhooks`。这里没有对它们做 override，它们默认拦截未验证的 bot。如果不想有别的变化，先把它们改成 Count\n",
+        "bot_remaining": "- {rules} 没有被改成 Count。它们从 Version_5.0 起才有，这个规则组又没有固定版本，会不会拦截取决于默认版本\n",
+        "dup_metric": "- `{metric}`：{rules}",
+        "no_ip_other": "。按 User-Agent 或常量计数的限速，只管得到它们点名的客户端",
+        "probe_gaps": "- 按附录 I 里的版本，就算 Core rule set、Known bad inputs、Linux operating system 都部署了，{paths} 也没有 AWS 托管规则拦截\n",
+        "rec_probe_all": "- 在托管规则组后面用自定义规则拦住这些路径，先用 Count：可以加附录 I 的规则，也可以扩充现有规则。附录 I 的规则拦截 `/.well-known/` 以外的 dotfile、备份和导出文件的扩展名，以及几个常见文件名\n",
+        "rec_probe_ext": "- 这里 dotfile 已经拦住了。把附录 I 规则里扩展名和文件名那一段并进现有规则，或者加在托管规则组后面，先用 Count\n",
+        "base_crs": "CRS 防护常见的 Web 攻击：跨站脚本、本地和远程文件包含、针对 EC2 元数据服务的 SSRF、恶意 User-Agent，以及请求大小限制。SQL 注入由单独的 SQL database 规则组（`AWSManagedRulesSQLiRuleSet`）负责",
+        "base_rec_crs": "- 评估是否需要添加 CRS；如果添加，把 `SizeRestrictions_BODY` 改成 Count，免得大 payload 的 API 端点被误拦（见附录 F）",
+        "base_kbi": "KnownBadInputsRuleSet 防护 Log4Shell（CVE-2021-44228）、Java 反序列化漏洞等已知的恶意输入，WCU 消耗低，误报也少",
+        "base_rec_kbi": "- 添加 AWSManagedRulesKnownBadInputsRuleSet（WCU 消耗低，建议优先添加）",
+        "base_wcu": "- 添加前先看 WCU：这个 Web ACL 用了 {cap}。基础价格包含 1,500，超出部分每 500 加收一笔按请求计的费用，5,000 是固定上限（见附录 E）",
+        "rec_linux": "- 加上 `AWSManagedRulesLinuxRuleSet`（200 WCU）。其他规则组漏掉的 `.env` 变体、`.htaccess` 和 `.ssh/` 下的文件，它都能拦。它也会命中 `composer.json` 和 `wp-config.php`，Count 期间留意误报\n",
         "group_count": "- `{rule}`（priority {p}，{group}）：整个规则组设成了 Count，组里的规则都不拦截",
         "rule_count": "- `{rule}`（priority {p}，{group}）：{names} 被改成了 Count",
         "fragment_allow": "- 对 Allow 规则来说，路径限制因此失效：只要其他条件满足，任何路径都会被放行",
         "default_block_note": "- 这个 ACL 默认 Block，靠白名单放行，这些规则等于在白名单上开了口子\n",
-        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` 分成两条版本线，检测逻辑不同。2.0 那条线给 `SQLi_BODY` 加了 JSON 解析；1.3、2.3、2.4、2.5 是另一条线。选版本时要明确选哪条线\n",
+        "sqli_lineage": "- `AWSManagedRulesSQLiRuleSet` 分成两条版本线，检测逻辑不同。2.0 那条线给 `SQLi_BODY` 加了 JSON 检查；2.3 及之后接的是 1.x 那条线（1.2、1.3），不是 2.0。选版本时要明确选哪条线\n",
         "default_version": "没有固定版本（AWS 默认版本）",
         "unpinned_bot": "Bot Control 没有固定静态版本，跑的是 AWS 当前设定的默认版本。具体是哪个版本，可以用 `ListAvailableManagedRuleGroupVersions` 查（看 `CurrentDefaultVersion`）",
         "versions_later": "之后的版本新增了：",
         "versions_all": "各个静态版本新增的内容（默认版本可能是其中任何一个）：",
         "outdated_bot": "Bot Control 固定在 {version}",
+        "bot_title_pinned": "Bot Control 跑的是旧版本，识别能力弱很多",
+        "bot_title_unpinned": "Bot Control 没有固定版本，可能跑的是旧版本",
+        "bot_old_pinned": "旧版本能认出的 bot 少得多，各个类别规则能命中的流量也少得多",
+        "bot_old_unpinned": "默认版本如果是旧版本，能认出的 bot 就少得多，各个类别规则能命中的流量也少得多",
         "bot_versions": [
-            ((2, 0), "- 2.0/3.0：TARGETED 级别按 IP、ASN、国家区分的 `TGT_TokenReuse*` 规则，COMMON 各类别也加了很多新的 bot"),
-            ((4, 0), "- 4.0：Web Bot Authentication，用签名验证 AI bot 和 agent（6.0 之前只支持 CloudFront）"),
-            ((5, 0), "- 5.0：新增 400 多种 bot，新增 `CategoryPagePreview` 和 `CategoryWebhooks` 两个类别，并调整了匹配顺序，具体的 bot 规则先于通用信号匹配"),
-            ((6, 0), "- 6.0：Web Bot Authentication 支持区域资源，用这种方式验证过的 bot 在所有类别里都算已验证"),
-            ((6, 1), "- 6.1：多个类别继续增加特征，包括 Security、SEO 和爬虫框架"),
-            ((7, 0), "- 7.0：TARGETED 级别新增 token 来源标签，token 拿到时和使用时的 IP 类型不一样就打标（比如在数据中心拿到、从家庭宽带使用），还有来自 Android SDK 的设备 ID 标签。规则组里没有规则对这些标签动作。另外新增 `fastly` 云服务商标签；按 AWS 的 SNS 通知，还加了一批新 bot，大多是 AI 和 Miscellaneous 类"),
+            ((2, 0), "2.0/3.0", [("targeted", "TARGETED 级别按 IP、ASN、国家区分的 `TGT_TokenReuse*` 规则"),
+                                 (None, "COMMON 各类别加了很多新的 bot")]),
+            ((4, 0), "4.0", [("cloudfront", "Web Bot Authentication，用签名验证 AI bot 和 agent")]),
+            ((5, 0), "5.0", [(None, "新增 400 多种 bot，新增 `CategoryPagePreview` 和 `CategoryWebhooks` 两个类别，并调整了匹配顺序，具体的 bot 规则先于通用信号匹配")]),
+            ((6, 0), "6.0", [("regional", "Web Bot Authentication 支持区域资源"),
+                             (None, "用 Web Bot Authentication 验证过的 bot 在所有类别里都算已验证，不只 AI 类")]),
+            ((6, 1), "6.1", [(None, "多个类别继续增加特征，包括 Security、SEO 和爬虫框架")]),
+            ((7, 0), "7.0", [("targeted", "token 来源标签，token 拿到时和使用时的 IP 类型不一样就打标（比如在数据中心拿到、从家庭宽带使用），还有来自 Android SDK 的设备 ID 标签。规则组里没有规则对这些标签动作"),
+                             (None, "`fastly` 云服务商标签；按 AWS 的 SNS 通知，还加了一批新 bot，大多是 AI 和 Miscellaneous 类")]),
         ],
+        "bot_versions_join": "；", "bot_versions_sep": "：",
         "missing_amr": "- 没有部署 Anti-DDoS 规则组：这个 ACL 默认放行，遇到 HTTP flood 时没有自动缓解（Medium）",
         "missing_amr_alb": "- 没有部署 Anti-DDoS 规则组。如果这个 Web ACL 关联的是 ALB，ALB 的资源级 DDoS 防护（`ALBLowReputationMode` 为 `{mode}`）会{when}对已知低信誉来源的请求限速。它管不到来自正常信誉来源的 flood，也没有流量基线、Challenge 和标签，所以 HTTP flood 的自动缓解仍然缺失（Medium）",
         "alb_when_ACTIVE_UNDER_DDOS": "在 ALB 高负载或疑似遭受 DDoS 时",
@@ -279,7 +378,7 @@ LINES = {
         "missing_iprep": "- 没有部署 Amazon IP 信誉列表：AWS 威胁情报名单上的 IP，包括正在做侦察和扫描的 IP，都不会被拦（Medium）",
         "missing_anon": "- 没有部署匿名 IP 列表：来自 VPN、Tor、代理和非 AWS 云主机的流量不会被标记。很多扫描器跑在云主机上（Low）",
         "missing_bot": "- 没有部署 Bot Control：如果这个 ACL 承载浏览器页面，自报身份的 bot 和非浏览器客户端都不会被分类（Low）",
-        "rec_amr": "- Anti-DDoS：在 ACL 最前面加 `AWSManagedRulesAntiDDoSRuleSet`，放在只按 IP set 放行的白名单和爬虫标记规则（附录 A）之后，不要用 scope-down 把它限定在少数路径上，它要看到全部流量才能建立基线（附录 B 的双实例拆分例外）。API 和机器调用的路径用豁免正则排除在 Challenge 之外",
+        "rec_amr": "- Anti-DDoS：把 `AWSManagedRulesAntiDDoSRuleSet` 加在 ACL 靠前的位置，紧跟在只按 IP set 放行的白名单和爬虫标记规则（附录 A）之后。不要用 scope-down 把它限定在少数路径上，它要看到全部流量才能建立基线。排除验证过的爬虫（附录 A）和附录 B 的双实例拆分是例外。API 和机器调用的流量用豁免正则排除在 Challenge 之外。AWS WAF 拿它去匹配\"host 加规范化后的路径\"：API 路径写 `^[^/]+\\/api(\\/|$)`，API host 写 `^api\\.example\\.com\\/`。只有同一个 host 既服务浏览器又服务 API 客户端时，才用附录 B 的双实例",
         "rec_iprep": "- IP 信誉：`AWSManagedRulesAmazonIpReputationList` 放在 Anti-DDoS 之后、限速和自定义规则之前",
         "rec_anon": "- 匿名 IP：`AWSManagedRulesAnonymousIpList` 放在 IP 信誉列表旁边，先用 Count。用 scope-down 限定在调用方是最终用户的 host 或路径上：`HostingProviderIPList` 会拦非 AWS 的云主机 IP，可能误伤部署在其他云上的合作方",
         "rec_bot": "- Bot Control：放在 ACL 最后，固定到最新的静态版本，用 scope-down 限定在浏览器访问的 host 或路径上",
@@ -368,7 +467,7 @@ LINES = {
         "no_ip_scoped": "- 只在 scope-down 里的路径上按 IP 限速：{rules}。其他路径都没有\n",
         "no_ip_unloaded": "- 这个 Web ACL 引用的部分 rule group 没有提供，里面可能有按 IP 的限速\n",
         "rule_na_global": "**Rule**: N/A (Web ACL 全局配置)",
-        "sum_refs": "- Web ACL 导出里只有{what}的 ARN，没有它们的规则和内容，这次评审没检查到",
+        "sum_refs": "- Web ACL 导出里，{what}只给了 ARN，没有它们的规则和内容，这次评审没检查到",
         "refs_groups": " {n} 个 rule group ", "refs_sets": " {n} 个 IP set / regex pattern set ", "refs_and": "和",
         "ref_missing": "- `{name}`（{kind}），被 {rules} 引用",
         "ref_rule_group": "rule group", "ref_ip_set": "IP set", "ref_regex_pattern_set": "regex pattern set",
@@ -389,7 +488,7 @@ LINES = {
         "host_excluded": "- `{host}` 被 {n} 条规则用 NOT(Host) 条件排除在外：{rules}",
         "host_lookup_cf": "`aws cloudfront list-distributions-by-web-acl-id --web-acl-id {arn}` 会列出关联的 distribution 和它们的备用域名（`Aliases`）",
         "host_lookup_regional": "`aws wafv2 list-resources-for-web-acl --web-acl-arn {arn} --resource-type <类型>` 会列出关联的资源，每次查一种资源类型",
-        "traversal_note": "- 这些路径分支用的是 `STARTS_WITH`，没有 `NORMALIZE_PATH`。`/prefix/../admin` 也以这个前缀开头，如果 CloudFront 或源站会解析 `..`，请求就会到达规则本来没打算放行的路径\n",
+        "traversal_note": "- 这些路径分支用的是 `STARTS_WITH`，没有先 URL 解码再做 `NORMALIZE_PATH`。`/prefix/../admin` 和 `/prefix/%2e%2e/admin` 也以这个前缀开头，如果 CloudFront 或源站会解析 `..`，请求就会到达规则本来没打算放行的路径\n",
         "traversal_rec": "- 给这条 Allow 规则的路径条件加上 `NORMALIZE_PATH`（放在 `URL_DECODE` 之后）\n",
         "rec_other_crawlers": "- AI 爬虫和 agent 不影响搜索排名，不需要放行，直接从这条规则里删掉它们的名字\n",
         "after_last_allow": "- 这些规则排在最后一条 Allow 之后：{others}。默认动作是 Block，走到这里的请求最后都会被 Block，这些规则改变不了结果，最多改变响应码",
@@ -498,7 +597,7 @@ def _referenced_sets(summary: dict) -> list:
 
 
 def _payment_indicators(summary: dict) -> list:
-    """Hosts, paths, and token domains that look like payment endpoints."""
+    """Hosts, paths, match patterns, and token domains that look like payment endpoints."""
     values = set(summary.get("web_acl", {}).get("token_domains") or [])
     for r in summary.get("rules", []):
         for l in r.get("statement", {}).get("leaves", []) + (r.get("scope_down") or {}).get("leaves", []):
@@ -667,30 +766,14 @@ def _gen_missing_baseline(summary, pre_checks, flags, T, lang):
     if not missing:
         return NOT_APPLICABLE
     missing_names = (" 和 " if lang == "zh" else " and ").join(sorted(missing))
-    details = []
-    recs = []
-    if "CRS" in missing:
-        if lang == "zh":
-            details.append("CRS 提供 OWASP Top 10 防护（SQLi、XSS 等），是大多数 Web 应用的基础防护层")
-            recs.append("- 评估是否需要添加 CRS；如果添加，务必将 `SizeRestrictions_BODY` 覆盖为 Count，避免对大 payload 的 API 端点产生误报（实现步骤见附录 F）")
-        else:
-            details.append("CRS provides OWASP Top 10 protection (SQLi, XSS, etc.), the baseline protection layer for most web applications")
-            recs.append("- Evaluate whether to add CRS; if adding, override `SizeRestrictions_BODY` to Count to avoid false positives on large-payload API endpoints (see Appendix F)")
-    if "KnownBadInputs" in missing:
-        if lang == "zh":
-            details.append("KnownBadInputsRuleSet 防护 Log4Shell（CVE-2021-44228）、Java 反序列化漏洞等已知恶意输入模式，WCU 消耗低、误报率低")
-            recs.append("- 添加 AWSManagedRulesKnownBadInputsRuleSet（WCU 消耗低，建议优先添加）")
-        else:
-            details.append("KnownBadInputsRuleSet protects against Log4Shell (CVE-2021-44228), Java deserialization exploits, and other known malicious input patterns, with low WCU cost and few false positives")
-            recs.append("- Add AWSManagedRulesKnownBadInputsRuleSet (low WCU cost, recommended as priority)")
+    L = LINES[lang]
+    details = [L["base_" + k] for k in ("crs", "kbi") if {"crs": "CRS", "kbi": "KnownBadInputs"}[k] in missing]
+    recs = [L["base_rec_" + k] for k in ("crs", "kbi") if {"crs": "CRS", "kbi": "KnownBadInputs"}[k] in missing]
     default_block = summary.get("web_acl", {}).get("default_action") == "block"
     recs.append(LINES[lang]["placement_block" if default_block else "placement_allow"])
     cap = summary.get("web_acl", {}).get("capacity")
     if cap is not None:
-        if lang == "zh":
-            recs.append(f"- 添加前请在 AWS 控制台确认剩余 WCU 容量（当前已使用 {cap} WCU，上限 5000）")
-        else:
-            recs.append(f"- Verify remaining WCU capacity in AWS Console before adding (current: {cap} / 5000)")
+        recs.append(L["base_wcu"].format(cap=cap))
     # In an allow-list ACL, content inspection is defense in depth only
     severity = "Low" if default_block else "Medium"
     md = T["missing_baseline"].format(
@@ -750,7 +833,11 @@ def _gen_count_without_labels(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("count_without_labels", {})
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
-    rules = check.get("rules", [])
+    # A rule that can't match produces no metric; the pitfalls finding covers it
+    broken = {r["name"] for r in pre_checks.get("uri_path_pitfalls", {}).get("rules", [])}
+    rules = [r for r in check.get("rules", []) if r["name"] not in broken]
+    if not rules:
+        return NOT_APPLICABLE
     names = [r["name"] for r in rules]
     rule_names = " / ".join(names)
     md = T["count_without_labels"].format(
@@ -816,25 +903,39 @@ def _gen_unanchored_exempt_regex(summary, pre_checks, flags, T, lang):
     state_note = "" if active else L["exempt_inactive"]
     results = []
     for rf in regex_flags:
-        unanchored = [b for b in rf.get("branches", [])
-                      if not b.get("anchored_start") and not b.get("anchored_end")]
-        if not unanchored:
-            continue
-        unanchored_list = ", ".join(f"`{b['pattern']}`" for b in unanchored)
-        examples = ", ".join(f"`/admin{b['pattern'].replace(chr(92), '').rstrip('/')}/export`"
-                             for b in unanchored[:2])
-        anchored = "`" + "|".join(
-            f"^{b['pattern']}" if not (b.get("anchored_start") or b.get("anchored_end"))
-            else b["pattern"]
-            for b in rf["branches"]) + "`"
-        md = T["unanchored_exempt_regex"].format(
-            n="{n}", severity=severity, rule_name=rf["rule"], priority=rf["priority"],
-            regex=rf["full_regex"], unanchored_list=unanchored_list,
-            examples=examples, anchored_suggestion=anchored,
-            challenge_rules=challenge_rules, state_note=state_note)
-        results.append((md, {"severity": severity, "title_key": "unanchored_exempt_regex",
-                             "rules": [rf["rule"]], "sections": [3]}))
+        branches = rf.get("branches", [])
+        dead = [b for b in branches if b.get("path_anchored")]
+        # A path branch with no anchor matches anywhere in host + path
+        unanchored = [b for b in branches if not b.get("anchored_start") and not b.get("anchored_end")
+                      and b["pattern"].startswith(("/", "\\/"))]
+        suggestion = "`" + "|".join(_host_anchor(b["pattern"]) if b in dead or b in unanchored else b["pattern"]
+                                    for b in branches) + "`"
+        common = dict(n="{n}", severity=severity, rule_name=rf["rule"], priority=rf["priority"],
+                      regex=rf["full_regex"], suggestion=suggestion,
+                      challenge_rules=challenge_rules, state_note=state_note)
+        if dead:
+            md = T["dead_exempt_regex"].format(**common, dead_list=", ".join(f"`{b['pattern']}`" for b in dead))
+            results.append((md, {"severity": severity, "title_key": "dead_exempt_regex",
+                                 "rules": [rf["rule"]], "sections": [3]}))
+        if unanchored:
+            examples = ", ".join(f"`/admin{b['pattern'].replace(chr(92), '').rstrip('/')}/export`"
+                                 for b in unanchored[:2])
+            md = T["unanchored_exempt_regex"].format(
+                **common, unanchored_list=", ".join(f"`{b['pattern']}`" for b in unanchored), examples=examples)
+            results.append((md, {"severity": severity, "title_key": "unanchored_exempt_regex",
+                                 "rules": [rf["rule"]], "sections": [3]}))
     return results if results else NOT_APPLICABLE
+
+
+def _host_anchor(pattern: str) -> str:
+    """A path branch anchored after the host: `^\\/api\\/` → `^[^/]+\\/api(\\/|$)`."""
+    p = pattern[1:] if pattern.startswith("^") else pattern
+    # The normalized path has no trailing slash, so `/api/` alone would miss `/api`
+    if p.endswith("\\/") and not p.endswith("\\\\/"):
+        p = p[:-2] + "(\\/|$)"
+    elif p.endswith("/") and not p.endswith("\\/"):
+        p = p[:-1] + "(/|$)"
+    return "^[^/]+" + p
 
 
 def _gen_missing_crawler_labeling(summary, pre_checks, flags, T, lang):
@@ -898,35 +999,77 @@ def _gen_duplicate_rules(summary, pre_checks, flags, T, lang):
                   "rules": [r["name"] for r in rules], "sections": [6]})]
 
 
+def _bot_additions(L: dict, current: tuple, names: list, summary: dict) -> str:
+    """What the versions after current added, keeping only what applies to these
+    Bot Control rules' inspection level and the Web ACL's scope."""
+    by_name = {r["name"]: r for r in summary.get("rules", [])}
+    cfg = lambda n: ((by_name.get(n) or {}).get("managed") or {}).get("config") or {}
+    scope = summary.get("web_acl", {}).get("scope")
+    keep = {None}
+    if any(cfg(n).get("inspection_level") == "TARGETED" for n in names):
+        keep.add("targeted")
+    if scope != "CLOUDFRONT":  # unknown scope keeps both
+        keep.add("regional")
+    if scope != "REGIONAL":
+        keep.add("cloudfront")
+    lines = []
+    for v, label, parts in L["bot_versions"]:
+        texts = [t for cond, t in parts if cond in keep]
+        if v > current and texts:
+            lines.append(f"  - {label}{L['bot_versions_sep']}{L['bot_versions_join'].join(texts)}")
+    return "\n".join(lines)
+
+
 def _gen_managed_versions(summary, pre_checks, flags, T, lang):
     check = pre_checks.get("managed_versions", {})
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
     L = LINES[lang]
     results = []
+    # A Bot Control that acts on nothing: its version only changes labels, so Low
+    inert_rules = {r["name"]: r for r in pre_checks.get("bot_control_inert", {}).get("rules", [])}
+    # Pinning a version turns on the 5.0 rules left at their default, so the version still matters then
+    inert = lambda b: b["name"] in inert_rules and not inert_rules[b["name"]]["remaining"]
+    # Pinning then only changes labels and turns on two rules, not detection that's in use
+    sev = lambda b: "Low" if all(x["name"] in inert_rules for x in same_group(b)) else "Medium"
+    new_rules = lambda b: b["name"] in inert_rules and inert_rules[b["name"]]["remaining"]
+    same_group = lambda b: next((g for g in same.values() if b in g), [b])
     bots = [u for u in check.get("unpinned", []) if u["group"] == BOT_GROUP]
     bots += [o for o in check.get("outdated", []) if o["group"] == BOT_GROUP]
+    # Instances on the same version share one finding
+    same = {}
     for b in bots:
+        same.setdefault(b.get("version") or "", []).append(b)
+    for bs in same.values():
+        b = bs[0]
         version = b.get("version") or L["default_version"]
         detail = L["outdated_bot"].format(version=b["version"]) if b.get("version") else L["unpinned_bot"]
         m = re.search(r'(\d+)\.(\d+)', b.get("version") or "1.0")
         current = (int(m.group(1)), int(m.group(2))) if m else (1, 0)
-        additions = "\n".join("  " + line for v, line in L["bot_versions"] if v > current)
+        additions = _bot_additions(L, current, [x["name"] for x in bs], summary)
         md = T["bot_control_version"].format(
-            n="{n}", rule_name=b["name"], priority=b["priority"], current_version=version, detail=detail,
+            n="{n}", rule_line=_rule_line(bs), current_version=version, detail=detail,
+            title=L["bot_title_pinned" if b.get("version") else "bot_title_unpinned"],
+            old_note=L["bot_old_pinned" if b.get("version") else "bot_old_unpinned"] + "".join(
+                "\n" + L[k].rstrip("\n") for k, on in (("bot_inert_note", inert(b)), ("bot_new_rules_note", new_rules(b))) if on),
+            severity=sev(b),
             versions_header=L["versions_later"] if b.get("version") else L["versions_all"], additions=additions)
-        results.append((md, {"severity": "Medium", "title_key": "bot_control_version",
-                             "rules": [b["name"]], "sections": [12]}))
+        results.append((md, {"severity": sev(b), "title_key": "bot_control_version",
+                             "rules": [x["name"] for x in bs], "sections": [12]}))
     # Pinned to 5.0 or later but not the latest: narrower bot coverage, Low
+    # Instances pinned to the same version share one finding
+    by_version = {}
     for b in check.get("behind", []):
-        m = re.search(r'(\d+)\.(\d+)', b["version"])
+        by_version.setdefault(b["version"], []).append(b)
+    for ver, bs in by_version.items():
+        m = re.search(r'(\d+)\.(\d+)', ver)
         current = (int(m.group(1)), int(m.group(2)))
-        additions = "\n".join("  " + line for v, line in L["bot_versions"] if v > current)
+        additions = _bot_additions(L, current, [b["name"] for b in bs], summary)
         md = T["bot_control_behind"].format(
-            n="{n}", rule_name=b["name"], priority=b["priority"], current_version=b["version"],
-            latest=b["latest"], released=b["released"], additions=additions)
+            n="{n}", rule_line=_rule_line(bs), current_version=ver,
+            latest=bs[0]["latest"], released=bs[0]["released"], additions=additions)
         results.append((md, {"severity": "Low", "title_key": "bot_control_behind",
-                             "rules": [b["name"]], "sections": [12]}))
+                             "rules": [b["name"] for b in bs], "sections": [12]}))
     others = [u for u in check.get("unpinned", []) if u["group"] != BOT_GROUP]
     if others:
         sqli_note = L["sqli_lineage"] if any("SQLi" in u["group"] for u in others) else ""
@@ -1101,16 +1244,27 @@ def _gen_uri_path_pitfalls(summary, pre_checks, flags, T, lang):
     details.insert(0, L["sum_uri"].format(n=len(details)))
     kinds = {pb["kind"] for r in check["rules"] for pb in r["problems"]}
     recs = [L["rec_" + k] for k in ("literal_wildcard", "query_in_path") if k in kinds]
+    # Rules in Count whose label nothing uses block nothing either way
+    by_name = {r["name"]: r for r in summary.get("rules", [])}
+    severity = "Low" if all((by_name.get(r["name"]) or {}).get("action") == "count"
+                            and not (by_name.get(r["name"]) or {}).get("rule_labels") for r in check["rules"]) else "Medium"
     md = T["uri_path_pitfalls"].format(
-        n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details),
+        n="{n}", severity=severity, rule_line=_rule_line(check["rules"]), details="\n".join(details),
         recs="\n".join(recs))
-    return [(md, {"severity": "Medium", "title_key": "uri_path_pitfalls",
+    return [(md, {"severity": severity, "title_key": "uri_path_pitfalls",
                   "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
 
 
-def _case_flip(path: str) -> str:
-    """The path with its first lowercase letter capitalized: `/admin` → `/Admin`."""
-    return re.sub(r"[a-z]", lambda m: m.group(0).upper(), path, count=1) if re.search(r"[a-z]", path) else "/Internal/"
+def _field_name(field: str) -> str:
+    """The FieldToMatch as written in the Web ACL: `uri_path` → `UriPath`."""
+    base, _, arg = field.partition(":")
+    name = "".join(w.capitalize() for w in base.split("_"))
+    return f"`{name}` `{arg}`" if arg else f"`{name}`"
+
+
+def _unloaded_groups(summary) -> bool:
+    """Whether a referenced rule group wasn't provided, so its rules weren't checked."""
+    return any((r.get("rule_group") or {}).get("loaded") is False for r in summary.get("rules", []))
 
 
 def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
@@ -1118,15 +1272,104 @@ def _gen_path_block_decoding(summary, pre_checks, flags, T, lang):
     if check.get("status") != "FAIL":
         return NOT_APPLICABLE
     L = LINES[lang]
-    details = [L["no_decode"].format(
-        rule=r["name"], p=r["priority"],
-        transforms=" / ".join(f"`{t}`" for t in r["transforms"]),
-        case=L["case_note"].format(path=_case_flip(r.get("path") or "/Internal/"))
-        if r["case_sensitive"] else "") for r in check["rules"]]
+    sep = "、" if lang == "zh" else ", "
+    details, guessed = [], {}
+    for r in check["rules"]:
+        fields = " / ".join(_field_name(f) for f in r["fields"])
+        transforms = " / ".join(f"`{t}`" for t in r["transforms"])
+        if r["open"]:
+            # A rule that requires a header (an API key) in front: say it once for the rule
+            gates = list(dict.fromkeys(g for o in r["open"] for g in o.get("gates", [])))
+            details.append(L["dec_open_gated" if gates else "dec_open"].format(
+                rule=r["name"], p=r["priority"], fields=fields, transforms=transforms,
+                gates=_ticks([{"name": g} for g in gates], lang),
+                examples=sep.join(f"`{o['example']}`" + L.get("tag_" + o["kind"], "") for o in r["open"])))
+        if r["problems"]:
+            # Rules with the same transformations and problems share one line
+            guessed.setdefault((fields, transforms, tuple(r["problems"])), []).append(r)
+        for e in r["exempt"]:
+            details.append(L["exempt_norm" if e["example"] else "exempt_guess"].format(
+                rule=r["name"], p=r["priority"], value=e["value"], example=e["example"]) + (
+                L["tag_gate"].format(rules=_ticks([{"name": g} for g in e.get("gates", [])], lang)) if e.get("gates") else ""))
+    for (fields, transforms, probs), rs in guessed.items():
+        details.append(L["dec_guess"].format(rules=_ticks(rs, lang) if len(rs) > 1 else
+                                             f"`{rs[0]['name']}`" + (f"（priority {rs[0]['priority']}）" if lang == "zh"
+                                                                    else f" (priority {rs[0]['priority']})"),
+                                             fields=fields, transforms=transforms,
+                                             problems=L["dec_join"].join(L["dec_" + p] for p in probs)))
+    kinds = {o["kind"] for r in check["rules"] for o in r["open"]}
+    probs = {p for r in check["rules"] for p in r["problems"]}
+    fields = {f for r in check["rules"] for f in r["fields"]}
+    recs = ([L["rec_path_chain"]] if "uri_path" in fields or any(r["exempt"] for r in check["rules"]) else []) \
+        + ([L["rec_query_chain"]] if fields - {"uri_path"} else []) \
+        + ([L["rec_exempt"]] if any(r["exempt"] for r in check["rules"]) else []) \
+        + ([L["rec_lead"]] if any(o["example"].startswith("/..") for r in check["rules"] for o in r["open"]) else []) \
+        + ([L["rec_params"]] if "params" in kinds else []) \
+        + ([L["rec_h"]] if kinds & {"enc", "double", "case"} or probs & {"none", "once", "order"} else [])
+    # Conditional rewrites alone (double decoding, case, %2F, Java) are Low
+    medium = kinds & {"enc", "collapse"} or probs & {"none", "order", "normalize"} or any(
+        r["exempt"] for r in check["rules"])
+    severity = "Medium" if medium else "Low"
+    if _unloaded_groups(summary):
+        details.append(L["unloaded_note"].rstrip("\n"))
     md = T["path_block_decoding"].format(
-        n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
-    return [(md, {"severity": "Medium", "title_key": "path_block_decoding",
+        n="{n}", severity=severity, rule_line=_rule_line(check["rules"]), details="\n".join(details),
+        recs="\n".join(recs))
+    return [(md, {"severity": severity, "title_key": "path_block_decoding",
                   "rules": [r["name"] for r in check["rules"]], "sections": [19]})]
+
+
+def _gen_bot_control_inert(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("bot_control_inert", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    out = []
+    for r in check["rules"]:
+        md = T["bot_control_inert"].format(
+            n="{n}", rule_line=_rule_line([r]), level=r["level"], counted=r["counted"],
+            title=LINES[lang]["bot_inert_title_most" if r["remaining"] else "bot_inert_title_all"],
+            scope=LINES[lang]["bot_scope_narrow" if r["scoped"] else "bot_scope_add"],
+            remaining=LINES[lang]["bot_remaining"].format(rules=_ticks([{"name": x} for x in r["remaining"]], lang))
+            if r["remaining"] else "")
+        out.append((md, {"severity": "Low", "title_key": "bot_control_inert", "rules": [r["name"]], "sections": [5]}))
+    return out
+
+
+def _gen_unknown_overrides(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("unknown_overrides", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    out = []
+    for r in check["rules"]:
+        names = _ticks([{"name": x} for x in r["names"]], lang)
+        md = T["unknown_overrides"].format(n="{n}", rule_line=_rule_line([r]), names=names,
+                                           detail=LINES[lang]["unknown_pinned" if r["pinned"] else "unknown_unpinned"])
+        out.append((md, {"severity": "Low", "title_key": "unknown_overrides", "rules": [r["name"]], "sections": [5]}))
+    return out
+
+
+def _gen_duplicate_metrics(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("duplicate_metrics", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    details = [LINES[lang]["dup_metric"].format(metric=d["metric"], rules=_ticks(d["rules"], lang)) for d in check["metrics"]]
+    md = T["duplicate_metrics"].format(n="{n}", rule_line=_rule_line(check["rules"]), details="\n".join(details))
+    return [(md, {"severity": "Awareness", "title_key": "duplicate_metrics",
+                  "rules": [r["name"] for r in check["rules"]], "sections": [13]})]
+
+
+def _gen_sensitive_files(summary, pre_checks, flags, T, lang):
+    check = pre_checks.get("sensitive_files", {})
+    if check.get("status") != "FAIL":
+        return NOT_APPLICABLE
+    tick = lambda ps: ("、" if lang == "zh" else ", ").join(f"`{p}`" for p in ps)
+    gaps = LINES[lang]["unloaded_note"] if _unloaded_groups(summary) else ""
+    md = T["sensitive_files"].format(
+        n="{n}", first=check["paths"][0], paths=tick(check["paths"]),
+        gaps=(LINES[lang]["probe_gaps"].format(paths=tick(check["managed_gaps"])) if check["managed_gaps"] else "") + gaps,
+        linux=LINES[lang]["rec_linux"] if check["linux_helps"] else "",
+        custom=LINES[lang]["rec_probe_all" if check["dotfiles_open"] else "rec_probe_ext"])
+    return [(md, {"severity": "Low", "title_key": "sensitive_files", "rules": [], "sections": [9]})]
 
 
 def _gen_path_only_allow(summary, pre_checks, flags, T, lang):
@@ -1313,7 +1556,9 @@ def _gen_rate_limits(summary, pre_checks, flags, T, lang):
                                        for r in summary.get("rules", [])) else "")
         md = T["no_ip_rate_limit"].format(
             n="{n}", rule_line=_rule_line(counted + scoped) if counted + scoped else LINES[lang]["rule_na_global"],
-            counted=note)
+            counted=note, other=L["no_ip_other"] if any(
+                (r.get("rate_based") or {}).get("aggregate_key_type") not in (None, "IP", "FORWARDED_IP")
+                for r in summary.get("rules", [])) else "")
         out.append((md, {"severity": "Medium", "title_key": "no_ip_rate_limit",
                          "rules": [f["name"] for f in counted + scoped], "sections": [6]}))
     if check["challenge"]:
@@ -1452,7 +1697,7 @@ def _gen_unreviewed_refs(summary, pre_checks, flags, T, lang):
                                        rules=", ".join(f"`{u}`" for u in e["used_by"])) for e in missing]
     what = [L["refs_groups"].format(n=len(groups))] if groups else []
     what += [L["refs_sets"].format(n=len(sets))] if sets else []
-    details.insert(0, L["sum_refs"].format(what=L["refs_and"].join(what)))
+    details.insert(0, L["sum_refs"].format(what=L["refs_and"].join(what).lstrip()))
     if groups:
         details += [L["ref_group_blind"], L["ref_group_missing"]]
     details += [L["ref_label_users"].format(name=e["name"], rules=", ".join(f"`{u}`" for u in e["label_users"]))
@@ -1486,6 +1731,10 @@ ALL_GENERATORS = [
     (_gen_duplicate_rules, [6], True),
     (_gen_hosting_provider_allow, [7], True),
     (_gen_missing_baseline, [9], True),
+    (_gen_sensitive_files, [9], True),
+    (_gen_bot_control_inert, [5], False),
+    (_gen_unknown_overrides, [5], False),
+    (_gen_duplicate_metrics, [13], True),
     (_gen_token_domain, [11], True),
     (_gen_managed_versions, [12], True),
     (_gen_no_logging, [13], True),
@@ -1589,7 +1838,7 @@ def main():
         notes = [LINES[lang]["fms_note"].format(rules=_ticks(fms, lang))] if fms else []
         if any(r["firewall_manager"] == "post" for r in fms) and meta.get("title_key") == "managed_count":
             notes.append(LINES[lang]["fms_post"])
-        if not fms and meta.get("title_key") in ("recommended_protections", "missing_baseline") and any(
+        if not fms and meta.get("title_key") in ("recommended_protections", "missing_baseline", "sensitive_files") and any(
                 r.get("firewall_manager") for r in by_name.values()):
             notes.append(LINES[lang]["fms_place"])
         inner = [by_name[x] for x in meta.get("rules", []) if (by_name.get(x) or {}).get("group")]

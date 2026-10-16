@@ -221,7 +221,10 @@ def _leaf(ltype: str, node: dict, ftm: str, match=None, value=None) -> dict:
         for v in ftm_raw.values():
             if isinstance(v, dict) and "fallback_behavior" in v:
                 fallback = v["fallback_behavior"]
-    tts = sorted(node.get("text_transformations", []), key=lambda t: t.get("priority", 0))
+    # Pre-parse transformations (query arguments only) run before the standard ones
+    pre = sorted(node.get("pre_parse_text_transformations", []), key=lambda t: t.get("priority", 0))
+    tts = [t for t in pre if t.get("type") != "NONE"] + sorted(
+        node.get("text_transformations", []), key=lambda t: t.get("priority", 0))
     return {"type": ltype, "field": ftm, "match": match, "value": value,
             "transforms": [t.get("type", "NONE") for t in tts],
             "fallback": fallback, "negated": False}
@@ -1053,9 +1056,10 @@ def main():
             "captcha_config": captcha_config,
             "logging": _load_logging(logging_arg),
             **({"managed_by_firewall_manager": True} if web_acl.get("managed_by_firewall_manager") else {}),
-            # ALB resource-level DDoS protection; has effect only on an ALB
+            # ALB resource-level DDoS protection; has effect only on an ALB, so not on a CloudFront Web ACL
             **({"alb_low_reputation_mode": osd["alb_low_reputation_mode"]}
-               if (osd := web_acl.get("on_source_ddos_protection_config") or {}).get("alb_low_reputation_mode") else {}),
+               if (osd := web_acl.get("on_source_ddos_protection_config") or {}).get("alb_low_reputation_mode")
+               and ":global/" not in (acl_arn or "") else {}),
         },
         "rule_count": len(rules),
         "rules": rules,
