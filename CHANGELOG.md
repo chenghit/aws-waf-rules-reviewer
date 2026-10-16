@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.1 (2026-10-16)
+
+Bot Control Version_7.0 (2026-10-15) is the latest static version.
+
+### Added
+- A label match on `token_provenance:*` or `device_id:*` is reported (Medium) when no Bot Control before it can add the label: it runs COMMON, it's pinned below 7.0, or it isn't pinned. These labels exist only at TARGETED on 7.0 or later. A match on `device_id:unavailable` or `device_id:Invalid` is reported too. Labels are case-sensitive, and AWS adds `Unavailable` and `invalid`.
+- `references/bot-control.md` covers the 7.0 labels: when they appear, that no rule in the group acts on them, why Challenge on provenance labels only catches expired tokens, that device ID labels wait on the Android SDK 2.1.0 (not yet available), and how to pass the device ID to the backend with dynamic label interpolation.
+
+### Changed
+- `latest_versions` in `scripts/managed-labels.json` is 7.0, so Bot Control pinned to 6.x gets the Low "not the latest version" finding. Its list of later versions describes 7.0 from the changelog and the AWS SNS notification.
+
 ## v0.8.0 (2026-10-15)
 
 Rule groups, IP sets, and regex pattern sets that the Web ACL references are now part of the review. Tested on a Web ACL in a test account and a synthetic Firewall Manager one, with three rounds of fresh agents following AGENTS.md.
